@@ -1,0 +1,746 @@
+package com.blissless.anime
+
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import androidx.core.net.toUri
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import com.blissless.anime.api.AniwatchService
+import com.blissless.anime.api.AniwatchStreamResult
+
+private val Context.dataStore by preferencesDataStore(name = "settings")
+
+class MainViewModel : ViewModel() {
+
+    companion object {
+        private const val TAG = "MainViewModel"
+        private const val CLIENT_ID = "36313"
+    }
+
+    private val _authToken = MutableStateFlow<String?>(null)
+    val authToken: StateFlow<String?> = _authToken.asStateFlow()
+
+    private val _isOled = MutableStateFlow(false)
+    val isOled: StateFlow<Boolean> = _isOled.asStateFlow()
+
+    private val _trackingPercentage = MutableStateFlow(85)
+    val trackingPercentage: StateFlow<Int> = _trackingPercentage.asStateFlow()
+
+    private val _userId = MutableStateFlow<Int?>(null)
+    val userId: StateFlow<Int?> = _userId.asStateFlow()
+
+    private val _userName = MutableStateFlow<String?>(null)
+    val userName: StateFlow<String?> = _userName.asStateFlow()
+
+    private val _userAvatar = MutableStateFlow<String?>(null)
+    val userAvatar: StateFlow<String?> = _userAvatar.asStateFlow()
+
+    // Loading states
+    private val _isLoadingExplore = MutableStateFlow(false)
+    val isLoadingExplore: StateFlow<Boolean> = _isLoadingExplore.asStateFlow()
+
+    private val _isLoadingHome = MutableStateFlow(false)
+    val isLoadingHome: StateFlow<Boolean> = _isLoadingHome.asStateFlow()
+
+    // Explore data
+    private val _featuredAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val featuredAnime: StateFlow<List<ExploreAnime>> = _featuredAnime.asStateFlow()
+
+    private val _seasonalAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val seasonalAnime: StateFlow<List<ExploreAnime>> = _seasonalAnime.asStateFlow()
+
+    private val _topSeries = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val topSeries: StateFlow<List<ExploreAnime>> = _topSeries.asStateFlow()
+
+    private val _topMovies = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val topMovies: StateFlow<List<ExploreAnime>> = _topMovies.asStateFlow()
+
+    // Anime lists
+    private val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val currentlyWatching: StateFlow<List<AnimeMedia>> = _currentlyWatching.asStateFlow()
+
+    private val _planningToWatch = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val planningToWatch: StateFlow<List<AnimeMedia>> = _planningToWatch.asStateFlow()
+
+    private var context: Context? = null
+
+    fun init(context: Context) {
+        this.context = context
+        viewModelScope.launch {
+            loadSettings(context)
+            _authToken.value?.let { token ->
+                if (token.isNotEmpty()) {
+                    _isLoadingHome.value = true
+                    fetchUser()
+                    fetchLists()
+                    _isLoadingHome.value = false
+                }
+            }
+            fetchExploreData()
+        }
+    }
+
+    private suspend fun loadSettings(context: Context) {
+        context.dataStore.edit { preferences ->
+            val tokenKey = stringPreferencesKey("auth_token")
+            val savedToken = preferences[tokenKey]
+            _authToken.value = savedToken
+
+            val oledKey = booleanPreferencesKey("is_oled")
+            _isOled.value = preferences[oledKey] ?: false
+
+            val trackingKey = intPreferencesKey("tracking_percentage")
+            _trackingPercentage.value = preferences[trackingKey] ?: 85
+        }
+    }
+
+    fun setOledMode(enabled: Boolean) {
+        _isOled.value = enabled
+        viewModelScope.launch {
+            context?.dataStore?.edit { preferences ->
+                preferences[booleanPreferencesKey("is_oled")] = enabled
+            }
+        }
+    }
+
+    fun setTrackingPercentage(percentage: Int) {
+        _trackingPercentage.value = percentage
+        viewModelScope.launch {
+            context?.dataStore?.edit { preferences ->
+                preferences[intPreferencesKey("tracking_percentage")] = percentage
+            }
+        }
+        Log.d(TAG, "Tracking percentage set to: $percentage%")
+    }
+
+    fun loginWithAniList() {
+        val url = "https://anilist.co/api/v2/oauth/authorize?client_id=$CLIENT_ID&response_type=token"
+        Log.d(TAG, "Opening auth URL: $url")
+        context?.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+    }
+
+    fun handleAuthRedirect(intent: Intent?) {
+        val uriString = intent?.dataString
+        Log.d(TAG, "handleAuthRedirect: uriString=$uriString")
+
+        if (uriString != null && uriString.startsWith("animescraper://success")) {
+            val token = uriString.replace("#", "?").toUri().getQueryParameter("access_token")
+            Log.d(TAG, "Parsed token: ${token?.take(20)}...")
+
+            if (token != null) {
+                viewModelScope.launch {
+                    context?.dataStore?.edit { preferences ->
+                        preferences[stringPreferencesKey("auth_token")] = token
+                    }
+                    _authToken.value = token
+                    _isLoadingHome.value = true
+                    fetchUser()
+                    fetchLists()
+                    _isLoadingHome.value = false
+                }
+            }
+        }
+    }
+
+    fun logout() {
+        _authToken.value = null
+        _userId.value = null
+        _userName.value = null
+        _userAvatar.value = null
+        _currentlyWatching.value = emptyList()
+        _planningToWatch.value = emptyList()
+        viewModelScope.launch {
+            context?.dataStore?.edit { preferences ->
+                preferences.remove(stringPreferencesKey("auth_token"))
+            }
+        }
+    }
+
+    private suspend fun graphqlRequest(query: String, variables: Map<String, Any?>): String? = withContext(Dispatchers.IO) {
+        val token = _authToken.value ?: return@withContext null
+        val url = URL("https://graphql.anilist.co")
+        val connection = url.openConnection() as HttpsURLConnection
+
+        try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.doOutput = true
+
+            val variablesJson = variables.entries.joinToString(",", "{", "}") { (key, value) ->
+                "\"$key\":${when (value) {
+                    is String -> "\"$value\""
+                    is Number -> value.toString()
+                    is Boolean -> value.toString()
+                    null -> "null"
+                    else -> "\"$value\""
+                }}"
+            }
+            val body = "{\"query\":${Json.encodeToString(query)},\"variables\":$variablesJson}"
+
+            connection.outputStream.use { it.write(body.toByteArray()) }
+
+            if (connection.responseCode == 200) {
+                connection.inputStream.bufferedReader().readText()
+            } else {
+                val error = connection.errorStream?.bufferedReader()?.readText()
+                Log.e(TAG, "GraphQL error: ${connection.responseCode} - $error")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "GraphQL request failed", e)
+            null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private suspend fun publicGraphqlRequest(query: String, variables: Map<String, Any?>): String? = withContext(Dispatchers.IO) {
+        val url = URL("https://graphql.anilist.co")
+        val connection = url.openConnection() as HttpsURLConnection
+
+        try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+
+            val variablesJson = if (variables.isEmpty()) "{}" else {
+                variables.entries.joinToString(",", "{", "}") { (key, value) ->
+                    "\"$key\":${when (value) {
+                        is String -> "\"$value\""
+                        is Number -> value.toString()
+                        is Boolean -> value.toString()
+                        null -> "null"
+                        else -> "\"$value\""
+                    }}"
+                }
+            }
+            val body = "{\"query\":${Json.encodeToString(query)},\"variables\":$variablesJson}"
+
+            connection.outputStream.use { it.write(body.toByteArray()) }
+
+            if (connection.responseCode == 200) {
+                connection.inputStream.bufferedReader().readText()
+            } else {
+                val error = connection.errorStream?.bufferedReader()?.readText()
+                Log.e(TAG, "Public GraphQL error: ${connection.responseCode} - $error")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Public GraphQL request failed", e)
+            null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    suspend fun fetchUser() {
+        Log.d(TAG, "Fetching user data...")
+        val query = """
+            query {
+                Viewer {
+                    id
+                    name
+                    avatar { medium }
+                }
+            }
+        """.trimIndent()
+
+        val response = graphqlRequest(query, emptyMap())
+        response?.let {
+            try {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<ViewerResponse>(it)
+                _userId.value = data.data.Viewer.id
+                _userName.value = data.data.Viewer.name
+                _userAvatar.value = data.data.Viewer.avatar?.medium
+                Log.d(TAG, "User fetched: ${data.data.Viewer.name}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse user response", e)
+            }
+        }
+    }
+
+    suspend fun fetchLists() {
+        val userId = _userId.value ?: return
+        Log.d(TAG, "Fetching lists for user: $userId")
+
+        val query = """
+            query (${'$'}userId: Int) {
+                MediaListCollection(userId: ${'$'}userId, type: ANIME) {
+                    lists {
+                        name
+                        status
+                        entries {
+                            id
+                            mediaId
+                            progress
+                            status
+                            media {
+                                id
+                                title { romaji english }
+                                coverImage { large medium }
+                                bannerImage
+                                episodes
+                                nextAiringEpisode { episode airingAt }
+                                status
+                                averageScore
+                                genres
+                            }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        val response = graphqlRequest(query, mapOf("userId" to userId))
+        response?.let {
+            try {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<MediaListResponse>(it)
+
+                val currentlyWatchingList = mutableListOf<AnimeMedia>()
+                val planningList = mutableListOf<AnimeMedia>()
+
+                data.data.MediaListCollection.lists.forEach { list ->
+                    list.entries.forEach { entry ->
+                        val anime = AnimeMedia(
+                            id = entry.mediaId,
+                            title = entry.media.title.romaji ?: entry.media.title.english ?: "Unknown",
+                            cover = entry.media.coverImage?.large ?: entry.media.coverImage?.medium ?: "",
+                            banner = entry.media.bannerImage,
+                            progress = entry.progress ?: 0,
+                            totalEpisodes = entry.media.episodes ?: 0,
+                            latestEpisode = entry.media.nextAiringEpisode?.episode,
+                            status = entry.media.status ?: "",
+                            averageScore = entry.media.averageScore,
+                            genres = entry.media.genres ?: emptyList(),
+                            listStatus = list.status ?: list.name
+                        )
+
+                        when (list.status ?: list.name) {
+                            "CURRENT", "Watching" -> currentlyWatchingList.add(anime)
+                            "PLANNING", "Plan to Watch" -> planningList.add(anime)
+                        }
+                    }
+                }
+
+                _currentlyWatching.value = currentlyWatchingList
+                _planningToWatch.value = planningList
+                Log.d(TAG, "Fetched ${currentlyWatchingList.size} watching, ${planningList.size} planning")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse lists response", e)
+            }
+        }
+    }
+
+    fun updateAnimeProgress(mediaId: Int, progress: Int) {
+        Log.d(TAG, "updateAnimeProgress: mediaId=$mediaId, progress=$progress")
+        viewModelScope.launch {
+            val query = $$"""
+                mutation ($mediaId: Int, $progress: Int) {
+                    SaveMediaListEntry(mediaId: $mediaId, progress: $progress) {
+                        id
+                        progress
+                    }
+                }
+            """.trimIndent()
+
+            val response = graphqlRequest(query, mapOf("mediaId" to mediaId, "progress" to progress))
+            if (response != null) {
+                Log.d(TAG, "Update progress SUCCESS")
+                fetchLists()
+            } else {
+                Log.e(TAG, "Update progress FAILED")
+            }
+        }
+    }
+
+    fun updateAnimeStatus(mediaId: Int, status: String, progress: Int? = null) {
+        Log.d(TAG, "updateAnimeStatus: mediaId=$mediaId, status=$status")
+        viewModelScope.launch {
+            val query = """
+                mutation (${'$'}mediaId: Int, ${'$'}status: MediaListStatus${if (progress != null) ", ${'$'}progress: Int" else ""}) {
+                    SaveMediaListEntry(mediaId: ${'$'}mediaId, status: ${'$'}status${if (progress != null) ", progress: ${'$'}progress" else ""}) {
+                        id
+                        status
+                    }
+                }
+            """.trimIndent()
+
+            val variables = mutableMapOf<String, Any?>("mediaId" to mediaId, "status" to status)
+            if (progress != null) variables["progress"] = progress
+
+            val response = graphqlRequest(query, variables)
+            if (response != null) {
+                Log.d(TAG, "Update status SUCCESS")
+                fetchLists()
+            } else {
+                Log.e(TAG, "Update status FAILED")
+            }
+        }
+    }
+
+    fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
+        Log.d(TAG, "addExploreAnimeToList: ${anime.title}, status=$status")
+        updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
+    }
+
+    fun fetchExploreData() {
+        Log.d(TAG, "Fetching explore data...")
+        viewModelScope.launch {
+            _isLoadingExplore.value = true
+
+            // Fetch all in parallel for faster loading
+            val deferredFeatured = async { fetchFeaturedAnime() }
+            val deferredSeasonal = async { fetchSeasonalAnime() }
+            val deferredSeries = async { fetchTopSeries() }
+            val deferredMovies = async { fetchTopMovies() }
+
+            awaitAll(deferredFeatured, deferredSeasonal, deferredSeries, deferredMovies)
+
+            _isLoadingExplore.value = false
+        }
+    }
+
+    private suspend fun fetchFeaturedAnime() {
+        val query = """
+            query {
+                Page(page: 1, perPage: 10) {
+                    media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC) {
+                        id
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                    }
+                }
+            }
+        """.trimIndent()
+
+        val response = publicGraphqlRequest(query, emptyMap())
+        Log.d(TAG, "Featured response: ${response?.take(100)}...")
+        response?.let {
+            try {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<ExploreResponse>(it)
+                _featuredAnime.value = data.data.Page.media.map { media ->
+                    ExploreAnime(
+                        id = media.id,
+                        title = media.title.romaji ?: media.title.english ?: "Unknown",
+                        cover = media.coverImage?.large ?: "",
+                        banner = media.bannerImage,
+                        episodes = media.episodes ?: 0,
+                        latestEpisode = media.nextAiringEpisode?.episode,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList()
+                    )
+                }
+                Log.d(TAG, "Featured anime loaded: ${_featuredAnime.value.size}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse featured anime", e)
+            }
+        }
+    }
+
+    private suspend fun fetchSeasonalAnime() {
+        val query = """
+            query {
+                Page(page: 1, perPage: 20) {
+                    media(type: ANIME, sort: POPULARITY_DESC, status: RELEASING) {
+                        id
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                    }
+                }
+            }
+        """.trimIndent()
+
+        val response = publicGraphqlRequest(query, emptyMap())
+        response?.let {
+            try {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<ExploreResponse>(it)
+                _seasonalAnime.value = data.data.Page.media.map { media ->
+                    ExploreAnime(
+                        id = media.id,
+                        title = media.title.romaji ?: media.title.english ?: "Unknown",
+                        cover = media.coverImage?.large ?: "",
+                        banner = media.bannerImage,
+                        episodes = media.episodes ?: 0,
+                        latestEpisode = media.nextAiringEpisode?.episode,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList()
+                    )
+                }
+                Log.d(TAG, "Seasonal anime loaded: ${_seasonalAnime.value.size}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse seasonal anime", e)
+            }
+        }
+    }
+
+    private suspend fun fetchTopSeries() {
+        val query = """
+            query {
+                Page(page: 1, perPage: 20) {
+                    media(type: ANIME, format: TV, sort: SCORE_DESC) {
+                        id
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                    }
+                }
+            }
+        """.trimIndent()
+
+        Log.d(TAG, "Fetching top series...")
+
+        try {
+            val response = publicGraphqlRequest(query, emptyMap())
+            Log.d(TAG, "Top series raw response: ${response?.take(500)}...")
+
+            if (response != null) {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<ExploreResponse>(response)
+
+                val seriesList = data.data.Page.media.map { media ->
+                    ExploreAnime(
+                        id = media.id,
+                        title = media.title.romaji ?: media.title.english ?: "Unknown",
+                        cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
+                        banner = media.bannerImage,
+                        episodes = media.episodes ?: 0,
+                        latestEpisode = media.nextAiringEpisode?.episode,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList()
+                    )
+                }
+
+                // Only filter if we have enough results, otherwise show all
+                _topSeries.value = if (seriesList.size > 10) {
+                    seriesList.filter { (it.averageScore ?: 0) >= 70 }
+                } else {
+                    seriesList
+                }
+
+                Log.d(TAG, "Top series loaded: ${_topSeries.value.size}")
+            } else {
+                Log.e(TAG, "Top series response was null")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch/parse top series", e)
+        }
+    }
+
+    private suspend fun fetchTopMovies() {
+        val query = """
+            query {
+                Page(page: 1, perPage: 20) {
+                    media(type: ANIME, format: MOVIE, sort: SCORE_DESC) {
+                        id
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                    }
+                }
+            }
+        """.trimIndent()
+
+        Log.d(TAG, "Fetching top movies...")
+
+        try {
+            val response = publicGraphqlRequest(query, emptyMap())
+            Log.d(TAG, "Top movies raw response: ${response?.take(500)}...")
+
+            if (response != null) {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<ExploreResponse>(response)
+
+                val moviesList = data.data.Page.media.map { media ->
+                    ExploreAnime(
+                        id = media.id,
+                        title = media.title.romaji ?: media.title.english ?: "Unknown",
+                        cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
+                        banner = media.bannerImage,
+                        episodes = media.episodes ?: 0,
+                        latestEpisode = media.nextAiringEpisode?.episode,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList()
+                    )
+                }
+
+                // Only filter if we have enough results, otherwise show all
+                _topMovies.value = if (moviesList.size > 10) {
+                    moviesList.filter { (it.averageScore ?: 0) >= 70 }
+                } else {
+                    moviesList
+                }
+
+                Log.d(TAG, "Top movies loaded: ${_topMovies.value.size}")
+            } else {
+                Log.e(TAG, "Top movies response was null")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch/parse top movies", e)
+        }
+    }
+
+    fun refreshHome() {
+        viewModelScope.launch {
+            _isLoadingHome.value = true
+            fetchLists()
+            _isLoadingHome.value = false
+        }
+    }
+
+    suspend fun getStreamLink(animeTitle: String, episodeNumber: Int): AniwatchStreamResult? = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting stream link for $animeTitle episode $episodeNumber")
+            AniwatchService.getStreamLink(animeTitle, episodeNumber)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get stream link", e)
+            null
+        }
+    }
+}
+
+// Data classes
+@Serializable
+data class ExploreAnime(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val banner: String?,
+    val episodes: Int,
+    val latestEpisode: Int?,
+    val averageScore: Int?,
+    val genres: List<String>
+)
+
+@Serializable
+data class AnimeMedia(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val banner: String? = null,
+    val progress: Int = 0,
+    val totalEpisodes: Int = 0,
+    val latestEpisode: Int? = null,
+    val status: String = "",
+    val averageScore: Int? = null,
+    val genres: List<String> = emptyList(),
+    val listStatus: String = "",
+    val listEntryId: Int? = null
+)
+
+@Serializable
+data class ViewerResponse(val data: ViewerData)
+
+@Serializable
+data class ViewerData(val Viewer: Viewer)
+
+@Serializable
+data class Viewer(val id: Int, val name: String, val avatar: Avatar?)
+
+@Serializable
+data class Avatar(val medium: String)
+
+@Serializable
+data class MediaListResponse(val data: MediaListData)
+
+@Serializable
+data class MediaListData(val MediaListCollection: MediaListCollection)
+
+@Serializable
+data class MediaListCollection(val lists: List<MediaList>)
+
+@Serializable
+data class MediaList(val name: String, val status: String?, val entries: List<MediaListEntry>)
+
+@Serializable
+data class MediaListEntry(val id: Int, val mediaId: Int, val progress: Int?, val status: String?, val media: MediaData)
+
+@Serializable
+data class MediaData(
+    val id: Int,
+    val title: Title,
+    val coverImage: CoverImage?,
+    val bannerImage: String?,
+    val episodes: Int?,
+    val nextAiringEpisode: NextAiringEpisode?,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?
+)
+
+@Serializable
+data class Title(val romaji: String?, val english: String?)
+
+@Serializable
+data class CoverImage(val large: String?, val medium: String?)
+
+@Serializable
+data class NextAiringEpisode(val episode: Int, val airingAt: Int)
+
+@Serializable
+data class ExploreResponse(val data: ExploreData)
+
+@Serializable
+data class ExploreData(val Page: ExplorePage)
+
+@Serializable
+data class ExplorePage(val media: List<ExploreMedia>)
+
+@Serializable
+data class ExploreMedia(
+    val id: Int,
+    val title: Title,
+    val coverImage: CoverImage?,
+    val bannerImage: String?,
+    val episodes: Int?,
+    val nextAiringEpisode: NextAiringEpisode?,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?
+)
