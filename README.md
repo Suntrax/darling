@@ -34,7 +34,7 @@ A modern anime tracking and streaming app for Android with AniList integration.
 
 | Home Screen | Explore Screen | Player |
 |-------------|----------------|--------|
-| ![Home Screen Screenshot](screenshots/home.png) | ![Explore Screen Screenshot](screenshots/explore.png) | ![Player Screen Screenshot](player/home.png) |
+| ![Home Screen Screenshot](screenshots/home.png) | ![Explore Screen Screenshot](screenshots/explore.png) | ![Player Screen Screenshot](screenshots/player.png) |
 
 ## Requirements
 
