@@ -4,7 +4,7 @@ A modern anime tracking and streaming app for Android with AniList integration.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green)
 ![MinSDK](https://img.shields.io/badge/MinSDK-36-blue)
-![Kotlin](https://img.shields.io/badge/Kotlin-100%-purple)
+![Kotlin](https://img.shields.io/badge/Kotlin-100%25-purple)
 
 ## Features
 
@@ -34,7 +34,7 @@ A modern anime tracking and streaming app for Android with AniList integration.
 
 | Home Screen | Explore Screen | Player |
 |-------------|----------------|--------|
-| *Coming soon* | *Coming soon* | *Coming soon* |
+| ![Home Screen Screenshot](screenshots/home.png) | ![Explore Screen Screenshot](screenshots/explore.png) | ![Player Screen Screenshot](player/home.png) |
 
 ## Requirements
 
