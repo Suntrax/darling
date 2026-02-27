@@ -37,39 +37,6 @@ fun SettingsScreen(
 
         HorizontalDivider()
 
-        // OLED Mode Toggle
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        "OLED Mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        "Pure black background for AMOLED screens",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = isOled,
-                    onCheckedChange = { viewModel.setOledMode(it) }
-                )
-            }
-        }
-
         // Episode Tracking Percentage
         Card(
             modifier = Modifier.fillMaxWidth(),

@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
 
         setContent {
-            val isOled by mainViewModel.isOled.collectAsState(initial = false)
+            val isOled by mainViewModel.isOled.collectAsState(initial = true)
             val token by mainViewModel.authToken.collectAsState(initial = if (hasToken) "loading" else null)
 
             // User is logged in if they had a token OR if token is now set
