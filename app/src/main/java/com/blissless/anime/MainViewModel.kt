@@ -335,7 +335,8 @@ class MainViewModel : ViewModel() {
                             status = entry.media.status ?: "",
                             averageScore = entry.media.averageScore,
                             genres = entry.media.genres ?: emptyList(),
-                            listStatus = list.status ?: list.name
+                            listStatus = list.status ?: list.name,
+                            listEntryId = entry.id
                         )
 
                         when (list.status ?: list.name) {
@@ -357,9 +358,9 @@ class MainViewModel : ViewModel() {
     fun updateAnimeProgress(mediaId: Int, progress: Int) {
         Log.d(TAG, "updateAnimeProgress: mediaId=$mediaId, progress=$progress")
         viewModelScope.launch {
-            val query = $$"""
-                mutation ($mediaId: Int, $progress: Int) {
-                    SaveMediaListEntry(mediaId: $mediaId, progress: $progress) {
+            val query = """
+                mutation (${'$'}mediaId: Int, ${'$'}progress: Int) {
+                    SaveMediaListEntry(mediaId: ${'$'}mediaId, progress: ${'$'}progress) {
                         id
                         progress
                     }
@@ -641,6 +642,100 @@ class MainViewModel : ViewModel() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get stream link", e)
             null
+        }
+    }
+
+    suspend fun searchAnime(query: String): List<ExploreAnime> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Searching for: $query")
+
+            val searchQuery = """
+                query (${'$'}search: String, ${'$'}page: Int, ${'$'}perPage: Int) {
+                    Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                        media(search: ${'$'}search, type: ANIME, sort: SEARCH_MATCH) {
+                            id
+                            title {
+                                romaji
+                                english
+                            }
+                            coverImage {
+                                large
+                                medium
+                            }
+                            bannerImage
+                            episodes
+                            nextAiringEpisode {
+                                episode
+                                airingAt
+                            }
+                            status
+                            averageScore
+                            genres
+                        }
+                    }
+                }
+            """.trimIndent()
+
+            val response = publicGraphqlRequest(
+                searchQuery,
+                mapOf("search" to query, "page" to 1, "perPage" to 20)
+            )
+
+            if (response != null) {
+                val json = Json { ignoreUnknownKeys = true }
+                val searchData = json.decodeFromString<ExploreResponse>(response)
+                searchData.data.Page.media.map { media ->
+                    ExploreAnime(
+                        id = media.id,
+                        title = media.title.romaji ?: media.title.english ?: "Unknown",
+                        cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
+                        banner = media.bannerImage,
+                        episodes = media.episodes ?: 0,
+                        latestEpisode = media.nextAiringEpisode?.episode,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList()
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Search failed", e)
+            emptyList()
+        }
+    }
+
+    fun removeAnimeFromList(mediaId: Int) {
+        Log.d(TAG, "removeAnimeFromList: mediaId=$mediaId")
+
+        // Find the list entry ID from the user's lists
+        val watchingEntry = _currentlyWatching.value.find { it.id == mediaId }?.listEntryId
+        val planningEntry = _planningToWatch.value.find { it.id == mediaId }?.listEntryId
+        val entryId = watchingEntry ?: planningEntry
+
+        if (entryId == null) {
+            Log.e(TAG, "Could not find list entry ID for mediaId=$mediaId")
+            return
+        }
+
+        Log.d(TAG, "Found entryId=$entryId for mediaId=$mediaId")
+
+        viewModelScope.launch {
+            val query = $$"""
+                mutation ($id: Int) {
+                    DeleteMediaListEntry(id: $id) {
+                        deleted
+                    }
+                }
+            """.trimIndent()
+
+            val response = graphqlRequest(query, mapOf("id" to entryId))
+            if (response != null) {
+                Log.d(TAG, "Remove from list SUCCESS")
+                fetchLists()
+            } else {
+                Log.e(TAG, "Remove from list FAILED")
+            }
         }
     }
 }

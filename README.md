@@ -3,7 +3,7 @@
 A modern anime tracking and streaming app for Android with AniList integration.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green)
-![MinSDK](https://img.shields.io/badge/MinSDK-36-blue)
+![MinSDK](https://img.shields.io/badge/MinSDK-26-blue)
 ![Kotlin](https://img.shields.io/badge/Kotlin-100%25-purple)
 
 ## Features
@@ -38,7 +38,7 @@ A modern anime tracking and streaming app for Android with AniList integration.
 
 ## Requirements
 
-- Android 16.0 or higher
+- Android 8.0 or higher (optimised for Android 16)
 - AniList account (optional, for tracking features)
 
 ## Installation
@@ -68,11 +68,8 @@ The app comes pre-configured with AniList OAuth credentials. If you want to use 
 4. Update `clientId` in `MainViewModel.kt`
 
 ### Stream Provider
-The app uses a custom scraper service. Update the base URL in `AniwatchService.kt`:
+The app uses a custom scraper service. Check out the following repository for more information: "https://github.com/ghoshRitesh12/aniwatch-api"
 
-```kotlin
-private const val SCRAPER_BASE_URL = "http://your-server:4000"
-```
 
 ## Tech Stack
 
@@ -119,16 +116,6 @@ The app uses AniList's GraphQL API for:
 - Searching and discovering anime
 
 [AniList API Documentation](https://docs.anilist.co/)
-
-## Roadmap
-
-- [ ] Search functionality
-- [ ] Anime detail page
-- [ ] Download for offline viewing
-- [ ] Watch history
-- [ ] Custom tracking percentage
-- [ ] Notifications for new episodes
-- [ ] Widget support
 
 ## Contributing
 

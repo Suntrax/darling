@@ -82,6 +82,10 @@ fun MainScreen(
     val pagerState = rememberPagerState(initialPage = 1) { 3 }
     val scope = rememberCoroutineScope()
 
+    // Collect user's anime lists
+    val currentlyWatching by viewModel.currentlyWatching.collectAsState()
+    val planningToWatch by viewModel.planningToWatch.collectAsState()
+
     // Player state
     var showPlayer by remember { mutableStateOf(false) }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
@@ -247,7 +251,11 @@ fun MainScreen(
                         0 -> ExploreScreen(
                             viewModel = viewModel,
                             onAnimeClick = { },
-                            isLoggedIn = isLoggedIn
+                            isLoggedIn = isLoggedIn,
+                            isOled = isOled,
+                            onPlayEpisode = onPlayEpisode,
+                            currentlyWatching = currentlyWatching,
+                            planningToWatch = planningToWatch
                         )
                         1 -> HomeScreen(
                             viewModel = viewModel,

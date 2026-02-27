@@ -16,7 +16,7 @@ data class AniwatchStreamResult(
 )
 
 object AniwatchService {
-    private const val API_BASE = "http://rp5:4000/api/v2/hianime"
+    private const val API_BASE = "http://aniwatch-cxjn.vercel.app/api/v2/hianime"
     private val client = OkHttpClient()
 
     private suspend fun <T> retry(retries: Int = 3, block: suspend () -> T?): T? {

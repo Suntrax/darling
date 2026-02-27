@@ -1,9 +1,13 @@
 package com.blissless.anime.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,31 +22,39 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
-import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.blissless.anime.AnimeMedia
 import com.blissless.anime.ExploreAnime
 import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
+import java.util.Locale
 
 @Composable
 fun ExploreScreen(
     viewModel: MainViewModel,
     onAnimeClick: (ExploreAnime) -> Unit,
-    isLoggedIn: Boolean = false
+    isLoggedIn: Boolean = false,
+    isOled: Boolean = false,
+    onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
+    currentlyWatching: List<AnimeMedia> = emptyList(),
+    planningToWatch: List<AnimeMedia> = emptyList()
 ) {
     val scrollState = rememberScrollState()
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -51,19 +63,43 @@ fun ExploreScreen(
     val topMovies by viewModel.topMovies.collectAsState()
     val isLoading by viewModel.isLoadingExplore.collectAsState()
 
+    // Get IDs from user's lists to check if anime is already saved
+    val savedAnimeIds = remember(currentlyWatching, planningToWatch) {
+        val watchingIds = currentlyWatching.map { it.id }.toSet()
+        val planningIds = planningToWatch.map { it.id }.toSet()
+        watchingIds + planningIds
+    }
+
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDialog by remember { mutableStateOf(false) }
 
     if (showDialog && selectedAnime != null) {
         ExploreAnimeDialog(
             anime = selectedAnime!!,
+            isOled = isOled,
+            isSaved = savedAnimeIds.contains(selectedAnime!!.id),
             onDismiss = { showDialog = false },
             onAddToPlanning = {
                 viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING")
                 showDialog = false
             },
-            onStartWatching = {
+            onStartWatching = { episode ->
+                val animeMedia = AnimeMedia(
+                    id = selectedAnime!!.id,
+                    title = selectedAnime!!.title,
+                    cover = selectedAnime!!.cover,
+                    banner = selectedAnime!!.banner,
+                    progress = 0,
+                    totalEpisodes = selectedAnime!!.episodes,
+                    latestEpisode = selectedAnime!!.latestEpisode,
+                    status = "",
+                    averageScore = selectedAnime!!.averageScore,
+                    genres = selectedAnime!!.genres,
+                    listStatus = "",
+                    listEntryId = 0
+                )
                 viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                onPlayEpisode(animeMedia, episode)
                 showDialog = false
             },
             isLoggedIn = isLoggedIn
@@ -97,7 +133,7 @@ fun ExploreScreen(
         }
 
         // This Season
-        SectionTitle("This Season")
+        SectionTitle("This Season", isOled)
 
         if (seasonalAnime.isNotEmpty()) {
             ExploreAnimeHorizontalList(
@@ -107,16 +143,23 @@ fun ExploreScreen(
                     showDialog = true
                 },
                 onBookmarkClick = { anime ->
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                    if (savedAnimeIds.contains(anime.id)) {
+                        // Remove from list
+                        viewModel.removeAnimeFromList(anime.id)
+                    } else {
+                        viewModel.addExploreAnimeToList(anime, "PLANNING")
+                    }
                 },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                isOled = isOled,
+                savedAnimeIds = savedAnimeIds
             )
         } else {
-            LoadingPlaceholder()
+            LoadingPlaceholder(isOled)
         }
 
         // Top Rated Series
-        SectionTitle("Top Rated Series")
+        SectionTitle("Top Rated Series", isOled)
 
         if (topSeries.isNotEmpty()) {
             ExploreAnimeHorizontalList(
@@ -126,23 +169,29 @@ fun ExploreScreen(
                     showDialog = true
                 },
                 onBookmarkClick = { anime ->
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                    if (savedAnimeIds.contains(anime.id)) {
+                        viewModel.removeAnimeFromList(anime.id)
+                    } else {
+                        viewModel.addExploreAnimeToList(anime, "PLANNING")
+                    }
                 },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                isOled = isOled,
+                savedAnimeIds = savedAnimeIds
             )
         } else if (isLoading) {
-            LoadingPlaceholder()
+            LoadingPlaceholder(isOled)
         } else {
             Text(
                 "No top series found",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
 
         // Top Rated Movies
-        SectionTitle("Top Rated Movies")
+        SectionTitle("Top Rated Movies", isOled)
 
         if (topMovies.isNotEmpty()) {
             ExploreAnimeHorizontalList(
@@ -152,17 +201,23 @@ fun ExploreScreen(
                     showDialog = true
                 },
                 onBookmarkClick = { anime ->
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                    if (savedAnimeIds.contains(anime.id)) {
+                        viewModel.removeAnimeFromList(anime.id)
+                    } else {
+                        viewModel.addExploreAnimeToList(anime, "PLANNING")
+                    }
                 },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                isOled = isOled,
+                savedAnimeIds = savedAnimeIds
             )
         } else if (isLoading) {
-            LoadingPlaceholder()
+            LoadingPlaceholder(isOled)
         } else {
             Text(
                 "No top movies found",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
@@ -172,17 +227,18 @@ fun ExploreScreen(
 }
 
 @Composable
-private fun SectionTitle(title: String) {
+private fun SectionTitle(title: String, isOled: Boolean = false) {
     Text(
         title,
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
+        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
     )
 }
 
 @Composable
-private fun LoadingPlaceholder() {
+private fun LoadingPlaceholder(isOled: Boolean = false) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -192,12 +248,13 @@ private fun LoadingPlaceholder() {
                 modifier = Modifier
                     .width(130.dp)
                     .height(200.dp),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+                )
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
@@ -239,9 +296,7 @@ fun FeaturedCarousel(
                 model = anime.banner ?: anime.cover,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(15.dp)
+                modifier = Modifier.fillMaxSize()
             )
         }
 
@@ -317,8 +372,9 @@ fun FeaturedCarousel(
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 anime.averageScore?.let { score ->
+                                    val displayScore = score / 10.0
                                     Text(
-                                        "★ $score%",
+                                        "★ ${String.format(Locale.US, "%.1f", displayScore)}",
                                         color = Color(0xFFFFD700),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold
@@ -367,7 +423,9 @@ fun ExploreAnimeHorizontalList(
     animeList: List<ExploreAnime>,
     onAnimeClick: (ExploreAnime) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
-    isLoggedIn: Boolean = false
+    isLoggedIn: Boolean = false,
+    isOled: Boolean = false,
+    savedAnimeIds: Set<Int> = emptySet()
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -376,9 +434,11 @@ fun ExploreAnimeHorizontalList(
         items(animeList) { anime ->
             ExploreAnimeCard(
                 anime = anime,
+                isSaved = savedAnimeIds.contains(anime.id),
                 onClick = { onAnimeClick(anime) },
                 onBookmarkClick = { onBookmarkClick(anime) },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                isOled = isOled
             )
         }
     }
@@ -387,14 +447,31 @@ fun ExploreAnimeHorizontalList(
 @Composable
 fun ExploreAnimeCard(
     anime: ExploreAnime,
+    isSaved: Boolean = false,
     onClick: () -> Unit,
     onBookmarkClick: () -> Unit,
-    isLoggedIn: Boolean = false
+    isLoggedIn: Boolean = false,
+    isOled: Boolean = false
 ) {
+    val context = LocalContext.current
+
+    var showAnimation by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (showAnimation) 1.3f else 1f,
+        animationSpec = tween(200),
+        finishedListener = {
+            if (showAnimation) {
+                showAnimation = false
+            }
+        },
+        label = "bookmarkScale"
+    )
+
     Column(modifier = Modifier.width(130.dp)) {
         Card(
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.height(185.dp)
+            modifier = Modifier.height(185.dp),
+            onClick = onClick
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
@@ -404,7 +481,6 @@ fun ExploreAnimeCard(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Gradient overlay
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -420,8 +496,8 @@ fun ExploreAnimeCard(
                         )
                 )
 
-                // Score badge
                 anime.averageScore?.let { score ->
+                    val displayScore = score / 10.0
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -430,7 +506,7 @@ fun ExploreAnimeCard(
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
-                            "★ $score",
+                            "★ ${String.format(Locale.US, "%.1f", displayScore)}",
                             color = Color(0xFFFFD700),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
@@ -439,26 +515,32 @@ fun ExploreAnimeCard(
                     }
                 }
 
-                // Episode badge
-                anime.latestEpisode?.let { ep ->
+                // Episode badge - shows latest episode OR total episodes
+                // Episode badge - shows latest episode OR total episodes
+                if (anime.latestEpisode != null || anime.episodes > 0) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(6.dp),
                         shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        color = Color.Black.copy(alpha = 0.7f)
                     ) {
+                        val episodeText = when {
+                            anime.latestEpisode != null -> "Ep ${anime.latestEpisode}"
+                            anime.episodes > 0 -> "${anime.episodes} Ep"
+                            else -> ""
+                        }
                         Text(
-                            "Ep $ep",
+                            episodeText,
                             color = Color.White,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                         )
                     }
                 }
 
-                // Bottom buttons - only show when logged in
                 if (isLoggedIn) {
                     Row(
                         modifier = Modifier
@@ -467,30 +549,53 @@ fun ExploreAnimeCard(
                             .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Bookmark button (left) - adds to planning list
+                        // Bookmark button - same style as edit button in HomeScreen
                         FilledTonalIconButton(
-                            onClick = onBookmarkClick,
-                            modifier = Modifier.size(34.dp),
+                            onClick = {
+                                showAnimation = true
+                                if (isSaved) {
+                                    Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                                }
+                                onBookmarkClick()
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .scale(if (showAnimation) scale else 1f),
                             shape = RoundedCornerShape(10.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.2f),
+                                containerColor = Color.Black.copy(alpha = 0.6f),
                                 contentColor = Color.White
                             )
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.BookmarkAdd,
-                                contentDescription = "Add to Planning",
-                                modifier = Modifier.size(18.dp)
-                            )
+                            AnimatedContent(
+                                targetState = isSaved,
+                                transitionSpec = {
+                                    (scaleIn(animationSpec = tween(200)) + fadeIn())
+                                        .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
+                                },
+                                label = "bookmarkIcon"
+                            ) { saved ->
+                                Icon(
+                                    imageVector = if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkAdd,
+                                    contentDescription = if (saved) "Saved" else "Add to Planning",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Play button (right)
-                        FAB(
+                        // Play button - same style
+                        FilledTonalIconButton(
                             onClick = onClick,
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.White
+                            modifier = Modifier.size(32.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                contentColor = Color.White
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
@@ -508,49 +613,48 @@ fun ExploreAnimeCard(
             modifier = Modifier.padding(top = 6.dp),
             maxLines = 2,
             style = MaterialTheme.typography.labelMedium,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
         )
-    }
-}
-
-@Composable
-private fun FAB(
-    onClick: () -> Unit,
-    containerColor: Color,
-    contentColor: Color,
-    content: @Composable () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = containerColor,
-        contentColor = contentColor,
-        modifier = Modifier.size(36.dp),
-        shadowElevation = 4.dp
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            content()
-        }
     }
 }
 
 @Composable
 fun ExploreAnimeDialog(
     anime: ExploreAnime,
+    isOled: Boolean = false,
+    isSaved: Boolean = false,
     onDismiss: () -> Unit,
     onAddToPlanning: () -> Unit,
-    onStartWatching: () -> Unit,
+    onStartWatching: (Int) -> Unit,
     isLoggedIn: Boolean = false
 ) {
+    val context = LocalContext.current
+    val displayScore = anime.averageScore?.let { it / 10.0 }
+
+    // Animation state for add to planning button
+    var showAnimation by remember { mutableStateOf(false) }
+    var hasAddedToPlanning by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (showAnimation) 1.2f else 1f,
+        animationSpec = tween(200),
+        finishedListener = {
+            if (showAnimation) {
+                showAnimation = false
+            }
+        },
+        label = "buttonScale"
+    )
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface
+            )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -572,12 +676,13 @@ fun ExploreAnimeDialog(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
                         )
 
-                        anime.averageScore?.let { score ->
+                        displayScore?.let { score ->
                             Text(
-                                "★ $score%",
+                                "★ ${String.format(Locale.US, "%.1f", score)}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color(0xFFFFD700)
                             )
@@ -587,18 +692,27 @@ fun ExploreAnimeDialog(
                             Text(
                                 "Episode $ep ${if (anime.episodes > 0) "of ${anime.episodes}" else ""}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (anime.genres.isNotEmpty()) {
+                            Text(
+                                anime.genres.take(3).joinToString(", "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
 
-                // Only show action buttons when logged in
                 if (isLoggedIn) {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
-                        onClick = onStartWatching,
+                        onClick = { onStartWatching(1) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
@@ -609,14 +723,49 @@ fun ExploreAnimeDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // Add to Planning button with animation
+                    val isAlreadySaved = isSaved || hasAddedToPlanning
+
                     OutlinedButton(
-                        onClick = onAddToPlanning,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        onClick = {
+                            if (!isAlreadySaved) {
+                                showAnimation = true
+                                hasAddedToPlanning = true
+                                Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                            }
+                            onAddToPlanning()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .scale(scale),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = if (isAlreadySaved) {
+                            ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary
+                            )
+                        }
                     ) {
-                        Icon(Icons.Outlined.BookmarkBorder, contentDescription = null)
+                        AnimatedContent(
+                            targetState = isAlreadySaved,
+                            transitionSpec = {
+                                (scaleIn(animationSpec = tween(200)) + fadeIn())
+                                    .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
+                            },
+                            label = "buttonIcon"
+                        ) { saved ->
+                            if (saved) {
+                                Icon(Icons.Filled.Bookmark, contentDescription = null)
+                            } else {
+                                Icon(Icons.Outlined.BookmarkAdd, contentDescription = null)
+                            }
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add to Planning")
+                        Text(if (isAlreadySaved) "Saved" else "Add to Planning")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
