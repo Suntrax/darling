@@ -83,6 +83,10 @@ fun ExploreScreen(
                 viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING")
                 showDialog = false
             },
+            onRemoveFromList = {
+                viewModel.removeAnimeFromList(selectedAnime!!.id)
+                showDialog = false
+            },
             onStartWatching = { episode ->
                 val animeMedia = AnimeMedia(
                     id = selectedAnime!!.id,
@@ -632,6 +636,7 @@ fun ExploreAnimeDialog(
     isSaved: Boolean = false,
     onDismiss: () -> Unit,
     onAddToPlanning: () -> Unit,
+    onRemoveFromList: () -> Unit = {},
     onStartWatching: (Int) -> Unit,
     isLoggedIn: Boolean = false
 ) {
@@ -651,6 +656,15 @@ fun ExploreAnimeDialog(
         },
         label = "buttonScale"
     )
+
+    // Track local state - true if user added during this dialog session
+    // isSaved comes from parent and reflects actual saved state
+    // If anime was already saved when dialog opened (isSaved=true), clicking should remove
+    // If anime was not saved, clicking adds it (and sets hasAddedToPlanning=true)
+    // But if user added it in this dialog and clicks again, they might want to remove
+
+    // Simplified: just check if it's saved (either from parent or local state)
+    val isCurrentlySaved = isSaved || hasAddedToPlanning
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -733,23 +747,26 @@ fun ExploreAnimeDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Add to Planning button with animation
-                    val isAlreadySaved = isSaved || hasAddedToPlanning
-
+                    // Add to Planning / Remove button with animation
                     OutlinedButton(
                         onClick = {
-                            if (!isAlreadySaved) {
-                                showAnimation = true
+                            showAnimation = true
+                            if (isCurrentlySaved) {
+                                // Already saved - remove it
+                                Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
+                                onRemoveFromList()
+                            } else {
+                                // Not saved - add it
                                 hasAddedToPlanning = true
                                 Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                                onAddToPlanning()
                             }
-                            onAddToPlanning()
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .scale(scale),
                         shape = RoundedCornerShape(10.dp),
-                        colors = if (isAlreadySaved) {
+                        colors = if (isCurrentlySaved) {
                             ButtonDefaults.outlinedButtonColors(
                                 containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
                                 contentColor = MaterialTheme.colorScheme.primary
@@ -761,7 +778,7 @@ fun ExploreAnimeDialog(
                         }
                     ) {
                         AnimatedContent(
-                            targetState = isAlreadySaved,
+                            targetState = isCurrentlySaved,
                             transitionSpec = {
                                 (scaleIn(animationSpec = tween(200)) + fadeIn())
                                     .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
@@ -775,7 +792,7 @@ fun ExploreAnimeDialog(
                             }
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isAlreadySaved) "Saved" else "Add to Planning")
+                        Text(if (isCurrentlySaved) "Saved" else "Add to Planning")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
