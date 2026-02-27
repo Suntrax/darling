@@ -101,23 +101,101 @@ fun HomeScreen(
             }
 
             if (!isLoggedIn) {
+                // Redesigned Login Card
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                                    )
+                                )
+                            )
+                            .padding(24.dp)
                     ) {
-                        Text(
-                            "Login to AniList to sync your anime list",
-                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = onLoginClick) {
-                            Text("Login with AniList")
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // AniList Icon/Logo
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                "Welcome to Darling",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                "Sign in with AniList to sync your anime list and track your progress",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // Login Button
+                            Button(
+                                onClick = onLoginClick,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF02A9FF) // AniList blue
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Login,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Login with AniList",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                "Don't have an account? Sign up for free at anilist.co",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import android.util.Log
+import com.blissless.anime.api.EpisodeStreams
+import com.blissless.anime.api.ServerInfo
 import com.blissless.anime.ui.screens.ExploreScreen
 import com.blissless.anime.ui.screens.HomeScreen
 import com.blissless.anime.ui.screens.PlayerScreen
@@ -33,18 +35,33 @@ class MainActivity : ComponentActivity() {
 
     private val mainViewModel: MainViewModel by viewModels()
 
+    companion object {
+        const val PREFS_NAME = "anilist_prefs"
+        const val TOKEN_KEY = "auth_token"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        mainViewModel.init(applicationContext)
+        // Check if user is logged in SYNCHRONOUSLY using SharedPreferences
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val hasToken = prefs.getString(TOKEN_KEY, null) != null
+
+        Log.d("MainActivity", "Has saved token: $hasToken")
+
+        // Initialize ViewModel with the token state
+        mainViewModel.init(applicationContext, hasToken)
+
         handleAuthCallback(intent)
 
         setContent {
             val isOled by mainViewModel.isOled.collectAsState(initial = false)
-            val token by mainViewModel.authToken.collectAsState(initial = null)
-            val isLoggedIn = token != null
+            val token by mainViewModel.authToken.collectAsState(initial = if (hasToken) "loading" else null)
+
+            // User is logged in if they had a token OR if token is now set
+            val isLoggedIn = hasToken || token != null
 
             AppTheme(useOled = isOled) {
                 MainScreen(
@@ -85,6 +102,17 @@ fun MainScreen(
     // Collect user's anime lists
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
+    val prefetchedStreams by viewModel.prefetchedStreams.collectAsState()
+    val prefetchedEpisodeInfo by viewModel.prefetchedEpisodeInfo.collectAsState()
+
+    // Pre-fetch streams for currently watching when lists load
+    LaunchedEffect(currentlyWatching) {
+        if (currentlyWatching.isNotEmpty()) {
+            currentlyWatching.take(3).forEach { anime ->
+                viewModel.prefetchCurrentEpisodeStream(anime)
+            }
+        }
+    }
 
     // Player state
     var showPlayer by remember { mutableStateOf(false) }
@@ -97,26 +125,62 @@ fun MainScreen(
     var isLoadingStream by remember { mutableStateOf(false) }
     var streamError by remember { mutableStateOf<String?>(null) }
 
+    // Server/track selection state
+    var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
+    var currentCategory by remember { mutableStateOf("sub") }
+    var currentServerName by remember { mutableStateOf("") }
+    var currentServerIndex by remember { mutableIntStateOf(0) }
+
     // Helper function to load and play an episode
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int) {
         currentAnime = anime
         currentEpisode = episode
         totalEpisodes = anime.totalEpisodes
-        isLoadingStream = true
         streamError = null
         showPlayer = false
 
+        // Check if we have cached stream
+        val cacheKey = "${anime.id}_$episode"
+        prefetchedStreams[cacheKey]?.let { cached ->
+            if (cached != null) {
+                Log.d("MainActivity", "Using cached stream for ${anime.title} ep $episode")
+                currentVideoUrl = cached.url
+                currentReferer = cached.headers?.get("Referer") ?: "https://megacloud.tv/"
+                currentSubtitleUrl = cached.subtitleUrl
+                currentServerName = cached.serverName
+                currentCategory = cached.category
+                showPlayer = true
+
+                prefetchedEpisodeInfo[cacheKey]?.let { currentEpisodeInfo = it }
+                currentServerIndex = 0
+                viewModel.prefetchAdjacentEpisodes(anime.title, episode, anime.id)
+                return
+            }
+        }
+
+        // No cache, fetch new
+        isLoadingStream = true
         scope.launch {
-            val result = viewModel.getStreamLink(anime.title, episode)
+            Log.d("MainActivity", "Fetching stream for ${anime.title} ep $episode")
+
+            // First get episode info for server list
+            val epInfo = viewModel.getEpisodeInfo(anime.title, episode, anime.id)
+            currentEpisodeInfo = epInfo
+
+            val result = viewModel.getStreamLinkWithCache(anime.title, episode, anime.id)
 
             if (result != null) {
-                Log.d("MainActivity", "Stream URL: ${result.url.take(50)}...")
+                Log.d("MainActivity", "Stream URL found: ${result.url.take(50)}...")
                 currentVideoUrl = result.url
                 currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
                 currentSubtitleUrl = result.subtitleUrl
+                currentServerName = result.serverName
+                currentCategory = result.category
+                currentServerIndex = 0
                 showPlayer = true
+                viewModel.prefetchAdjacentEpisodes(anime.title, episode, anime.id)
             } else {
-                Log.e("MainActivity", "Failed to get stream")
+                Log.e("MainActivity", "Failed to get stream for ${anime.title} ep $episode")
                 streamError = "Could not find stream for ${anime.title} episode $episode"
             }
 
@@ -130,57 +194,103 @@ fun MainScreen(
         loadAndPlayEpisode(anime, episode)
     }
 
-    // Handle previous episode - scrape on demand
+    // Handle previous episode
     val onPreviousEpisode: () -> Unit = {
         currentAnime?.let { anime ->
             if (currentEpisode > 1) {
                 val prevEp = currentEpisode - 1
                 isLoadingStream = true
-
                 scope.launch {
-                    val result = viewModel.getStreamLink(anime.title, prevEp)
+                    val epInfo = viewModel.getEpisodeInfo(anime.title, prevEp, anime.id)
+                    currentEpisodeInfo = epInfo
 
+                    val result = viewModel.getStreamLinkWithCache(anime.title, prevEp, anime.id)
                     if (result != null) {
-                        Log.d("MainActivity", "Previous episode stream URL: ${result.url.take(50)}...")
                         currentVideoUrl = result.url
                         currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
                         currentSubtitleUrl = result.subtitleUrl
                         currentEpisode = prevEp
+                        currentServerName = result.serverName
+                        currentCategory = result.category
+                        currentServerIndex = 0
+                        viewModel.prefetchAdjacentEpisodes(anime.title, prevEp, anime.id)
                     } else {
-                        Log.e("MainActivity", "Failed to get stream for previous episode")
                         streamError = "Could not find stream for episode $prevEp"
                     }
-
                     isLoadingStream = false
                 }
             }
         }
     }
 
-    // Handle next episode - scrape on demand
+    // Handle next episode
     val onNextEpisode: () -> Unit = {
         currentAnime?.let { anime ->
-            // Allow next episode if we don't know total (0) or if there are more episodes
             if (totalEpisodes == 0 || currentEpisode < totalEpisodes) {
                 val nextEp = currentEpisode + 1
                 isLoadingStream = true
-
                 scope.launch {
-                    val result = viewModel.getStreamLink(anime.title, nextEp)
+                    val epInfo = viewModel.getEpisodeInfo(anime.title, nextEp, anime.id)
+                    currentEpisodeInfo = epInfo
 
+                    val result = viewModel.getStreamLinkWithCache(anime.title, nextEp, anime.id)
                     if (result != null) {
-                        Log.d("MainActivity", "Next episode stream URL: ${result.url.take(50)}...")
                         currentVideoUrl = result.url
                         currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
                         currentSubtitleUrl = result.subtitleUrl
                         currentEpisode = nextEp
+                        currentServerName = result.serverName
+                        currentCategory = result.category
+                        currentServerIndex = 0
+                        viewModel.prefetchAdjacentEpisodes(anime.title, nextEp, anime.id)
                     } else {
-                        Log.e("MainActivity", "Failed to get stream for next episode")
                         streamError = "Could not find stream for episode $nextEp"
                     }
-
                     isLoadingStream = false
                 }
+            }
+        }
+    }
+
+    // Handle server change
+    fun changeServer(serverName: String, category: String) {
+        currentAnime?.let { anime ->
+            isLoadingStream = true
+            scope.launch {
+                val result = viewModel.getStreamForServer(
+                    anime.title,
+                    currentEpisode,
+                    serverName,
+                    category,
+                    anime.id
+                )
+                if (result != null) {
+                    currentVideoUrl = result.url
+                    currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
+                    currentSubtitleUrl = result.subtitleUrl
+                    currentServerName = result.serverName
+                    currentCategory = result.category
+
+                    // Update server index
+                    val servers = if (category == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
+                    currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
+                }
+                isLoadingStream = false
+            }
+        }
+    }
+
+    // Handle playback error - auto try next server
+    fun onPlaybackError() {
+        currentAnime?.let { anime ->
+            val servers = if (currentCategory == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
+
+            if (servers != null && servers.size > 1) {
+                val nextIndex = (currentServerIndex + 1) % servers.size
+                val nextServer = servers[nextIndex]
+
+                Log.d("MainActivity", "Playback error, trying next server: ${nextServer.name}")
+                changeServer(nextServer.name, currentCategory)
             }
         }
     }
@@ -195,6 +305,9 @@ fun MainScreen(
                 currentEpisode = currentEpisode,
                 totalEpisodes = totalEpisodes,
                 isLoadingStream = isLoadingStream,
+                episodeInfo = currentEpisodeInfo,
+                currentServerName = currentServerName,
+                currentCategory = currentCategory,
                 onProgressUpdate = { percentage ->
                     val trackingPercent = viewModel.trackingPercentage.value
                     if (percentage >= trackingPercent && anime.id > 0) {
@@ -202,7 +315,9 @@ fun MainScreen(
                     }
                 },
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
-                onNextEpisode = if (totalEpisodes == 0 || currentEpisode < totalEpisodes) onNextEpisode else null
+                onNextEpisode = if (totalEpisodes == 0 || currentEpisode < totalEpisodes) onNextEpisode else null,
+                onServerChange = { server, category -> changeServer(server, category) },
+                onPlaybackError = { onPlaybackError() }
             )
         }
 
@@ -246,7 +361,12 @@ fun MainScreen(
             }
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                HorizontalPager(state = pagerState, userScrollEnabled = true) { page ->
+                HorizontalPager(
+                    state = pagerState,
+                    userScrollEnabled = true,
+                    pageSpacing = 8.dp,
+                    beyondViewportPageCount = 1
+                ) { page ->
                     when (page) {
                         0 -> ExploreScreen(
                             viewModel = viewModel,

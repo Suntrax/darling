@@ -2,6 +2,7 @@ package com.blissless.anime
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,6 +26,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import com.blissless.anime.api.AniwatchService
 import com.blissless.anime.api.AniwatchStreamResult
+import com.blissless.anime.api.EpisodeStreams
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -33,6 +35,8 @@ class MainViewModel : ViewModel() {
     companion object {
         private const val TAG = "MainViewModel"
         private const val CLIENT_ID = "36313"
+        private const val PREFS_NAME = "anilist_prefs"
+        private const val TOKEN_KEY = "auth_token"
     }
 
     private val _authToken = MutableStateFlow<String?>(null)
@@ -80,54 +84,52 @@ class MainViewModel : ViewModel() {
     private val _planningToWatch = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val planningToWatch: StateFlow<List<AnimeMedia>> = _planningToWatch.asStateFlow()
 
-    private var context: Context? = null
+    // Pre-fetched stream cache
+    private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
+    val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
 
-    fun init(context: Context) {
+    // Pre-fetched episode info (servers list)
+    private val _prefetchedEpisodeInfo = MutableStateFlow<Map<String, EpisodeStreams?>>(emptyMap())
+    val prefetchedEpisodeInfo: StateFlow<Map<String, EpisodeStreams?>> = _prefetchedEpisodeInfo.asStateFlow()
+
+    private var context: Context? = null
+    private lateinit var sharedPreferences: SharedPreferences
+
+    fun init(context: Context, hasToken: Boolean) {
         this.context = context
+        sharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // If we know user has token from MainActivity's synchronous check, set it now
+        if (hasToken) {
+            val token = sharedPreferences.getString(TOKEN_KEY, null)
+            _authToken.value = token
+            Log.d(TAG, "Token loaded from SharedPreferences: ${token?.take(20)}...")
+        }
+
+        // Load other settings
+        _isOled.value = sharedPreferences.getBoolean("oled_mode", false)
+        _trackingPercentage.value = sharedPreferences.getInt("tracking_percentage", 85)
+
+        // Fetch data asynchronously
         viewModelScope.launch {
-            loadSettings(context)
-            _authToken.value?.let { token ->
-                if (token.isNotEmpty()) {
-                    _isLoadingHome.value = true
-                    fetchUser()
-                    fetchLists()
-                    _isLoadingHome.value = false
-                }
+            if (hasToken) {
+                _isLoadingHome.value = true
+                fetchUser()
+                fetchLists()
+                _isLoadingHome.value = false
             }
             fetchExploreData()
         }
     }
 
-    private suspend fun loadSettings(context: Context) {
-        context.dataStore.edit { preferences ->
-            val tokenKey = stringPreferencesKey("auth_token")
-            val savedToken = preferences[tokenKey]
-            _authToken.value = savedToken
-
-            val oledKey = booleanPreferencesKey("is_oled")
-            _isOled.value = preferences[oledKey] ?: false
-
-            val trackingKey = intPreferencesKey("tracking_percentage")
-            _trackingPercentage.value = preferences[trackingKey] ?: 85
-        }
-    }
-
     fun setOledMode(enabled: Boolean) {
         _isOled.value = enabled
-        viewModelScope.launch {
-            context?.dataStore?.edit { preferences ->
-                preferences[booleanPreferencesKey("is_oled")] = enabled
-            }
-        }
+        sharedPreferences.edit().putBoolean("oled_mode", enabled).apply()
     }
 
     fun setTrackingPercentage(percentage: Int) {
         _trackingPercentage.value = percentage
-        viewModelScope.launch {
-            context?.dataStore?.edit { preferences ->
-                preferences[intPreferencesKey("tracking_percentage")] = percentage
-            }
-        }
+        sharedPreferences.edit().putInt("tracking_percentage", percentage).apply()
         Log.d(TAG, "Tracking percentage set to: $percentage%")
     }
 
@@ -148,11 +150,11 @@ class MainViewModel : ViewModel() {
             Log.d(TAG, "Parsed token: ${token?.take(20)}...")
 
             if (token != null) {
+                // Save to SharedPreferences for synchronous loading on next launch
+                sharedPreferences.edit().putString(TOKEN_KEY, token).apply()
+                _authToken.value = token
+
                 viewModelScope.launch {
-                    context?.dataStore?.edit { preferences ->
-                        preferences[stringPreferencesKey("auth_token")] = token
-                    }
-                    _authToken.value = token
                     _isLoadingHome.value = true
                     fetchUser()
                     fetchLists()
@@ -163,17 +165,17 @@ class MainViewModel : ViewModel() {
     }
 
     fun logout() {
+        // Clear from SharedPreferences
+        sharedPreferences.edit().remove(TOKEN_KEY).apply()
+
         _authToken.value = null
         _userId.value = null
         _userName.value = null
         _userAvatar.value = null
         _currentlyWatching.value = emptyList()
         _planningToWatch.value = emptyList()
-        viewModelScope.launch {
-            context?.dataStore?.edit { preferences ->
-                preferences.remove(stringPreferencesKey("auth_token"))
-            }
-        }
+        _prefetchedStreams.value = emptyMap()
+        _prefetchedEpisodeInfo.value = emptyMap()
     }
 
     private suspend fun graphqlRequest(query: String, variables: Map<String, Any?>): String? = withContext(Dispatchers.IO) {
@@ -412,7 +414,6 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoadingExplore.value = true
 
-            // Fetch all in parallel for faster loading
             val deferredFeatured = async { fetchFeaturedAnime() }
             val deferredSeasonal = async { fetchSeasonalAnime() }
             val deferredSeries = async { fetchTopSeries() }
@@ -444,7 +445,6 @@ class MainViewModel : ViewModel() {
         """.trimIndent()
 
         val response = publicGraphqlRequest(query, emptyMap())
-        Log.d(TAG, "Featured response: ${response?.take(100)}...")
         response?.let {
             try {
                 val json = Json { ignoreUnknownKeys = true }
@@ -530,12 +530,8 @@ class MainViewModel : ViewModel() {
             }
         """.trimIndent()
 
-        Log.d(TAG, "Fetching top series...")
-
         try {
             val response = publicGraphqlRequest(query, emptyMap())
-            Log.d(TAG, "Top series raw response: ${response?.take(500)}...")
-
             if (response != null) {
                 val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(response)
@@ -553,7 +549,6 @@ class MainViewModel : ViewModel() {
                     )
                 }
 
-                // Only filter if we have enough results, otherwise show all
                 _topSeries.value = if (seriesList.size > 10) {
                     seriesList.filter { (it.averageScore ?: 0) >= 70 }
                 } else {
@@ -561,8 +556,6 @@ class MainViewModel : ViewModel() {
                 }
 
                 Log.d(TAG, "Top series loaded: ${_topSeries.value.size}")
-            } else {
-                Log.e(TAG, "Top series response was null")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch/parse top series", e)
@@ -588,12 +581,8 @@ class MainViewModel : ViewModel() {
             }
         """.trimIndent()
 
-        Log.d(TAG, "Fetching top movies...")
-
         try {
             val response = publicGraphqlRequest(query, emptyMap())
-            Log.d(TAG, "Top movies raw response: ${response?.take(500)}...")
-
             if (response != null) {
                 val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(response)
@@ -611,7 +600,6 @@ class MainViewModel : ViewModel() {
                     )
                 }
 
-                // Only filter if we have enough results, otherwise show all
                 _topMovies.value = if (moviesList.size > 10) {
                     moviesList.filter { (it.averageScore ?: 0) >= 70 }
                 } else {
@@ -619,8 +607,6 @@ class MainViewModel : ViewModel() {
                 }
 
                 Log.d(TAG, "Top movies loaded: ${_topMovies.value.size}")
-            } else {
-                Log.e(TAG, "Top movies response was null")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch/parse top movies", e)
@@ -635,6 +621,105 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    // Pre-fetch stream for currently watching anime (next episode)
+    fun prefetchCurrentEpisodeStream(anime: AnimeMedia) {
+        val nextEp = anime.progress + 1
+        val key = "${anime.id}_$nextEp"
+
+        if (_prefetchedStreams.value.containsKey(key)) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Pre-fetching stream for ${anime.title} ep $nextEp")
+                val result = AniwatchService.getStreamLink(anime.title, nextEp)
+                _prefetchedStreams.value = _prefetchedStreams.value + (key to result)
+
+                // Also cache episode info for server selection
+                val episodeInfo = AniwatchService.getEpisodeInfo(anime.title, nextEp)
+                _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to episodeInfo)
+
+                Log.d(TAG, "Pre-fetch complete for ${anime.title} ep $nextEp")
+            } catch (e: Exception) {
+                Log.e(TAG, "Pre-fetch failed for ${anime.title}", e)
+            }
+        }
+    }
+
+    // Get cached stream or fetch new one
+    suspend fun getStreamLinkWithCache(animeName: String, episodeNumber: Int, animeId: Int): AniwatchStreamResult? {
+        val key = "${animeId}_$episodeNumber"
+
+        _prefetchedStreams.value[key]?.let {
+            Log.d(TAG, "Using cached stream for $animeName ep $episodeNumber")
+            return it
+        }
+
+        Log.d(TAG, "Fetching new stream for $animeName ep $episodeNumber")
+        val result = AniwatchService.getStreamLink(animeName, episodeNumber)
+
+        _prefetchedStreams.value = _prefetchedStreams.value + (key to result)
+
+        return result
+    }
+
+    // Get stream for specific server
+    suspend fun getStreamForServer(
+        animeName: String,
+        episodeNumber: Int,
+        serverName: String,
+        category: String,
+        animeId: Int
+    ): AniwatchStreamResult? {
+        val key = "${animeId}_${episodeNumber}_${serverName}_$category"
+
+        _prefetchedStreams.value[key]?.let { return it }
+
+        val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, serverName, category)
+        _prefetchedStreams.value = _prefetchedStreams.value + (key to result)
+
+        return result
+    }
+
+    // Pre-fetch adjacent episodes (previous and next)
+    fun prefetchAdjacentEpisodes(animeName: String, currentEpisode: Int, animeId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Pre-fetch previous
+            if (currentEpisode > 1) {
+                val prevKey = "${animeId}_${currentEpisode - 1}"
+                if (!_prefetchedStreams.value.containsKey(prevKey)) {
+                    Log.d(TAG, "Pre-fetching previous episode: ${currentEpisode - 1}")
+                    val result = AniwatchService.getStreamLink(animeName, currentEpisode - 1)
+                    _prefetchedStreams.value = _prefetchedStreams.value + (prevKey to result)
+
+                    val episodeInfo = AniwatchService.getEpisodeInfo(animeName, currentEpisode - 1)
+                    _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (prevKey to episodeInfo)
+                }
+            }
+
+            // Pre-fetch next
+            val nextKey = "${animeId}_${currentEpisode + 1}"
+            if (!_prefetchedStreams.value.containsKey(nextKey)) {
+                Log.d(TAG, "Pre-fetching next episode: ${currentEpisode + 1}")
+                val result = AniwatchService.getStreamLink(animeName, currentEpisode + 1)
+                _prefetchedStreams.value = _prefetchedStreams.value + (nextKey to result)
+
+                val episodeInfo = AniwatchService.getEpisodeInfo(animeName, currentEpisode + 1)
+                _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (nextKey to episodeInfo)
+            }
+        }
+    }
+
+    // Get episode info for server selection
+    suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int, animeId: Int): EpisodeStreams? {
+        val key = "${animeId}_$episodeNumber"
+        _prefetchedEpisodeInfo.value[key]?.let { return it }
+
+        val result = AniwatchService.getEpisodeInfo(animeName, episodeNumber)
+        _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to result)
+        return result
+    }
+
+    // Legacy method for backward compatibility
     suspend fun getStreamLink(animeTitle: String, episodeNumber: Int): AniwatchStreamResult? = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Getting stream link for $animeTitle episode $episodeNumber")
@@ -708,7 +793,6 @@ class MainViewModel : ViewModel() {
     fun removeAnimeFromList(mediaId: Int) {
         Log.d(TAG, "removeAnimeFromList: mediaId=$mediaId")
 
-        // Find the list entry ID from the user's lists
         val watchingEntry = _currentlyWatching.value.find { it.id == mediaId }?.listEntryId
         val planningEntry = _planningToWatch.value.find { it.id == mediaId }?.listEntryId
         val entryId = watchingEntry ?: planningEntry
@@ -721,9 +805,9 @@ class MainViewModel : ViewModel() {
         Log.d(TAG, "Found entryId=$entryId for mediaId=$mediaId")
 
         viewModelScope.launch {
-            val query = $$"""
-                mutation ($id: Int) {
-                    DeleteMediaListEntry(id: $id) {
+            val query = """
+                mutation (${'$'}id: Int) {
+                    DeleteMediaListEntry(id: ${'$'}id) {
                         deleted
                     }
                 }

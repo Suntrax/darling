@@ -11,7 +11,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -44,6 +47,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import java.util.Locale
+import com.blissless.anime.api.EpisodeStreams
+import com.blissless.anime.api.ServerInfo
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -54,13 +59,20 @@ fun PlayerScreen(
     currentEpisode: Int = 1,
     totalEpisodes: Int = 0,
     isLoadingStream: Boolean = false,
+    episodeInfo: EpisodeStreams? = null,
+    currentServerName: String = "",
+    currentCategory: String = "sub",
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
-    onNextEpisode: (() -> Unit)? = null
+    onNextEpisode: (() -> Unit)? = null,
+    onServerChange: ((serverName: String, category: String) -> Unit)? = null,
+    onPlaybackError: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
     var hasTriggeredProgressUpdate by remember { mutableStateOf(false) }
+    var playbackError by remember { mutableStateOf<String?>(null) }
+    var hasError by remember { mutableStateOf(false) }
 
     // Resize mode state: 0 = FIT, 1 = FILL, 2 = 16:9
     var resizeModeIndex by remember { mutableIntStateOf(0) }
@@ -79,6 +91,9 @@ fun PlayerScreen(
     // Progress state
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
+
+    // Server selection state
+    var showServerMenu by remember { mutableStateOf(false) }
 
     // Fullscreen & Orientation Logic
     LaunchedEffect(Unit) {
@@ -122,12 +137,29 @@ fun PlayerScreen(
                     override fun onIsPlayingChanged(playing: Boolean) {
                         isPlaying = playing
                     }
+
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        hasError = true
+                        playbackError = error.message ?: "Unknown playback error"
+                        // Notify parent to try next server
+                        onPlaybackError?.invoke()
+                    }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY) {
+                            hasError = false
+                            playbackError = null
+                        }
+                    }
                 })
             }
     }
 
     // Update player when URL changes
     LaunchedEffect(videoUrl) {
+        hasError = false
+        playbackError = null
+
         val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -199,6 +231,10 @@ fun PlayerScreen(
             String.format(Locale.US, "%d:%02d", minutes, seconds)
         }
     }
+
+    // Get available servers
+    val subServers = episodeInfo?.subServers ?: emptyList()
+    val dubServers = episodeInfo?.dubServers ?: emptyList()
 
     Box(
         modifier = Modifier
@@ -293,7 +329,7 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Top bar - Episode info and Resize button
+                // Top bar - Episode info and controls
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -317,23 +353,94 @@ fun PlayerScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
 
-                    // Resize button
-                    // Resize button - icon only
-                    IconButton(
-                        onClick = {
-                            resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
-                        },
-                        modifier = Modifier
-                            .background(
-                                Color.Black.copy(alpha = 0.5f),
-                                shape = MaterialTheme.shapes.small
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Server selection button
+                        if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
+                            Box {
+                                IconButton(
+                                    onClick = { showServerMenu = true },
+                                    modifier = Modifier
+                                        .background(
+                                            Color.Black.copy(alpha = 0.5f),
+                                            shape = MaterialTheme.shapes.small
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Server Selection",
+                                        tint = Color.White
+                                    )
+                                }
+
+                                // Server dropdown
+                                DropdownMenu(
+                                    expanded = showServerMenu,
+                                    onDismissRequest = { showServerMenu = false },
+                                    modifier = Modifier
+                                        .background(Color(0xFF1A1A1A))
+                                        .width(180.dp)
+                                ) {
+                                    // SUB servers
+                                    if (subServers.isNotEmpty()) {
+                                        Text(
+                                            "SUB",
+                                            color = Color.Gray,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                        subServers.forEach { server ->
+                                            ServerMenuItem(
+                                                serverName = server.name,
+                                                isSelected = server.name == currentServerName && currentCategory == "sub",
+                                                onClick = {
+                                                    onServerChange(server.name, "sub")
+                                                    showServerMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+
+                                    // DUB servers
+                                    if (dubServers.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "DUB",
+                                            color = Color.Gray,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                        dubServers.forEach { server ->
+                                            ServerMenuItem(
+                                                serverName = server.name,
+                                                isSelected = server.name == currentServerName && currentCategory == "dub",
+                                                onClick = {
+                                                    onServerChange(server.name, "dub")
+                                                    showServerMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Resize button
+                        IconButton(
+                            onClick = {
+                                resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
+                            },
+                            modifier = Modifier
+                                .background(
+                                    Color.Black.copy(alpha = 0.5f),
+                                    shape = MaterialTheme.shapes.small
+                                )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AspectRatio,
+                                contentDescription = "Change aspect ratio",
+                                tint = Color.White
                             )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AspectRatio,
-                            contentDescription = "Change aspect ratio",
-                            tint = Color.White
-                        )
+                        }
                     }
                 }
 
@@ -409,6 +516,57 @@ fun PlayerScreen(
                     )
                 }
 
+                // Error indicator
+                if (hasError && playbackError != null) {
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Stream Error",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                playbackError ?: "Unknown error",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            if (onServerChange != null && subServers.size > 1) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = {
+                                        // Find current server index and try next
+                                        val currentIndex = subServers.indexOfFirst { it.name == currentServerName }
+                                        val nextIndex = (currentIndex + 1) % subServers.size
+                                        onServerChange(subServers[nextIndex].name, currentCategory)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Text("Try Next Server")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Bottom controls - Progress bar
                 Column(
                     modifier = Modifier
@@ -459,4 +617,35 @@ fun PlayerScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ServerMenuItem(
+    serverName: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    DropdownMenuItem(
+        text = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (isSelected) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Text(
+                    serverName,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White
+                )
+            }
+        },
+        onClick = onClick,
+        modifier = Modifier.background(if (isSelected) Color(0xFF2A2A2A) else Color.Transparent)
+    )
 }

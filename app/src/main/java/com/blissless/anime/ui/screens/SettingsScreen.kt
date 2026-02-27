@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.blissless.anime.MainViewModel
+import kotlin.math.round
 
 @Composable
 fun SettingsScreen(
@@ -107,21 +108,18 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                var sliderPosition by remember { mutableFloatStateOf(trackingPercentage.toFloat()) }
-
+                // Smooth slider that snaps to 5% increments - no tick marks
                 Slider(
-                    value = sliderPosition,
+                    value = trackingPercentage.toFloat(),
                     onValueChange = { newValue ->
-                        val rounded = (newValue / 5).toInt() * 5
-                        sliderPosition = rounded.toFloat()
+                        // Snap to nearest 5%
+                        val snapped = round(newValue / 5f) * 5f
+                        viewModel.setTrackingPercentage(snapped.toInt())
                     },
-                    onValueChangeFinished = {
-                        viewModel.setTrackingPercentage(sliderPosition.toInt())
-                    },
-                    valueRange = 50f..100f,
-                    steps = 10
+                    valueRange = 50f..100f
+                    // No steps parameter = no tick marks, smooth slider
                 )
 
                 Row(
@@ -156,17 +154,18 @@ fun SettingsScreen(
 
                 if (isLoggedIn) {
                     val userName by viewModel.userName.collectAsState()
-                    val userAvatar by viewModel.userAvatar.collectAsState()
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        userAvatar?.let { avatar ->
-                            Text("👤 ", style = MaterialTheme.typography.titleLarge)
-                        }
+                        Text(
+                            "👤 ",
+                            style = MaterialTheme.typography.titleLarge
+                        )
                         Text(
                             userName ?: "Logged In",
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
                         )
                     }
 
