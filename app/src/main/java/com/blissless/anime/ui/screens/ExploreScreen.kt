@@ -382,12 +382,16 @@ fun FeaturedCarousel(
                                     Spacer(modifier = Modifier.width(12.dp))
                                 }
 
+                                // latestEpisode is NEXT to air, so subtract 1 for released count
                                 anime.latestEpisode?.let { ep ->
-                                    Text(
-                                        "Ep $ep ${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}",
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
+                                    val releasedEp = ep - 1
+                                    if (releasedEp > 0) {
+                                        Text(
+                                            "Ep $releasedEp ${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -515,8 +519,7 @@ fun ExploreAnimeCard(
                     }
                 }
 
-                // Episode badge - shows latest episode OR total episodes
-                // Episode badge - shows latest episode OR total episodes
+                // Episode badge - latestEpisode is NEXT to air, so subtract 1
                 if (anime.latestEpisode != null || anime.episodes > 0) {
                     Surface(
                         modifier = Modifier
@@ -525,8 +528,11 @@ fun ExploreAnimeCard(
                         shape = RoundedCornerShape(6.dp),
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
+                        // latestEpisode from AniList is the next episode TO AIR
+                        // So released episodes = latestEpisode - 1
+                        val releasedEpisodes = anime.latestEpisode?.let { it - 1 }
                         val episodeText = when {
-                            anime.latestEpisode != null -> "Ep ${anime.latestEpisode}"
+                            releasedEpisodes != null && releasedEpisodes > 0 -> "Ep $releasedEpisodes"
                             anime.episodes > 0 -> "${anime.episodes} Ep"
                             else -> ""
                         }
@@ -688,12 +694,16 @@ fun ExploreAnimeDialog(
                             )
                         }
 
+                        // latestEpisode is NEXT to air, so subtract 1 for released count
                         anime.latestEpisode?.let { ep ->
-                            Text(
-                                "Episode $ep ${if (anime.episodes > 0) "of ${anime.episodes}" else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            val releasedEp = ep - 1
+                            if (releasedEp > 0) {
+                                Text(
+                                    "Episode $releasedEp ${if (anime.episodes > 0) "of ${anime.episodes}" else ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
 
                         if (anime.genres.isNotEmpty()) {
