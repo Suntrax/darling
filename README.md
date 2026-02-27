@@ -76,7 +76,7 @@
 ### From Source
 ```bash
 # Clone the repository
-git clone [https://github.com/Suntrax/darling.git](https://github.com/Suntrax/darling.git)
+git clone https://github.com/Suntrax/darling.git
 
 # Open in Android Studio
 # Build and run on your device or emulator
