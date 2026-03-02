@@ -55,7 +55,7 @@
 - **Swipe Navigation** – Smooth page transitions and intuitive gestures.
 - **Responsive Layouts** – Fully optimized for both phone and tablet form factors.
 - **Smooth Animations** – Visual feedback for all user interactions and state changes.
-- **Smart Caching** – Data and images cached to prevent reloads and API rate limits.
+- **Smart Caching** – Data cached for 24 hours with images fetched on-demand.
 
 ---
 
@@ -75,9 +75,9 @@ Each anime list category has a distinct color for easy visual identification:
 
 ## Screenshots
 
-| Home Screen | Explore Screen | Video Player | Settings Screen |
-|:---:|:---:|:---:|:---:|
-| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) | ![Home](screenshots/settings.png) |
+| Home Screen | Explore Screen | Video Player |
+|:---:|:---:|:---:|
+| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) |
 
 ---
 
@@ -142,7 +142,7 @@ app/src/main/java/com/blissless/anime/
 ### v1.6 (Current)
 - **User Avatar Display** – Your AniList avatar now appears in the Settings screen.
 - **Organized Settings** – Settings reorganized into Appearance and Player Settings sections.
-- **Improved Caching** – Data cached for 5 minutes to prevent API rate limiting.
+- **Smart Caching** – Data cached for 24 hours; images fetched on-demand if not cached.
 - **Image Caching** – All images cached to disk and memory for instant loading.
 
 ### v1.5

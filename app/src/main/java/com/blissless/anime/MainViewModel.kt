@@ -39,8 +39,8 @@ class MainViewModel : ViewModel() {
         private const val PREFS_NAME = "anilist_prefs"
         private const val TOKEN_KEY = "auth_token"
 
-        // Cache duration in milliseconds (5 minutes)
-        private const val CACHE_DURATION_MS = 5 * 60 * 1000L
+        // Cache duration in milliseconds (24 hours)
+        private const val CACHE_DURATION_MS = 24 * 60 * 60 * 1000L
 
         // Cache keys
         private const val CACHE_EXPLORE_TIME = "cache_explore_time"
