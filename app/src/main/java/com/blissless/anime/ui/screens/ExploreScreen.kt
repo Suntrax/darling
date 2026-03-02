@@ -2,20 +2,26 @@ package com.blissless.anime.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -35,6 +41,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import com.blissless.anime.AnimeMedia
 import com.blissless.anime.ExploreAnime
@@ -419,35 +427,67 @@ fun FeaturedCarousel(
     animeList: List<ExploreAnime>,
     onAnimeClick: (ExploreAnime) -> Unit
 ) {
-    // Simple auto-rotating banner without HorizontalPager for better performance
-    var currentIndex by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(pageCount = { animeList.size })
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5000)
-            currentIndex = (currentIndex + 1) % animeList.size
+    // Pre-cache all banner images
+    LaunchedEffect(animeList) {
+        animeList.forEach { anime ->
+            val bannerUrl = anime.banner ?: anime.cover
+            val request = ImageRequest.Builder(context)
+                .data(bannerUrl)
+                .memoryCacheKey(bannerUrl)
+                .diskCacheKey(bannerUrl)
+                .build()
+            context.imageLoader.enqueue(request)
+
+            // Also cache cover images
+            val coverRequest = ImageRequest.Builder(context)
+                .data(anime.cover)
+                .memoryCacheKey(anime.cover)
+                .diskCacheKey(anime.cover)
+                .build()
+            context.imageLoader.enqueue(coverRequest)
         }
     }
 
-    val currentAnime = animeList.getOrElse(currentIndex) { animeList.first() }
+    // Auto-scroll
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5000)
+            val nextPage = (pagerState.currentPage + 1) % animeList.size
+            pagerState.animateScrollToPage(nextPage, animationSpec = tween(800))
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(280.dp)
-            .clickable { onAnimeClick(currentAnime) }
     ) {
-        // Banner image
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(currentAnime.banner ?: currentAnime.cover)
-                .crossfade(false)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
+        // Animated banner transition
+        val currentAnime = animeList.getOrElse(pagerState.currentPage) { animeList.first() }
+
+        AnimatedContent(
+            targetState = currentAnime,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(400)) + slideInHorizontally(animationSpec = tween(400)) { it })
+                    .togetherWith(fadeOut(animationSpec = tween(400)) + slideOutHorizontally(animationSpec = tween(400)) { -it })
+            },
+            label = "BannerTransition"
+        ) { anime ->
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(anime.banner ?: anime.cover)
+                    .memoryCacheKey(anime.banner ?: anime.cover)
+                    .diskCacheKey(anime.banner ?: anime.cover)
+                    .crossfade(false)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Gradient overlay
         Box(
@@ -462,78 +502,97 @@ fun FeaturedCarousel(
                 ))
         )
 
-        // Info card at bottom
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .align(Alignment.BottomStart),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.7f)
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // Swipeable pager for info cards
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            pageSpacing = 0.dp,
+            userScrollEnabled = true
+        ) { page ->
+            val anime = animeList[page]
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomStart
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(currentAnime.cover)
-                        .crossfade(false)
-                        .build(),
-                    contentDescription = currentAnime.title,
-                    contentScale = ContentScale.Crop,
+                Card(
                     modifier = Modifier
-                        .width(50.dp)
-                        .height(70.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        currentAnime.title,
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onAnimeClick(anime) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.7f)
                     )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(anime.cover)
+                                .memoryCacheKey(anime.cover)
+                                .diskCacheKey(anime.cover)
+                                .crossfade(false)
+                                .build(),
+                            contentDescription = anime.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .width(50.dp)
+                                .height(70.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                        )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                    Text(
-                        currentAnime.genres.take(3).joinToString(" - "),
-                        color = Color.White.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        currentAnime.averageScore?.let { score ->
-                            val displayScore = score / 10.0
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "★ ${String.format(Locale.US, "%.1f", displayScore)}",
-                                color = Color(0xFFFFD700),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
+                                anime.title,
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                        }
 
-                        currentAnime.latestEpisode?.let { ep ->
-                            val releasedEp = ep - 1
-                            if (releasedEp > 0) {
-                                Text(
-                                    "Ep $releasedEp ${if (currentAnime.episodes > 0) "/ ${currentAnime.episodes}" else ""}",
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                anime.genres.take(3).joinToString(" - "),
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                anime.averageScore?.let { score ->
+                                    val displayScore = score / 10.0
+                                    Text(
+                                        "★ ${String.format(Locale.US, "%.1f", displayScore)}",
+                                        color = Color(0xFFFFD700),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                }
+
+                                anime.latestEpisode?.let { ep ->
+                                    val releasedEp = ep - 1
+                                    if (releasedEp > 0) {
+                                        Text(
+                                            "Ep $releasedEp ${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -541,7 +600,7 @@ fun FeaturedCarousel(
             }
         }
 
-        // Page indicators
+        // Page indicators with animation
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -552,10 +611,10 @@ fun FeaturedCarousel(
                 Box(
                     modifier = Modifier
                         .height(4.dp)
-                        .width(if (index == currentIndex) 24.dp else 8.dp)
+                        .width(if (index == pagerState.currentPage) 24.dp else 8.dp)
                         .clip(RoundedCornerShape(2.dp))
                         .background(
-                            if (index == currentIndex) Color.White
+                            if (index == pagerState.currentPage) Color.White
                             else Color.White.copy(alpha = 0.4f)
                         )
                 )
@@ -623,7 +682,9 @@ fun ExploreAnimeCard(
     val imageRequest = remember(anime.cover) {
         ImageRequest.Builder(context)
             .data(anime.cover)
-            .crossfade(false) // Disable crossfade for smoother scrolling
+            .memoryCacheKey(anime.cover)
+            .diskCacheKey(anime.cover)
+            .crossfade(false)
             .build()
     }
 

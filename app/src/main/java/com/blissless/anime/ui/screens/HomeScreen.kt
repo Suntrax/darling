@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.imageLoader
 import com.blissless.anime.AnimeMedia
 import com.blissless.anime.ExploreAnime
 import com.blissless.anime.MainViewModel
@@ -617,6 +619,8 @@ fun HomeAnimeCard(
     onPlayClick: () -> Unit,
     onStatusClick: () -> Unit
 ) {
+    val context = LocalContext.current
+
     // Status colors matching ExploreScreen
     val statusColor = when (listType) {
         "CURRENT" -> Color(0xFF2196F3)    // Blue - Watching
@@ -652,6 +656,16 @@ fun HomeAnimeCard(
         }
     }
 
+    // Cached image request for performance
+    val imageRequest = remember(anime.cover) {
+        ImageRequest.Builder(context)
+            .data(anime.cover)
+            .memoryCacheKey(anime.cover)
+            .diskCacheKey(anime.cover)
+            .crossfade(false)
+            .build()
+    }
+
     Column(
         modifier = Modifier.width(130.dp)
     ) {
@@ -662,7 +676,7 @@ fun HomeAnimeCard(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
-                    model = anime.cover,
+                    model = imageRequest,
                     contentDescription = anime.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -775,10 +789,21 @@ fun EpisodeSelectionDialog(
     onDismiss: () -> Unit,
     onEpisodeSelect: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
     val currentProgress = anime.progress
+
+    // Cached image request for dialog
+    val imageRequest = remember(anime.cover) {
+        ImageRequest.Builder(context)
+            .data(anime.cover)
+            .memoryCacheKey(anime.cover)
+            .diskCacheKey(anime.cover)
+            .crossfade(false)
+            .build()
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -801,7 +826,7 @@ fun EpisodeSelectionDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     AsyncImage(
-                        model = anime.cover,
+                        model = imageRequest,
                         contentDescription = anime.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -1306,7 +1331,18 @@ private fun SearchResultItem(
     currentStatus: String?,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val displayScore = anime.averageScore?.let { it / 10.0 }
+
+    // Cached image request
+    val imageRequest = remember(anime.cover) {
+        ImageRequest.Builder(context)
+            .data(anime.cover)
+            .memoryCacheKey(anime.cover)
+            .diskCacheKey(anime.cover)
+            .crossfade(false)
+            .build()
+    }
 
     Card(
         modifier = Modifier
@@ -1322,7 +1358,7 @@ private fun SearchResultItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
-                model = anime.cover,
+                model = imageRequest,
                 contentDescription = anime.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -1457,6 +1493,16 @@ fun SearchAnimeDetailDialog(
         label = "statusScale"
     )
 
+    // Cached image request
+    val imageRequest = remember(anime.cover) {
+        ImageRequest.Builder(context)
+            .data(anime.cover)
+            .memoryCacheKey(anime.cover)
+            .diskCacheKey(anime.cover)
+            .crossfade(false)
+            .build()
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -1475,7 +1521,7 @@ fun SearchAnimeDetailDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     AsyncImage(
-                        model = anime.cover,
+                        model = imageRequest,
                         contentDescription = anime.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

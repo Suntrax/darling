@@ -2,18 +2,26 @@ package com.blissless.anime.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.blissless.anime.MainViewModel
 import kotlin.math.round
 
@@ -45,359 +53,313 @@ fun SettingsScreen(
 
         HorizontalDivider()
 
-        // OLED Mode Toggle
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
-            )
+        // Appearance Section
+        SettingsSection(
+            title = "Appearance",
+            icon = Icons.Default.Palette,
+            isOled = isOled
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        "OLED Mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        "Pure black background for AMOLED screens",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = isOled,
-                    onCheckedChange = { viewModel.setOledMode(it) }
-                )
-            }
+            // OLED Mode Toggle
+            SettingsToggle(
+                title = "OLED Mode",
+                description = "Pure black background for AMOLED screens",
+                checked = isOled,
+                onCheckedChange = { viewModel.setOledMode(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Status Colors Toggle
+            SettingsToggle(
+                title = "Status Color Indicators",
+                description = "Show colored status bars on anime cards",
+                checked = showStatusColors,
+                onCheckedChange = { viewModel.setShowStatusColors(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // High Refresh Rate Toggle
+            SettingsToggle(
+                title = "High Refresh Rate",
+                description = "Force 120Hz for smoother scrolling",
+                checked = forceHighRefreshRate,
+                onCheckedChange = { viewModel.setForceHighRefreshRate(it) },
+                isOled = isOled
+            )
         }
 
-        // Status Colors Toggle
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
-            )
+        // Player Settings Section
+        SettingsSection(
+            title = "Player Settings",
+            icon = Icons.Default.PlayArrow,
+            isOled = isOled
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Status Color Indicators",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        "Show colored status bars and bookmark colors on anime cards",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = showStatusColors,
-                    onCheckedChange = { viewModel.setShowStatusColors(it) }
-                )
-            }
-        }
-
-        // High Refresh Rate Toggle
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
+            // Episode Tracking
+            SettingsSlider(
+                title = "Episode Tracking",
+                description = "Auto-update AniList progress when you've watched this percentage",
+                value = trackingPercentage.toFloat(),
+                valueRange = 50f..100f,
+                valueLabel = "${trackingPercentage}%",
+                onValueChange = { newValue ->
+                    val snapped = round(newValue / 5f) * 5f
+                    viewModel.setTrackingPercentage(snapped.toInt())
+                },
+                isOled = isOled,
+                minLabel = "50%",
+                maxLabel = "100%"
             )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "High Refresh Rate",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        "Force 120Hz display for smoother scrolling",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = forceHighRefreshRate,
-                    onCheckedChange = { viewModel.setForceHighRefreshRate(it) }
-                )
-            }
-        }
 
-        // Episode Tracking Percentage
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Skip Forward Duration
+            SettingsSlider(
+                title = "Skip Forward",
+                description = "Double-tap right side to skip forward",
+                value = forwardSkipSeconds.toFloat(),
+                valueRange = 5f..30f,
+                valueLabel = "${forwardSkipSeconds}s",
+                onValueChange = { newValue ->
+                    val snapped = round(newValue / 5f) * 5f
+                    viewModel.setForwardSkipSeconds(snapped.toInt())
+                },
+                isOled = isOled,
+                minLabel = "5s",
+                maxLabel = "30s",
+                leadingIcon = Icons.Default.FastForward
             )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        "Episode Tracking",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        "$trackingPercentage%",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-                Text(
-                    "Auto-update AniList progress when you've watched this percentage of an episode",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Smooth slider that snaps to 5% increments - no tick marks
-                Slider(
-                    value = trackingPercentage.toFloat(),
-                    onValueChange = { newValue ->
-                        // Snap to nearest 5%
-                        val snapped = round(newValue / 5f) * 5f
-                        viewModel.setTrackingPercentage(snapped.toInt())
-                    },
-                    valueRange = 50f..100f
-                    // No steps parameter = no tick marks, smooth slider
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("50%", style = MaterialTheme.typography.labelSmall)
-                    Text("100%", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
-        // Forward Skip Duration
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
+            // Skip Backward Duration
+            SettingsSlider(
+                title = "Skip Backward",
+                description = "Double-tap left side to skip backward",
+                value = backwardSkipSeconds.toFloat(),
+                valueRange = 5f..30f,
+                valueLabel = "${backwardSkipSeconds}s",
+                onValueChange = { newValue ->
+                    val snapped = round(newValue / 5f) * 5f
+                    viewModel.setBackwardSkipSeconds(snapped.toInt())
+                },
+                isOled = isOled,
+                minLabel = "5s",
+                maxLabel = "30s",
+                leadingIcon = Icons.Default.FastRewind
             )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.FastForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Skip Forward",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Text(
-                        "${forwardSkipSeconds}s",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "Number of seconds to skip forward in the player",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Slider(
-                    value = forwardSkipSeconds.toFloat(),
-                    onValueChange = { newValue ->
-                        val snapped = round(newValue / 5f) * 5f
-                        viewModel.setForwardSkipSeconds(snapped.toInt())
-                    },
-                    valueRange = 5f..30f,
-                    steps = 4
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("5s", style = MaterialTheme.typography.labelSmall)
-                    Text("30s", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
-        // Backward Skip Duration
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.FastRewind,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Skip Backward",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Text(
-                        "${backwardSkipSeconds}s",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "Number of seconds to skip backward in the player",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Slider(
-                    value = backwardSkipSeconds.toFloat(),
-                    onValueChange = { newValue ->
-                        val snapped = round(newValue / 5f) * 5f
-                        viewModel.setBackwardSkipSeconds(snapped.toInt())
-                    },
-                    valueRange = 5f..30f,
-                    steps = 4
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("5s", style = MaterialTheme.typography.labelSmall)
-                    Text("30s", style = MaterialTheme.typography.labelSmall)
-                }
-            }
         }
 
         // Account Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surfaceVariant
-            )
+        SettingsSection(
+            title = "Account",
+            icon = Icons.Default.Person,
+            isOled = isOled
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    "Account",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
+            if (isLoggedIn) {
+                val userName by viewModel.userName.collectAsState()
+                val userAvatar by viewModel.userAvatar.collectAsState()
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (isLoggedIn) {
-                    val userName by viewModel.userName.collectAsState()
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    // Avatar image or placeholder
+                    if (userAvatar != null) {
+                        AsyncImage(
+                            model = userAvatar,
+                            contentDescription = "User Avatar",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = null,
-                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            userName ?: "Logged In",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(40.dp)
                         )
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        userName ?: "Logged In",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    OutlinedButton(
-                        onClick = { viewModel.logout() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Log Out")
-                    }
-                } else {
-                    Button(
-                        onClick = { viewModel.loginWithAniList() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Login with AniList")
-                    }
+                OutlinedButton(
+                    onClick = { viewModel.logout() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Log Out")
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.loginWithAniList() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Login with AniList")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    icon: ImageVector,
+    isOled: Boolean,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Section Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(bottom = 12.dp),
+                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
+
+            // Section Content
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsToggle(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    isOled: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+private fun SettingsSlider(
+    title: String,
+    description: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    valueLabel: String,
+    onValueChange: (Float) -> Unit,
+    isOled: Boolean,
+    minLabel: String,
+    maxLabel: String,
+    leadingIcon: ImageVector? = null
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (leadingIcon != null) {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                valueLabel,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Text(
+            description,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(minLabel, style = MaterialTheme.typography.labelSmall)
+            Text(maxLabel, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

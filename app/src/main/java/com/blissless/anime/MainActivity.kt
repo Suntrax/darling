@@ -167,6 +167,16 @@ fun MainScreen(
         }
     }
 
+    // Pre-render Explore page after Home finishes loading
+    val isLoadingHome by viewModel.isLoadingHome.collectAsState()
+    LaunchedEffect(isLoadingHome) {
+        // When Home finishes loading, mark Explore as preloaded
+        // This triggers the HorizontalPager to compose it in advance
+        if (!isLoadingHome && 0 !in preloadedPages) {
+            preloadedPages = preloadedPages + 0
+        }
+    }
+
     // Preload adjacent pages when swiping
     LaunchedEffect(pagerState.currentPage, pagerState.currentPageOffsetFraction) {
         val currentPage = pagerState.currentPage

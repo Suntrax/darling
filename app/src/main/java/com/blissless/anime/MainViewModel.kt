@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.core.net.toUri
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,20 @@ class MainViewModel : ViewModel() {
         private const val CLIENT_ID = "36313"
         private const val PREFS_NAME = "anilist_prefs"
         private const val TOKEN_KEY = "auth_token"
+
+        // Cache duration in milliseconds (5 minutes)
+        private const val CACHE_DURATION_MS = 5 * 60 * 1000L
+
+        // Cache keys
+        private const val CACHE_EXPLORE_TIME = "cache_explore_time"
+        private const val CACHE_HOME_TIME = "cache_home_time"
+        private const val CACHE_EXPLORE_DATA = "cache_explore_data"
+        private const val CACHE_HOME_DATA = "cache_home_data"
+    }
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
     }
 
     private val _authToken = MutableStateFlow<String?>(null)
@@ -151,15 +166,129 @@ class MainViewModel : ViewModel() {
         _backwardSkipSeconds.value = sharedPreferences.getInt("backward_skip_seconds", 10)
         _forceHighRefreshRate.value = sharedPreferences.getBoolean("force_high_refresh_rate", false)
 
-        // Fetch data asynchronously
+        // Fetch data asynchronously with cache check
         viewModelScope.launch {
             if (hasToken) {
-                _isLoadingHome.value = true
-                fetchUser()
-                fetchLists()
-                _isLoadingHome.value = false
+                loadHomeDataWithCache()
             }
-            fetchExploreData()
+            loadExploreDataWithCache()
+        }
+    }
+
+    private fun isCacheValid(cacheKey: String): Boolean {
+        val cacheTime = sharedPreferences.getLong(cacheKey, 0)
+        val now = System.currentTimeMillis()
+        return (now - cacheTime) < CACHE_DURATION_MS
+    }
+
+    private fun setCacheTime(cacheKey: String) {
+        sharedPreferences.edit().putLong(cacheKey, System.currentTimeMillis()).apply()
+    }
+
+    private suspend fun loadHomeDataWithCache() {
+        // Try to load from cache first
+        val cachedHomeData = sharedPreferences.getString(CACHE_HOME_DATA, null)
+
+        if (cachedHomeData != null && isCacheValid(CACHE_HOME_TIME)) {
+            Log.d(TAG, "Loading home data from cache")
+            try {
+                val cacheData = json.decodeFromString<HomeCacheData>(cachedHomeData)
+                _currentlyWatching.value = cacheData.currentlyWatching
+                _planningToWatch.value = cacheData.planningToWatch
+                _completed.value = cacheData.completed
+                _onHold.value = cacheData.onHold
+                _dropped.value = cacheData.dropped
+                _userId.value = cacheData.userId
+                _userName.value = cacheData.userName
+                _userAvatar.value = cacheData.userAvatar
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse cached home data", e)
+            }
+        }
+
+        // Cache expired or doesn't exist, fetch fresh data
+        _isLoadingHome.value = true
+        fetchUser()
+        fetchLists()
+        _isLoadingHome.value = false
+    }
+
+    private suspend fun loadExploreDataWithCache() {
+        // Try to load from cache first
+        val cachedExploreData = sharedPreferences.getString(CACHE_EXPLORE_DATA, null)
+
+        if (cachedExploreData != null && isCacheValid(CACHE_EXPLORE_TIME)) {
+            Log.d(TAG, "Loading explore data from cache")
+            try {
+                val cacheData = json.decodeFromString<ExploreCacheData>(cachedExploreData)
+                _featuredAnime.value = cacheData.featuredAnime
+                _seasonalAnime.value = cacheData.seasonalAnime
+                _topSeries.value = cacheData.topSeries
+                _topMovies.value = cacheData.topMovies
+                _actionAnime.value = cacheData.actionAnime
+                _romanceAnime.value = cacheData.romanceAnime
+                _comedyAnime.value = cacheData.comedyAnime
+                _fantasyAnime.value = cacheData.fantasyAnime
+                _scifiAnime.value = cacheData.scifiAnime
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse cached explore data", e)
+            }
+        }
+
+        // Cache expired or doesn't exist, fetch fresh data
+        fetchExploreData()
+    }
+
+    private fun saveHomeDataToCache() {
+        viewModelScope.launch {
+            try {
+                val cacheData = HomeCacheData(
+                    currentlyWatching = _currentlyWatching.value,
+                    planningToWatch = _planningToWatch.value,
+                    completed = _completed.value,
+                    onHold = _onHold.value,
+                    dropped = _dropped.value,
+                    userId = _userId.value,
+                    userName = _userName.value,
+                    userAvatar = _userAvatar.value
+                )
+                val jsonString = json.encodeToString(HomeCacheData.serializer(), cacheData)
+                sharedPreferences.edit()
+                    .putString(CACHE_HOME_DATA, jsonString)
+                    .apply()
+                setCacheTime(CACHE_HOME_TIME)
+                Log.d(TAG, "Home data saved to cache")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save home data to cache", e)
+            }
+        }
+    }
+
+    private fun saveExploreDataToCache() {
+        viewModelScope.launch {
+            try {
+                val cacheData = ExploreCacheData(
+                    featuredAnime = _featuredAnime.value,
+                    seasonalAnime = _seasonalAnime.value,
+                    topSeries = _topSeries.value,
+                    topMovies = _topMovies.value,
+                    actionAnime = _actionAnime.value,
+                    romanceAnime = _romanceAnime.value,
+                    comedyAnime = _comedyAnime.value,
+                    fantasyAnime = _fantasyAnime.value,
+                    scifiAnime = _scifiAnime.value
+                )
+                val jsonString = json.encodeToString(ExploreCacheData.serializer(), cacheData)
+                sharedPreferences.edit()
+                    .putString(CACHE_EXPLORE_DATA, jsonString)
+                    .apply()
+                setCacheTime(CACHE_EXPLORE_TIME)
+                Log.d(TAG, "Explore data saved to cache")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save explore data to cache", e)
+            }
         }
     }
 
@@ -230,7 +359,13 @@ class MainViewModel : ViewModel() {
 
     fun logout() {
         // Clear from SharedPreferences
-        sharedPreferences.edit().remove(TOKEN_KEY).apply()
+        sharedPreferences.edit()
+            .remove(TOKEN_KEY)
+            .remove(CACHE_HOME_DATA)
+            .remove(CACHE_HOME_TIME)
+            .remove(CACHE_EXPLORE_DATA)
+            .remove(CACHE_EXPLORE_TIME)
+            .apply()
 
         _authToken.value = null
         _userId.value = null
@@ -338,7 +473,6 @@ class MainViewModel : ViewModel() {
         val response = graphqlRequest(query, emptyMap())
         response?.let {
             try {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ViewerResponse>(it)
                 _userId.value = data.data.Viewer.id
                 _userName.value = data.data.Viewer.name
@@ -385,7 +519,6 @@ class MainViewModel : ViewModel() {
         val response = graphqlRequest(query, mapOf("userId" to userId))
         response?.let {
             try {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<MediaListResponse>(it)
 
                 val currentlyWatchingList = mutableListOf<AnimeMedia>()
@@ -427,6 +560,9 @@ class MainViewModel : ViewModel() {
                 _onHold.value = onHoldList
                 _dropped.value = droppedList
                 Log.d(TAG, "Fetched ${currentlyWatchingList.size} watching, ${planningList.size} planning, ${completedList.size} completed, ${onHoldList.size} on hold, ${droppedList.size} dropped")
+
+                // Save to cache after successful fetch
+                saveHomeDataToCache()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse lists response", e)
             }
@@ -504,6 +640,9 @@ class MainViewModel : ViewModel() {
                 deferredAction, deferredRomance, deferredComedy, deferredFantasy, deferredScifi)
 
             _isLoadingExplore.value = false
+
+            // Save to cache after successful fetch
+            saveExploreDataToCache()
         }
     }
 
@@ -529,7 +668,6 @@ class MainViewModel : ViewModel() {
         val response = publicGraphqlRequest(query, emptyMap())
         response?.let {
             try {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(it)
                 _featuredAnime.value = data.data.Page.media.map { media ->
                     ExploreAnime(
@@ -572,7 +710,6 @@ class MainViewModel : ViewModel() {
         val response = publicGraphqlRequest(query, emptyMap())
         response?.let {
             try {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(it)
                 _seasonalAnime.value = data.data.Page.media.map { media ->
                     ExploreAnime(
@@ -615,7 +752,6 @@ class MainViewModel : ViewModel() {
         try {
             val response = publicGraphqlRequest(query, emptyMap())
             if (response != null) {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(response)
 
                 val seriesList = data.data.Page.media.map { media ->
@@ -666,7 +802,6 @@ class MainViewModel : ViewModel() {
         try {
             val response = publicGraphqlRequest(query, emptyMap())
             if (response != null) {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(response)
 
                 val moviesList = data.data.Page.media.map { media ->
@@ -717,7 +852,6 @@ class MainViewModel : ViewModel() {
         try {
             val response = publicGraphqlRequest(query, emptyMap())
             if (response != null) {
-                val json = Json { ignoreUnknownKeys = true }
                 val data = json.decodeFromString<ExploreResponse>(response)
 
                 val animeList = data.data.Page.media.map { media ->
@@ -747,6 +881,11 @@ class MainViewModel : ViewModel() {
             fetchLists()
             _isLoadingHome.value = false
         }
+    }
+
+    fun forceRefreshExplore() {
+        sharedPreferences.edit().remove(CACHE_EXPLORE_TIME).apply()
+        fetchExploreData()
     }
 
     // Pre-fetch stream for currently watching anime (next episode)
@@ -895,9 +1034,8 @@ class MainViewModel : ViewModel() {
             )
 
             if (response != null) {
-                val json = Json { ignoreUnknownKeys = true }
-                val searchData = json.decodeFromString<ExploreResponse>(response)
-                searchData.data.Page.media.map { media ->
+                val data = json.decodeFromString<ExploreResponse>(response)
+                data.data.Page.media.map { media ->
                     ExploreAnime(
                         id = media.id,
                         title = media.title.romaji ?: media.title.english ?: "Unknown",
@@ -956,6 +1094,32 @@ class MainViewModel : ViewModel() {
     }
 }
 
+// Cache data classes for serialization
+@Serializable
+data class ExploreCacheData(
+    val featuredAnime: List<ExploreAnime>,
+    val seasonalAnime: List<ExploreAnime>,
+    val topSeries: List<ExploreAnime>,
+    val topMovies: List<ExploreAnime>,
+    val actionAnime: List<ExploreAnime>,
+    val romanceAnime: List<ExploreAnime>,
+    val comedyAnime: List<ExploreAnime>,
+    val fantasyAnime: List<ExploreAnime>,
+    val scifiAnime: List<ExploreAnime>
+)
+
+@Serializable
+data class HomeCacheData(
+    val currentlyWatching: List<AnimeMedia>,
+    val planningToWatch: List<AnimeMedia>,
+    val completed: List<AnimeMedia>,
+    val onHold: List<AnimeMedia>,
+    val dropped: List<AnimeMedia>,
+    val userId: Int?,
+    val userName: String?,
+    val userAvatar: String?
+)
+
 // Data classes
 @Serializable
 data class ExploreAnime(
@@ -992,7 +1156,11 @@ data class ViewerResponse(val data: ViewerData)
 data class ViewerData(val Viewer: Viewer)
 
 @Serializable
-data class Viewer(val id: Int, val name: String, val avatar: Avatar?)
+data class Viewer(
+    val id: Int,
+    val name: String,
+    val avatar: Avatar?
+)
 
 @Serializable
 data class Avatar(val medium: String)
@@ -1007,16 +1175,26 @@ data class MediaListData(val MediaListCollection: MediaListCollection)
 data class MediaListCollection(val lists: List<MediaList>)
 
 @Serializable
-data class MediaList(val name: String, val status: String?, val entries: List<MediaListEntry>)
+data class MediaList(
+    val name: String,
+    val status: String?,
+    val entries: List<MediaListEntry>
+)
 
 @Serializable
-data class MediaListEntry(val id: Int, val mediaId: Int, val progress: Int?, val status: String?, val media: MediaData)
-
-@Serializable
-data class MediaData(
+data class MediaListEntry(
     val id: Int,
-    val title: Title,
-    val coverImage: CoverImage?,
+    val mediaId: Int,
+    val progress: Int?,
+    val status: String?,
+    val media: MediaEntryMedia
+)
+
+@Serializable
+data class MediaEntryMedia(
+    val id: Int,
+    val title: MediaTitle,
+    val coverImage: MediaCoverImage?,
     val bannerImage: String?,
     val episodes: Int?,
     val nextAiringEpisode: NextAiringEpisode?,
@@ -1024,15 +1202,6 @@ data class MediaData(
     val averageScore: Int?,
     val genres: List<String>?
 )
-
-@Serializable
-data class Title(val romaji: String?, val english: String?)
-
-@Serializable
-data class CoverImage(val large: String?, val medium: String?)
-
-@Serializable
-data class NextAiringEpisode(val episode: Int, val airingAt: Int)
 
 @Serializable
 data class ExploreResponse(val data: ExploreData)
@@ -1046,12 +1215,30 @@ data class ExplorePage(val media: List<ExploreMedia>)
 @Serializable
 data class ExploreMedia(
     val id: Int,
-    val title: Title,
-    val coverImage: CoverImage?,
+    val title: MediaTitle,
+    val coverImage: MediaCoverImage?,
     val bannerImage: String?,
     val episodes: Int?,
     val nextAiringEpisode: NextAiringEpisode?,
     val status: String?,
     val averageScore: Int?,
     val genres: List<String>?
+)
+
+@Serializable
+data class MediaTitle(
+    val romaji: String?,
+    val english: String?
+)
+
+@Serializable
+data class MediaCoverImage(
+    val large: String?,
+    val medium: String?
+)
+
+@Serializable
+data class NextAiringEpisode(
+    val episode: Int,
+    val airingAt: Long
 )

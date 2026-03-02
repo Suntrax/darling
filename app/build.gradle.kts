@@ -80,4 +80,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.json)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.json.v160)
 }

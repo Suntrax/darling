@@ -21,6 +21,7 @@
 - **Color-Coded Categories** – Each list type has its own distinct color for easy identification.
 - **Quick Status Management** – Change anime status directly from cards with visual feedback.
 - **Status Indicators** – Visual status bars on cards show your list status at a glance.
+- **User Profile Display** – See your AniList avatar and username in settings.
 
 ### Explore and Discovery
 - **Featured Carousel** – Auto-scrolling showcase of currently airing popular anime.
@@ -54,6 +55,7 @@
 - **Swipe Navigation** – Smooth page transitions and intuitive gestures.
 - **Responsive Layouts** – Fully optimized for both phone and tablet form factors.
 - **Smooth Animations** – Visual feedback for all user interactions and state changes.
+- **Smart Caching** – Data and images cached to prevent reloads and API rate limits.
 
 ---
 
@@ -73,9 +75,9 @@ Each anime list category has a distinct color for easy visual identification:
 
 ## Screenshots
 
-| Home Screen | Explore Screen | Video Player |
-|:---:|:---:|:---:|
-| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) |
+| Home Screen | Explore Screen | Video Player | Settings Screen |
+|:---:|:---:|:---:|:---:|
+| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) | ![Home](screenshots/settings.png) |
 
 ---
 
@@ -108,6 +110,7 @@ To use your own **AniList OAuth** credentials:
 | **UI Framework** | Jetpack Compose (Material 3) |
 | **Architecture** | MVVM (Model-View-ViewModel) |
 | **Networking** | OkHttp, Kotlinx Serialization |
+| **Image Loading** | Coil (with memory and disk cache) |
 | **Video Player** | Media3 ExoPlayer |
 | **Async** | Kotlin Coroutines and Flow |
 | **Data Storage** | SharedPreferences / DataStore Preferences |
@@ -120,6 +123,7 @@ To use your own **AniList OAuth** credentials:
 app/src/main/java/com/blissless/anime/
 ├── MainActivity.kt           # Main entry point and navigation
 ├── MainViewModel.kt          # State management and API calls
+├── DarlingApplication.kt     # Coil image loader configuration
 ├── AnimeMedia.kt             # Core data models
 ├── api/
 │   ├── AniListApi.kt         # AniList GraphQL API implementation
@@ -135,7 +139,13 @@ app/src/main/java/com/blissless/anime/
 
 ## Changelog
 
-### v1.5 (Current)
+### v1.6 (Current)
+- **User Avatar Display** – Your AniList avatar now appears in the Settings screen.
+- **Organized Settings** – Settings reorganized into Appearance and Player Settings sections.
+- **Improved Caching** – Data cached for 5 minutes to prevent API rate limiting.
+- **Image Caching** – All images cached to disk and memory for instant loading.
+
+### v1.5
 - **Customizable Skip Durations** – Set skip forward/backward time independently (5-30 seconds).
 - **High Refresh Rate Mode** – New setting to force 120Hz for smoother scrolling.
 - **Major Performance Overhaul** – Complete rewrite of Explore screen for buttery smooth scrolling.
