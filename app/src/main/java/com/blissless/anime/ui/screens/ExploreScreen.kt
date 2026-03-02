@@ -17,14 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +43,23 @@ import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
 import java.util.Locale
 
+// Status colors for different list types
+val StatusColors = mapOf(
+    "CURRENT" to Color(0xFF2196F3),    // Blue - Watching
+    "PLANNING" to Color(0xFF9C27B0),   // Purple - Planning
+    "COMPLETED" to Color(0xFF4CAF50),  // Green - Completed
+    "PAUSED" to Color(0xFFFFC107),     // Amber - On Hold
+    "DROPPED" to Color(0xFFF44336)     // Red - Dropped
+)
+
+val StatusLabels = mapOf(
+    "CURRENT" to "Watching",
+    "PLANNING" to "Planning",
+    "COMPLETED" to "Completed",
+    "PAUSED" to "On Hold",
+    "DROPPED" to "Dropped"
+)
+
 @Composable
 fun ExploreScreen(
     viewModel: MainViewModel,
@@ -54,20 +68,32 @@ fun ExploreScreen(
     isOled: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     currentlyWatching: List<AnimeMedia> = emptyList(),
-    planningToWatch: List<AnimeMedia> = emptyList()
+    planningToWatch: List<AnimeMedia> = emptyList(),
+    completed: List<AnimeMedia> = emptyList(),
+    onHold: List<AnimeMedia> = emptyList(),
+    dropped: List<AnimeMedia> = emptyList()
 ) {
     val scrollState = rememberScrollState()
     val featuredAnime by viewModel.featuredAnime.collectAsState()
     val seasonalAnime by viewModel.seasonalAnime.collectAsState()
     val topSeries by viewModel.topSeries.collectAsState()
     val topMovies by viewModel.topMovies.collectAsState()
+    val actionAnime by viewModel.actionAnime.collectAsState()
+    val romanceAnime by viewModel.romanceAnime.collectAsState()
+    val comedyAnime by viewModel.comedyAnime.collectAsState()
+    val fantasyAnime by viewModel.fantasyAnime.collectAsState()
+    val scifiAnime by viewModel.scifiAnime.collectAsState()
     val isLoading by viewModel.isLoadingExplore.collectAsState()
 
-    // Get IDs from user's lists to check if anime is already saved
-    val savedAnimeIds = remember(currentlyWatching, planningToWatch) {
-        val watchingIds = currentlyWatching.map { it.id }.toSet()
-        val planningIds = planningToWatch.map { it.id }.toSet()
-        watchingIds + planningIds
+    // Create a map of animeId -> status for quick lookup
+    val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        val map = mutableMapOf<Int, String>()
+        currentlyWatching.forEach { map[it.id] = "CURRENT" }
+        planningToWatch.forEach { map[it.id] = "PLANNING" }
+        completed.forEach { map[it.id] = "COMPLETED" }
+        onHold.forEach { map[it.id] = "PAUSED" }
+        dropped.forEach { map[it.id] = "DROPPED" }
+        map
     }
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
@@ -77,7 +103,7 @@ fun ExploreScreen(
         ExploreAnimeDialog(
             anime = selectedAnime!!,
             isOled = isOled,
-            isSaved = savedAnimeIds.contains(selectedAnime!!.id),
+            currentStatus = animeStatusMap[selectedAnime!!.id],
             onDismiss = { showDialog = false },
             onAddToPlanning = {
                 viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING")
@@ -142,21 +168,21 @@ fun ExploreScreen(
         if (seasonalAnime.isNotEmpty()) {
             ExploreAnimeHorizontalList(
                 animeList = seasonalAnime,
+                animeStatusMap = animeStatusMap,
                 onAnimeClick = { anime ->
                     selectedAnime = anime
                     showDialog = true
                 },
                 onBookmarkClick = { anime ->
-                    if (savedAnimeIds.contains(anime.id)) {
-                        // Remove from list
+                    val status = animeStatusMap[anime.id]
+                    if (status != null) {
                         viewModel.removeAnimeFromList(anime.id)
                     } else {
                         viewModel.addExploreAnimeToList(anime, "PLANNING")
                     }
                 },
                 isLoggedIn = isLoggedIn,
-                isOled = isOled,
-                savedAnimeIds = savedAnimeIds
+                isOled = isOled
             )
         } else {
             LoadingPlaceholder(isOled)
@@ -168,30 +194,26 @@ fun ExploreScreen(
         if (topSeries.isNotEmpty()) {
             ExploreAnimeHorizontalList(
                 animeList = topSeries,
+                animeStatusMap = animeStatusMap,
                 onAnimeClick = { anime ->
                     selectedAnime = anime
                     showDialog = true
                 },
                 onBookmarkClick = { anime ->
-                    if (savedAnimeIds.contains(anime.id)) {
+                    val status = animeStatusMap[anime.id]
+                    if (status != null) {
                         viewModel.removeAnimeFromList(anime.id)
                     } else {
                         viewModel.addExploreAnimeToList(anime, "PLANNING")
                     }
                 },
                 isLoggedIn = isLoggedIn,
-                isOled = isOled,
-                savedAnimeIds = savedAnimeIds
+                isOled = isOled
             )
         } else if (isLoading) {
             LoadingPlaceholder(isOled)
         } else {
-            Text(
-                "No top series found",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            EmptySectionText("No top series found", isOled)
         }
 
         // Top Rated Movies
@@ -200,33 +222,172 @@ fun ExploreScreen(
         if (topMovies.isNotEmpty()) {
             ExploreAnimeHorizontalList(
                 animeList = topMovies,
+                animeStatusMap = animeStatusMap,
                 onAnimeClick = { anime ->
                     selectedAnime = anime
                     showDialog = true
                 },
                 onBookmarkClick = { anime ->
-                    if (savedAnimeIds.contains(anime.id)) {
+                    val status = animeStatusMap[anime.id]
+                    if (status != null) {
                         viewModel.removeAnimeFromList(anime.id)
                     } else {
                         viewModel.addExploreAnimeToList(anime, "PLANNING")
                     }
                 },
                 isLoggedIn = isLoggedIn,
-                isOled = isOled,
-                savedAnimeIds = savedAnimeIds
+                isOled = isOled
             )
         } else if (isLoading) {
             LoadingPlaceholder(isOled)
         } else {
-            Text(
-                "No top movies found",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            EmptySectionText("No top movies found", isOled)
         }
 
+        // Genre Sections
+        GenreSection(
+            title = "Action",
+            animeList = actionAnime,
+            animeStatusMap = animeStatusMap,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = { anime ->
+                selectedAnime = anime
+                showDialog = true
+            },
+            onBookmarkClick = { anime ->
+                val status = animeStatusMap[anime.id]
+                if (status != null) {
+                    viewModel.removeAnimeFromList(anime.id)
+                } else {
+                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                }
+            }
+        )
+
+        GenreSection(
+            title = "Romance",
+            animeList = romanceAnime,
+            animeStatusMap = animeStatusMap,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = { anime ->
+                selectedAnime = anime
+                showDialog = true
+            },
+            onBookmarkClick = { anime ->
+                val status = animeStatusMap[anime.id]
+                if (status != null) {
+                    viewModel.removeAnimeFromList(anime.id)
+                } else {
+                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                }
+            }
+        )
+
+        GenreSection(
+            title = "Comedy",
+            animeList = comedyAnime,
+            animeStatusMap = animeStatusMap,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = { anime ->
+                selectedAnime = anime
+                showDialog = true
+            },
+            onBookmarkClick = { anime ->
+                val status = animeStatusMap[anime.id]
+                if (status != null) {
+                    viewModel.removeAnimeFromList(anime.id)
+                } else {
+                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                }
+            }
+        )
+
+        GenreSection(
+            title = "Fantasy",
+            animeList = fantasyAnime,
+            animeStatusMap = animeStatusMap,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = { anime ->
+                selectedAnime = anime
+                showDialog = true
+            },
+            onBookmarkClick = { anime ->
+                val status = animeStatusMap[anime.id]
+                if (status != null) {
+                    viewModel.removeAnimeFromList(anime.id)
+                } else {
+                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                }
+            }
+        )
+
+        GenreSection(
+            title = "Sci-Fi",
+            animeList = scifiAnime,
+            animeStatusMap = animeStatusMap,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = { anime ->
+                selectedAnime = anime
+                showDialog = true
+            },
+            onBookmarkClick = { anime ->
+                val status = animeStatusMap[anime.id]
+                if (status != null) {
+                    viewModel.removeAnimeFromList(anime.id)
+                } else {
+                    viewModel.addExploreAnimeToList(anime, "PLANNING")
+                }
+            }
+        )
+
         Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun GenreSection(
+    title: String,
+    animeList: List<ExploreAnime>,
+    animeStatusMap: Map<Int, String>,
+    isLoading: Boolean,
+    isOled: Boolean,
+    isLoggedIn: Boolean,
+    onAnimeClick: (ExploreAnime) -> Unit,
+    onBookmarkClick: (ExploreAnime) -> Unit
+) {
+    if (animeList.isEmpty() && !isLoading) return
+
+    Column {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
+        )
+
+        if (animeList.isNotEmpty()) {
+            ExploreAnimeHorizontalList(
+                animeList = animeList,
+                animeStatusMap = animeStatusMap,
+                onAnimeClick = onAnimeClick,
+                onBookmarkClick = onBookmarkClick,
+                isLoggedIn = isLoggedIn,
+                isOled = isOled
+            )
+        } else if (isLoading) {
+            LoadingPlaceholder(isOled)
+        }
     }
 }
 
@@ -238,6 +399,16 @@ private fun SectionTitle(title: String, isOled: Boolean = false) {
         fontWeight = FontWeight.Bold,
         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun EmptySectionText(text: String, isOled: Boolean) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
     )
 }
 
@@ -365,7 +536,7 @@ fun FeaturedCarousel(
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text(
-                                anime.genres.take(3).joinToString(" • "),
+                                anime.genres.take(3).joinToString(" - "),
                                 color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1,
@@ -386,7 +557,6 @@ fun FeaturedCarousel(
                                     Spacer(modifier = Modifier.width(12.dp))
                                 }
 
-                                // latestEpisode is NEXT to air, so subtract 1 for released count
                                 anime.latestEpisode?.let { ep ->
                                     val releasedEp = ep - 1
                                     if (releasedEp > 0) {
@@ -429,11 +599,11 @@ fun FeaturedCarousel(
 @Composable
 fun ExploreAnimeHorizontalList(
     animeList: List<ExploreAnime>,
+    animeStatusMap: Map<Int, String>,
     onAnimeClick: (ExploreAnime) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
     isLoggedIn: Boolean = false,
-    isOled: Boolean = false,
-    savedAnimeIds: Set<Int> = emptySet()
+    isOled: Boolean = false
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -442,7 +612,7 @@ fun ExploreAnimeHorizontalList(
         items(animeList) { anime ->
             ExploreAnimeCard(
                 anime = anime,
-                isSaved = savedAnimeIds.contains(anime.id),
+                currentStatus = animeStatusMap[anime.id],
                 onClick = { onAnimeClick(anime) },
                 onBookmarkClick = { onBookmarkClick(anime) },
                 isLoggedIn = isLoggedIn,
@@ -455,13 +625,14 @@ fun ExploreAnimeHorizontalList(
 @Composable
 fun ExploreAnimeCard(
     anime: ExploreAnime,
-    isSaved: Boolean = false,
+    currentStatus: String?,
     onClick: () -> Unit,
     onBookmarkClick: () -> Unit,
     isLoggedIn: Boolean = false,
     isOled: Boolean = false
 ) {
     val context = LocalContext.current
+    val statusColor = currentStatus?.let { StatusColors[it] } ?: Color.Transparent
 
     var showAnimation by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -504,6 +675,17 @@ fun ExploreAnimeCard(
                         )
                 )
 
+                // Status indicator bar at top (only if anime is in a list)
+                if (currentStatus != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(statusColor)
+                    )
+                }
+
                 anime.averageScore?.let { score ->
                     val displayScore = score / 10.0
                     Surface(
@@ -523,7 +705,7 @@ fun ExploreAnimeCard(
                     }
                 }
 
-                // Episode badge - latestEpisode is NEXT to air, so subtract 1
+                // Episode badge
                 if (anime.latestEpisode != null || anime.episodes > 0) {
                     Surface(
                         modifier = Modifier
@@ -532,22 +714,22 @@ fun ExploreAnimeCard(
                         shape = RoundedCornerShape(6.dp),
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
-                        // latestEpisode from AniList is the next episode TO AIR
-                        // So released episodes = latestEpisode - 1
                         val releasedEpisodes = anime.latestEpisode?.let { it - 1 }
                         val episodeText = when {
                             releasedEpisodes != null && releasedEpisodes > 0 -> "Ep $releasedEpisodes"
                             anime.episodes > 0 -> "${anime.episodes} Ep"
                             else -> ""
                         }
-                        Text(
-                            episodeText,
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
+                        if (episodeText.isNotEmpty()) {
+                            Text(
+                                episodeText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
 
@@ -559,12 +741,12 @@ fun ExploreAnimeCard(
                             .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Bookmark button - same style as edit button in HomeScreen
+                        // Bookmark/status button
                         FilledTonalIconButton(
                             onClick = {
                                 showAnimation = true
-                                if (isSaved) {
-                                    Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
+                                if (currentStatus != null) {
+                                    Toast.makeText(context, "Removed from ${StatusLabels[currentStatus]}", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
                                 }
@@ -575,21 +757,25 @@ fun ExploreAnimeCard(
                                 .scale(if (showAnimation) scale else 1f),
                             shape = RoundedCornerShape(10.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                containerColor = if (currentStatus != null) {
+                                    statusColor.copy(alpha = 0.8f)
+                                } else {
+                                    Color.Black.copy(alpha = 0.6f)
+                                },
                                 contentColor = Color.White
                             )
                         ) {
                             AnimatedContent(
-                                targetState = isSaved,
+                                targetState = currentStatus,
                                 transitionSpec = {
                                     (scaleIn(animationSpec = tween(200)) + fadeIn())
                                         .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
                                 },
                                 label = "bookmarkIcon"
-                            ) { saved ->
+                            ) { status ->
                                 Icon(
-                                    imageVector = if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkAdd,
-                                    contentDescription = if (saved) "Saved" else "Add to Planning",
+                                    imageVector = if (status != null) Icons.Filled.Bookmark else Icons.Outlined.BookmarkAdd,
+                                    contentDescription = if (status != null) StatusLabels[status] else "Add to Planning",
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -597,7 +783,7 @@ fun ExploreAnimeCard(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Play button - same style
+                        // Play button
                         FilledTonalIconButton(
                             onClick = onClick,
                             modifier = Modifier.size(32.dp),
@@ -633,7 +819,7 @@ fun ExploreAnimeCard(
 fun ExploreAnimeDialog(
     anime: ExploreAnime,
     isOled: Boolean = false,
-    isSaved: Boolean = false,
+    currentStatus: String?,
     onDismiss: () -> Unit,
     onAddToPlanning: () -> Unit,
     onRemoveFromList: () -> Unit = {},
@@ -643,7 +829,6 @@ fun ExploreAnimeDialog(
     val context = LocalContext.current
     val displayScore = anime.averageScore?.let { it / 10.0 }
 
-    // Animation state for add to planning button
     var showAnimation by remember { mutableStateOf(false) }
     var hasAddedToPlanning by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -657,14 +842,7 @@ fun ExploreAnimeDialog(
         label = "buttonScale"
     )
 
-    // Track local state - true if user added during this dialog session
-    // isSaved comes from parent and reflects actual saved state
-    // If anime was already saved when dialog opened (isSaved=true), clicking should remove
-    // If anime was not saved, clicking adds it (and sets hasAddedToPlanning=true)
-    // But if user added it in this dialog and clicks again, they might want to remove
-
-    // Simplified: just check if it's saved (either from parent or local state)
-    val isCurrentlySaved = isSaved || hasAddedToPlanning
+    val isCurrentlySaved = currentStatus != null || hasAddedToPlanning
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -708,16 +886,27 @@ fun ExploreAnimeDialog(
                             )
                         }
 
-                        // latestEpisode is NEXT to air, so subtract 1 for released count
-                        anime.latestEpisode?.let { ep ->
-                            val releasedEp = ep - 1
-                            if (releasedEp > 0) {
-                                Text(
-                                    "Episode $releasedEp ${if (anime.episodes > 0) "of ${anime.episodes}" else ""}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                        // Episode info - show for all anime
+                        val episodeText = when {
+                            anime.latestEpisode != null && anime.latestEpisode > 0 -> {
+                                val releasedEp = anime.latestEpisode - 1
+                                if (releasedEp > 0 && anime.episodes > 0) {
+                                    "Episode $releasedEp of ${anime.episodes}"
+                                } else if (releasedEp > 0) {
+                                    "Episode $releasedEp"
+                                } else if (anime.episodes > 0) {
+                                    "${anime.episodes} Episodes"
+                                } else null
                             }
+                            anime.episodes > 0 -> "${anime.episodes} Episodes"
+                            else -> null
+                        }
+                        if (episodeText != null) {
+                            Text(
+                                episodeText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         if (anime.genres.isNotEmpty()) {
@@ -728,6 +917,23 @@ fun ExploreAnimeDialog(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        }
+
+                        // Show current status if anime is in a list
+                        if (currentStatus != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = StatusColors[currentStatus]?.copy(alpha = 0.2f)
+                                    ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = StatusLabels[currentStatus] ?: currentStatus,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = StatusColors[currentStatus] ?: MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -747,16 +953,14 @@ fun ExploreAnimeDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Add to Planning / Remove button with animation
+                    // Add to Planning / Remove button
                     OutlinedButton(
                         onClick = {
                             showAnimation = true
                             if (isCurrentlySaved) {
-                                // Already saved - remove it
                                 Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
                                 onRemoveFromList()
                             } else {
-                                // Not saved - add it
                                 hasAddedToPlanning = true
                                 Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
                                 onAddToPlanning()
@@ -768,8 +972,10 @@ fun ExploreAnimeDialog(
                         shape = RoundedCornerShape(10.dp),
                         colors = if (isCurrentlySaved) {
                             ButtonDefaults.outlinedButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                contentColor = MaterialTheme.colorScheme.primary
+                                containerColor = (currentStatus?.let { StatusColors[it] }
+                                    ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.2f),
+                                contentColor = currentStatus?.let { StatusColors[it] }
+                                    ?: MaterialTheme.colorScheme.primary
                             )
                         } else {
                             ButtonDefaults.outlinedButtonColors(
@@ -792,7 +998,7 @@ fun ExploreAnimeDialog(
                             }
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isCurrentlySaved) "Saved" else "Add to Planning")
+                        Text(if (isCurrentlySaved) StatusLabels[currentStatus] ?: "Saved" else "Add to Planning")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))

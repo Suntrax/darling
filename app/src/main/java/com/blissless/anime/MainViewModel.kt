@@ -77,6 +77,22 @@ class MainViewModel : ViewModel() {
     private val _topMovies = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val topMovies: StateFlow<List<ExploreAnime>> = _topMovies.asStateFlow()
 
+    // Genre recommendations
+    private val _actionAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val actionAnime: StateFlow<List<ExploreAnime>> = _actionAnime.asStateFlow()
+
+    private val _romanceAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val romanceAnime: StateFlow<List<ExploreAnime>> = _romanceAnime.asStateFlow()
+
+    private val _comedyAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val comedyAnime: StateFlow<List<ExploreAnime>> = _comedyAnime.asStateFlow()
+
+    private val _fantasyAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val fantasyAnime: StateFlow<List<ExploreAnime>> = _fantasyAnime.asStateFlow()
+
+    private val _scifiAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
+    val scifiAnime: StateFlow<List<ExploreAnime>> = _scifiAnime.asStateFlow()
+
     // Anime lists
     private val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val currentlyWatching: StateFlow<List<AnimeMedia>> = _currentlyWatching.asStateFlow()
@@ -439,8 +455,14 @@ class MainViewModel : ViewModel() {
             val deferredSeasonal = async { fetchSeasonalAnime() }
             val deferredSeries = async { fetchTopSeries() }
             val deferredMovies = async { fetchTopMovies() }
+            val deferredAction = async { fetchGenreAnime("Action", _actionAnime) }
+            val deferredRomance = async { fetchGenreAnime("Romance", _romanceAnime) }
+            val deferredComedy = async { fetchGenreAnime("Comedy", _comedyAnime) }
+            val deferredFantasy = async { fetchGenreAnime("Fantasy", _fantasyAnime) }
+            val deferredScifi = async { fetchGenreAnime("Sci-Fi", _scifiAnime) }
 
-            awaitAll(deferredFeatured, deferredSeasonal, deferredSeries, deferredMovies)
+            awaitAll(deferredFeatured, deferredSeasonal, deferredSeries, deferredMovies,
+                deferredAction, deferredRomance, deferredComedy, deferredFantasy, deferredScifi)
 
             _isLoadingExplore.value = false
         }
@@ -631,6 +653,52 @@ class MainViewModel : ViewModel() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch/parse top movies", e)
+        }
+    }
+
+    private suspend fun fetchGenreAnime(genre: String, stateFlow: MutableStateFlow<List<ExploreAnime>>) {
+        val query = """
+            query {
+                Page(page: 1, perPage: 15) {
+                    media(type: ANIME, genre: "$genre", sort: POPULARITY_DESC) {
+                        id
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                    }
+                }
+            }
+        """.trimIndent()
+
+        try {
+            val response = publicGraphqlRequest(query, emptyMap())
+            if (response != null) {
+                val json = Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString<ExploreResponse>(response)
+
+                val animeList = data.data.Page.media.map { media ->
+                    ExploreAnime(
+                        id = media.id,
+                        title = media.title.romaji ?: media.title.english ?: "Unknown",
+                        cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
+                        banner = media.bannerImage,
+                        episodes = media.episodes ?: 0,
+                        latestEpisode = media.nextAiringEpisode?.episode,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList()
+                    )
+                }
+
+                stateFlow.value = animeList.filter { (it.averageScore ?: 0) >= 60 }
+                Log.d(TAG, "$genre anime loaded: ${stateFlow.value.size}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch/parse $genre anime", e)
         }
     }
 

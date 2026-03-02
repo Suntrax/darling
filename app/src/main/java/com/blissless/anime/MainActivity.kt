@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
 
         setContent {
-            val isOled by mainViewModel.isOled.collectAsState(initial = true)
+            val isOled by mainViewModel.isOled.collectAsState()
             val token by mainViewModel.authToken.collectAsState(initial = if (hasToken) "loading" else null)
 
             // User is logged in if they had a token OR if token is now set
@@ -102,6 +102,9 @@ fun MainScreen(
     // Collect user's anime lists
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
+    val completed by viewModel.completed.collectAsState()
+    val onHold by viewModel.onHold.collectAsState()
+    val dropped by viewModel.dropped.collectAsState()
     val prefetchedStreams by viewModel.prefetchedStreams.collectAsState()
     val prefetchedEpisodeInfo by viewModel.prefetchedEpisodeInfo.collectAsState()
 
@@ -375,7 +378,10 @@ fun MainScreen(
                             isOled = isOled,
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
-                            planningToWatch = planningToWatch
+                            planningToWatch = planningToWatch,
+                            completed = completed,
+                            onHold = onHold,
+                            dropped = dropped
                         )
                         1 -> HomeScreen(
                             viewModel = viewModel,
