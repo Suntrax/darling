@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -59,12 +60,19 @@ fun HomeScreen(
 ) {
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
+    val completed by viewModel.completed.collectAsState()
+    val onHold by viewModel.onHold.collectAsState()
+    val dropped by viewModel.dropped.collectAsState()
     val isLoading by viewModel.isLoadingHome.collectAsState()
 
     var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
     var showEpisodeSheet by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
     var showSearchOverlay by remember { mutableStateOf(false) }
+
+    // Check if all lists are empty
+    val allListsEmpty = currentlyWatching.isEmpty() && planningToWatch.isEmpty() &&
+            completed.isEmpty() && onHold.isEmpty() && dropped.isEmpty()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -199,74 +207,201 @@ fun HomeScreen(
                         }
                     }
                 }
-            } else if (isLoading && currentlyWatching.isEmpty() && planningToWatch.isEmpty()) {
+            } else if (isLoading && allListsEmpty) {
                 LoadingSkeleton(isOled)
             } else {
-                if (currentlyWatching.isNotEmpty()) {
-                    SectionHeader("Currently Watching", isOled)
-
-                    HomeAnimeHorizontalList(
-                        animeList = currentlyWatching,
-                        listType = "CURRENT",
-                        isOled = isOled,
-                        onAnimeClick = { anime ->
-                            selectedAnime = anime
-                            showEpisodeSheet = true
-                        },
-                        onPlayClick = { anime ->
-                            val nextEp = anime.progress + 1
-                            onPlayEpisode(anime, nextEp)
-                        },
-                        onStatusClick = { anime ->
-                            selectedAnime = anime
-                            showStatusDialog = true
-                        }
-                    )
-                }
-
-                if (planningToWatch.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    SectionHeader("Planning to Watch", isOled)
-
-                    HomeAnimeHorizontalList(
-                        animeList = planningToWatch,
-                        listType = "PLANNING",
-                        isOled = isOled,
-                        onAnimeClick = { anime ->
-                            selectedAnime = anime
-                            showEpisodeSheet = true
-                        },
-                        onPlayClick = { anime ->
-                            onPlayEpisode(anime, 1)
-                        },
-                        onStatusClick = { anime ->
-                            selectedAnime = anime
-                            showStatusDialog = true
-                        }
-                    )
-                }
-
-                if (currentlyWatching.isEmpty() && planningToWatch.isEmpty() && !isLoading) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                "Your lists are empty",
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                "Check out the Explore tab to discover anime!",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                // Use LazyColumn with weight to make it scrollable
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    // Currently Watching
+                    if (currentlyWatching.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "Currently Watching",
+                                icon = Icons.Default.PlayArrow,
+                                count = currentlyWatching.size,
+                                isOled = isOled,
+                                iconTint = Color(0xFF2196F3) // Blue
                             )
                         }
+                        item {
+                            HomeAnimeHorizontalList(
+                                animeList = currentlyWatching,
+                                listType = "CURRENT",
+                                isOled = isOled,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime
+                                    showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    val nextEp = anime.progress + 1
+                                    onPlayEpisode(anime, nextEp)
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime
+                                    showStatusDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    // Planning to Watch
+                    if (planningToWatch.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "Planning to Watch",
+                                icon = Icons.Default.Bookmark,
+                                count = planningToWatch.size,
+                                isOled = isOled,
+                                iconTint = Color(0xFF9C27B0) // Purple
+                            )
+                        }
+                        item {
+                            HomeAnimeHorizontalList(
+                                animeList = planningToWatch,
+                                listType = "PLANNING",
+                                isOled = isOled,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime
+                                    showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    onPlayEpisode(anime, 1)
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime
+                                    showStatusDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    // Completed
+                    if (completed.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "Completed",
+                                icon = Icons.Default.Check,
+                                count = completed.size,
+                                isOled = isOled,
+                                iconTint = Color(0xFF4CAF50)
+                            )
+                        }
+                        item {
+                            HomeAnimeHorizontalList(
+                                animeList = completed,
+                                listType = "COMPLETED",
+                                isOled = isOled,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime
+                                    showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    onPlayEpisode(anime, 1)
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime
+                                    showStatusDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    // On Hold
+                    if (onHold.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "On Hold",
+                                icon = Icons.Default.Pause,
+                                count = onHold.size,
+                                isOled = isOled,
+                                iconTint = Color(0xFFFFC107)
+                            )
+                        }
+                        item {
+                            HomeAnimeHorizontalList(
+                                animeList = onHold,
+                                listType = "PAUSED",
+                                isOled = isOled,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime
+                                    showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    val nextEp = anime.progress + 1
+                                    onPlayEpisode(anime, nextEp)
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime
+                                    showStatusDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    // Dropped
+                    if (dropped.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "Dropped",
+                                icon = Icons.Default.Delete,
+                                count = dropped.size,
+                                isOled = isOled,
+                                iconTint = Color(0xFFF44336)
+                            )
+                        }
+                        item {
+                            HomeAnimeHorizontalList(
+                                animeList = dropped,
+                                listType = "DROPPED",
+                                isOled = isOled,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime
+                                    showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    onPlayEpisode(anime, 1)
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime
+                                    showStatusDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    // Empty state
+                    if (allListsEmpty && !isLoading) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        "Your lists are empty",
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Check out the Explore tab to discover anime!",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Bottom spacer
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
@@ -279,6 +414,9 @@ fun HomeScreen(
                 isOled = isOled,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,
+                completed = completed,
+                onHold = onHold,
+                dropped = dropped,
                 onClose = { showSearchOverlay = false },
                 onPlayEpisode = onPlayEpisode
             )
@@ -393,14 +531,43 @@ private fun LoadingSkeleton(isOled: Boolean) {
 }
 
 @Composable
-private fun SectionHeader(title: String, isOled: Boolean) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+private fun SectionHeader(
+    title: String,
+    icon: ImageVector,
+    count: Int,
+    isOled: Boolean,
+    iconTint: Color = MaterialTheme.colorScheme.primary
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(bottom = 8.dp)
-    )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Text(
+                "$count",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -441,19 +608,35 @@ fun HomeAnimeCard(
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val isFinished = total in 1..released
 
-    val progressText = if (listType == "CURRENT") {
-        when {
-            isFinished -> "${anime.progress} / $total"
-            total > 0 -> "${anime.progress} / $released / $total"
-            released > 0 -> "${anime.progress} / $released"
-            else -> "${anime.progress}"
+    val progressText = when (listType) {
+        "CURRENT" -> {
+            when {
+                isFinished -> "${anime.progress} / $total"
+                total > 0 -> "${anime.progress} / $released / $total"
+                released > 0 -> "${anime.progress} / $released"
+                else -> "${anime.progress}"
+            }
         }
-    } else {
-        when {
-            total > 0 -> "$released / $total"
-            released > 0 -> "$released / ??"
-            else -> "??"
+        "COMPLETED" -> {
+            if (total > 0) "$total eps" else "${anime.progress} eps"
         }
+        else -> {
+            when {
+                total > 0 -> "$released / $total"
+                released > 0 -> "$released / ??"
+                else -> "??"
+            }
+        }
+    }
+
+    // Status indicator color
+    val statusColor = when (listType) {
+        "CURRENT" -> Color(0xFF2196F3) // Blue for watching
+        "PLANNING" -> Color(0xFF9C27B0) // Purple for planning
+        "COMPLETED" -> Color(0xFF4CAF50) // Green for completed
+        "PAUSED" -> Color(0xFFFFC107) // Amber for on hold
+        "DROPPED" -> Color(0xFFF44336) // Red for dropped
+        else -> MaterialTheme.colorScheme.primary
     }
 
     Column(
@@ -485,6 +668,15 @@ fun HomeAnimeCard(
                                 )
                             )
                         )
+                )
+
+                // Status indicator bar at top
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(statusColor)
                 )
 
                 FilledTonalIconButton(
@@ -521,7 +713,8 @@ fun HomeAnimeCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    if (listType == "CURRENT") {
+                    // Play button for CURRENT and PAUSED lists
+                    if (listType == "CURRENT" || listType == "PAUSED") {
                         FilledTonalIconButton(
                             onClick = onPlayClick,
                             modifier = Modifier.size(32.dp),
@@ -900,6 +1093,9 @@ fun SearchOverlay(
     isOled: Boolean,
     currentlyWatching: List<AnimeMedia>,
     planningToWatch: List<AnimeMedia>,
+    completed: List<AnimeMedia>,
+    onHold: List<AnimeMedia>,
+    dropped: List<AnimeMedia>,
     onClose: () -> Unit,
     onPlayEpisode: (AnimeMedia, Int) -> Unit
 ) {
@@ -913,11 +1109,14 @@ fun SearchOverlay(
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDetailDialog by remember { mutableStateOf(false) }
 
-    // Get saved anime IDs and their statuses
-    val savedAnimeMap = remember(currentlyWatching, planningToWatch) {
+    // Get saved anime IDs and their statuses from all lists
+    val savedAnimeMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
         planningToWatch.forEach { map[it.id] = "PLANNING" }
+        completed.forEach { map[it.id] = "COMPLETED" }
+        onHold.forEach { map[it.id] = "PAUSED" }
+        dropped.forEach { map[it.id] = "DROPPED" }
         map
     }
 
@@ -1131,7 +1330,14 @@ private fun SearchResultItem(
                         Icon(
                             Icons.Filled.Bookmark,
                             contentDescription = "Saved",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = when (currentStatus) {
+                                "CURRENT" -> Color(0xFF2196F3) // Blue
+                                "PLANNING" -> Color(0xFF9C27B0) // Purple
+                                "COMPLETED" -> Color(0xFF4CAF50)
+                                "PAUSED" -> Color(0xFFFFC107)
+                                "DROPPED" -> Color(0xFFF44336)
+                                else -> MaterialTheme.colorScheme.primary
+                            },
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -1172,15 +1378,22 @@ private fun SearchResultItem(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = when(currentStatus) {
-                            "CURRENT" -> "Watching"
-                            "PLANNING" -> "Planning"
-                            "COMPLETED" -> "Completed"
-                            "PAUSED" -> "On Hold"
-                            "DROPPED" -> "Dropped"
+                            "CURRENT" -> "▶ Watching"
+                            "PLANNING" -> "📋 Planning"
+                            "COMPLETED" -> "✓ Completed"
+                            "PAUSED" -> "⏸ On Hold"
+                            "DROPPED" -> "✕ Dropped"
                             else -> currentStatus
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = when (currentStatus) {
+                            "CURRENT" -> Color(0xFF2196F3) // Blue
+                            "PLANNING" -> Color(0xFF9C27B0) // Purple
+                            "COMPLETED" -> Color(0xFF4CAF50)
+                            "PAUSED" -> Color(0xFFFFC107)
+                            "DROPPED" -> Color(0xFFF44336)
+                            else -> MaterialTheme.colorScheme.primary
+                        }
                     )
                 }
             }
@@ -1299,7 +1512,14 @@ fun SearchAnimeDetailDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                color = when (currentStatus) {
+                                    "CURRENT" -> Color(0xFF2196F3).copy(alpha = 0.2f) // Blue
+                                    "PLANNING" -> Color(0xFF9C27B0).copy(alpha = 0.2f) // Purple
+                                    "COMPLETED" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                    "PAUSED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
+                                    "DROPPED" -> Color(0xFFF44336).copy(alpha = 0.2f)
+                                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                }
                             ) {
                                 Text(
                                     text = when(currentStatus) {
@@ -1311,7 +1531,14 @@ fun SearchAnimeDetailDialog(
                                         else -> currentStatus
                                     },
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = when (currentStatus) {
+                                        "CURRENT" -> Color(0xFF2196F3) // Blue
+                                        "PLANNING" -> Color(0xFF9C27B0) // Purple
+                                        "COMPLETED" -> Color(0xFF4CAF50)
+                                        "PAUSED" -> Color(0xFFFFC107)
+                                        "DROPPED" -> Color(0xFFF44336)
+                                        else -> MaterialTheme.colorScheme.primary
+                                    },
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
                             }
@@ -1339,6 +1566,7 @@ fun SearchAnimeDetailDialog(
                         icon = Icons.Default.PlayArrow,
                         label = "Watching",
                         selected = selectedStatus == "CURRENT",
+                        selectedColor = Color(0xFF2196F3), // Blue
                         onClick = {
                             selectedStatus = "CURRENT"
                             showAnimation = true
@@ -1354,6 +1582,7 @@ fun SearchAnimeDetailDialog(
                         icon = Icons.Default.Bookmark,
                         label = "Planning",
                         selected = selectedStatus == "PLANNING",
+                        selectedColor = Color(0xFF9C27B0), // Purple
                         onClick = {
                             selectedStatus = "PLANNING"
                             showAnimation = true
@@ -1377,6 +1606,7 @@ fun SearchAnimeDetailDialog(
                         icon = Icons.Default.Check,
                         label = "Completed",
                         selected = selectedStatus == "COMPLETED",
+                        selectedColor = Color(0xFF4CAF50),
                         onClick = {
                             selectedStatus = "COMPLETED"
                             showAnimation = true
@@ -1463,11 +1693,12 @@ fun SearchAnimeDetailDialog(
 
 @Composable
 private fun StatusButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedColor: Color = MaterialTheme.colorScheme.primary
 ) {
     Button(
         onClick = onClick,
@@ -1475,7 +1706,7 @@ private fun StatusButton(
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (selected)
-                MaterialTheme.colorScheme.primary
+                selectedColor
             else
                 Color.White.copy(alpha = 0.08f),
             contentColor = if (selected)

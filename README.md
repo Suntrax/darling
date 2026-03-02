@@ -16,18 +16,19 @@
 
 ### 📊 Anime Tracking
 - 🔐 **AniList OAuth Login** – Secure authentication with your AniList account.
-- 📚 **Personal Lists** – View your Watching, Planning, Completed, Dropped, and Paused anime.
+- 📚 **Full List Support** – View all your anime lists: Watching, Planning, Completed, On Hold, and Dropped.
 - 📈 **Progress Tracking** – Automatically update your watch progress and sync with AniList.
 - 🔍 **Explore** – Discover trending, seasonal, and top-rated anime.
 - 🔖 **Smart Bookmarks** – Add/remove anime from lists with visual feedback and animations.
 - ⚡ **Quick Status Management** – Change anime status directly from cards.
+- 🎨 **Color-Coded Categories** – Each list type has its own distinct color for easy identification.
 
 ### 🧭 Explore & Discovery
 - 🎞 **Featured Carousel** – Auto-scrolling showcase of currently airing popular anime.
 - 🌸 **This Season** – See what's trending right now in the anime community.
 - ⭐ **Top Rated Series** – Browse highest-scoring TV anime of all time.
 - 🎬 **Top Rated Movies** – Discover top-rated anime films and features.
-- 🔢 **Episode Badges** – High-visibility episode counts for all series, including 1000+ episode titles.
+- 🔢 **Episode Badges** – Accurate episode counts for currently airing anime (shows released episodes).
 - 🔎 **Search** – Find any anime with debounced, real-time search and detail previews.
 
 ### 📺 Streaming & Video Player
@@ -52,6 +53,7 @@
 - 📱 **Responsive Layouts** – Fully optimized for both phone and tablet form factors.
 - 🎯 **Consistent Styling** – Unified button and badge designs across the entire app.
 - ✨ **Smooth Animations** – Visual feedback for all user interactions and state changes.
+- 🏷️ **Status Indicators** – Visual color bars on cards indicate anime list status at a glance.
 
 ---
 
@@ -116,7 +118,19 @@ app/src/main/java/com/blissless/anime/
 
 ## 📝 Changelog
 
-### 🚀 v1.2 (Current)
+### 🚀 v1.3 (Current)
+- **Full List Support:** Added Completed, On Hold, and Dropped anime lists to Home screen.
+- **Color-Coded Categories:** Each list type now has a distinct color for easy identification:
+  - 🔵 Watching (Blue)
+  - 🟣 Planning (Purple)
+  - 🟢 Completed (Green)
+  - 🟡 On Hold (Amber)
+  - 🔴 Dropped (Red)
+- **OLED Mode Fix:** Dark mode now properly applies across all screens.
+- **Dialog Improvements:** "Saved" button in anime detail dialog now correctly removes anime from lists.
+- **Visual Indicators:** Status bars on anime cards show list category at a glance.
+
+### 🚀 v1.2
 - **Player Upgrades:** Added Server Selection and SUB/DUB support.
 - **Reliability:** Implemented auto-server fallback and pre-fetched stream logic.
 - **UX:** Instant login state restoration and improved tracking slider.

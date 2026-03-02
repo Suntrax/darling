@@ -84,6 +84,15 @@ class MainViewModel : ViewModel() {
     private val _planningToWatch = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val planningToWatch: StateFlow<List<AnimeMedia>> = _planningToWatch.asStateFlow()
 
+    private val _completed = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val completed: StateFlow<List<AnimeMedia>> = _completed.asStateFlow()
+
+    private val _onHold = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val onHold: StateFlow<List<AnimeMedia>> = _onHold.asStateFlow()
+
+    private val _dropped = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val dropped: StateFlow<List<AnimeMedia>> = _dropped.asStateFlow()
+
     // Pre-fetched stream cache
     private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
@@ -174,6 +183,9 @@ class MainViewModel : ViewModel() {
         _userAvatar.value = null
         _currentlyWatching.value = emptyList()
         _planningToWatch.value = emptyList()
+        _completed.value = emptyList()
+        _onHold.value = emptyList()
+        _dropped.value = emptyList()
         _prefetchedStreams.value = emptyMap()
         _prefetchedEpisodeInfo.value = emptyMap()
     }
@@ -323,6 +335,9 @@ class MainViewModel : ViewModel() {
 
                 val currentlyWatchingList = mutableListOf<AnimeMedia>()
                 val planningList = mutableListOf<AnimeMedia>()
+                val completedList = mutableListOf<AnimeMedia>()
+                val onHoldList = mutableListOf<AnimeMedia>()
+                val droppedList = mutableListOf<AnimeMedia>()
 
                 data.data.MediaListCollection.lists.forEach { list ->
                     list.entries.forEach { entry ->
@@ -344,13 +359,19 @@ class MainViewModel : ViewModel() {
                         when (list.status ?: list.name) {
                             "CURRENT", "Watching" -> currentlyWatchingList.add(anime)
                             "PLANNING", "Plan to Watch" -> planningList.add(anime)
+                            "COMPLETED" -> completedList.add(anime)
+                            "PAUSED" -> onHoldList.add(anime)
+                            "DROPPED" -> droppedList.add(anime)
                         }
                     }
                 }
 
                 _currentlyWatching.value = currentlyWatchingList
                 _planningToWatch.value = planningList
-                Log.d(TAG, "Fetched ${currentlyWatchingList.size} watching, ${planningList.size} planning")
+                _completed.value = completedList
+                _onHold.value = onHoldList
+                _dropped.value = droppedList
+                Log.d(TAG, "Fetched ${currentlyWatchingList.size} watching, ${planningList.size} planning, ${completedList.size} completed, ${onHoldList.size} on hold, ${droppedList.size} dropped")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse lists response", e)
             }
@@ -793,9 +814,13 @@ class MainViewModel : ViewModel() {
     fun removeAnimeFromList(mediaId: Int) {
         Log.d(TAG, "removeAnimeFromList: mediaId=$mediaId")
 
+        // Check all lists for the entry ID
         val watchingEntry = _currentlyWatching.value.find { it.id == mediaId }?.listEntryId
         val planningEntry = _planningToWatch.value.find { it.id == mediaId }?.listEntryId
-        val entryId = watchingEntry ?: planningEntry
+        val completedEntry = _completed.value.find { it.id == mediaId }?.listEntryId
+        val onHoldEntry = _onHold.value.find { it.id == mediaId }?.listEntryId
+        val droppedEntry = _dropped.value.find { it.id == mediaId }?.listEntryId
+        val entryId = watchingEntry ?: planningEntry ?: completedEntry ?: onHoldEntry ?: droppedEntry
 
         if (entryId == null) {
             Log.e(TAG, "Could not find list entry ID for mediaId=$mediaId")
