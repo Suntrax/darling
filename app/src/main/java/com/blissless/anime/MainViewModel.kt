@@ -45,8 +45,20 @@ class MainViewModel : ViewModel() {
     private val _isOled = MutableStateFlow(false)
     val isOled: StateFlow<Boolean> = _isOled.asStateFlow()
 
+    private val _showStatusColors = MutableStateFlow(true)
+    val showStatusColors: StateFlow<Boolean> = _showStatusColors.asStateFlow()
+
     private val _trackingPercentage = MutableStateFlow(85)
     val trackingPercentage: StateFlow<Int> = _trackingPercentage.asStateFlow()
+
+    private val _forwardSkipSeconds = MutableStateFlow(10)
+    val forwardSkipSeconds: StateFlow<Int> = _forwardSkipSeconds.asStateFlow()
+
+    private val _backwardSkipSeconds = MutableStateFlow(10)
+    val backwardSkipSeconds: StateFlow<Int> = _backwardSkipSeconds.asStateFlow()
+
+    private val _forceHighRefreshRate = MutableStateFlow(false)
+    val forceHighRefreshRate: StateFlow<Boolean> = _forceHighRefreshRate.asStateFlow()
 
     private val _userId = MutableStateFlow<Int?>(null)
     val userId: StateFlow<Int?> = _userId.asStateFlow()
@@ -133,7 +145,11 @@ class MainViewModel : ViewModel() {
 
         // Load other settings
         _isOled.value = sharedPreferences.getBoolean("oled_mode", false)
+        _showStatusColors.value = sharedPreferences.getBoolean("show_status_colors", false)
         _trackingPercentage.value = sharedPreferences.getInt("tracking_percentage", 85)
+        _forwardSkipSeconds.value = sharedPreferences.getInt("forward_skip_seconds", 10)
+        _backwardSkipSeconds.value = sharedPreferences.getInt("backward_skip_seconds", 10)
+        _forceHighRefreshRate.value = sharedPreferences.getBoolean("force_high_refresh_rate", false)
 
         // Fetch data asynchronously
         viewModelScope.launch {
@@ -152,10 +168,33 @@ class MainViewModel : ViewModel() {
         sharedPreferences.edit().putBoolean("oled_mode", enabled).apply()
     }
 
+    fun setShowStatusColors(enabled: Boolean) {
+        _showStatusColors.value = enabled
+        sharedPreferences.edit().putBoolean("show_status_colors", enabled).apply()
+    }
+
     fun setTrackingPercentage(percentage: Int) {
         _trackingPercentage.value = percentage
         sharedPreferences.edit().putInt("tracking_percentage", percentage).apply()
         Log.d(TAG, "Tracking percentage set to: $percentage%")
+    }
+
+    fun setForwardSkipSeconds(seconds: Int) {
+        _forwardSkipSeconds.value = seconds
+        sharedPreferences.edit().putInt("forward_skip_seconds", seconds).apply()
+        Log.d(TAG, "Forward skip set to: $seconds seconds")
+    }
+
+    fun setBackwardSkipSeconds(seconds: Int) {
+        _backwardSkipSeconds.value = seconds
+        sharedPreferences.edit().putInt("backward_skip_seconds", seconds).apply()
+        Log.d(TAG, "Backward skip set to: $seconds seconds")
+    }
+
+    fun setForceHighRefreshRate(enabled: Boolean) {
+        _forceHighRefreshRate.value = enabled
+        sharedPreferences.edit().putBoolean("force_high_refresh_rate", enabled).apply()
+        Log.d(TAG, "Force high refresh rate set to: $enabled")
     }
 
     fun loginWithAniList() {

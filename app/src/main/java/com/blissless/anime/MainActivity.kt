@@ -2,13 +2,12 @@ package com.blissless.anime
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
@@ -30,6 +29,8 @@ import com.blissless.anime.ui.screens.PlayerScreen
 import com.blissless.anime.ui.screens.SettingsScreen
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 
 class MainActivity : ComponentActivity() {
 
@@ -58,15 +59,53 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isOled by mainViewModel.isOled.collectAsState()
+            val showStatusColors by mainViewModel.showStatusColors.collectAsState()
+            val forceHighRefreshRate by mainViewModel.forceHighRefreshRate.collectAsState()
             val token by mainViewModel.authToken.collectAsState(initial = if (hasToken) "loading" else null)
 
             // User is logged in if they had a token OR if token is now set
             val isLoggedIn = hasToken || token != null
 
+            // Apply high refresh rate setting
+            LaunchedEffect(forceHighRefreshRate) {
+                if (forceHighRefreshRate) {
+                    window.attributes = window.attributes.apply {
+                        // Try to set the preferred refresh rate to high (120Hz)
+                        // API 30+ uses preferredDisplayModeId
+                        // For older APIs, we use the WindowManager.LayoutParams approach
+                    }
+                    // Request high refresh rate mode
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        val display = display
+                        display?.let {
+                            val modes = it.supportedModes
+                            var highestRefreshRateMode: android.view.Display.Mode? = null
+                            var highestRefreshRate = 60f
+
+                            modes?.forEach { mode ->
+                                if (mode.refreshRate > highestRefreshRate) {
+                                    highestRefreshRate = mode.refreshRate
+                                    highestRefreshRateMode = mode
+                                }
+                            }
+
+                            highestRefreshRateMode?.let { mode ->
+                                val params = window.attributes
+                                params.preferredDisplayModeId = mode.modeId
+                                window.attributes = params
+                                Log.d("MainActivity", "Set preferred display mode to ${mode.refreshRate}Hz")
+                            }
+                        }
+                    }
+                }
+            }
+
             AppTheme(useOled = isOled) {
                 MainScreen(
                     viewModel = mainViewModel,
                     isOled = isOled,
+                    showStatusColors = showStatusColors,
+                    forceHighRefreshRate = forceHighRefreshRate,
                     isLoggedIn = isLoggedIn
                 )
             }
@@ -94,10 +133,17 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     viewModel: MainViewModel,
     isOled: Boolean,
+    showStatusColors: Boolean,
+    forceHighRefreshRate: Boolean,
     isLoggedIn: Boolean
 ) {
-    val pagerState = rememberPagerState(initialPage = 1) { 3 }
     val scope = rememberCoroutineScope()
+
+    // Pager state for swipe navigation - start on Home (page 1)
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+
+    // Track which pages have been preloaded
+    var preloadedPages by remember { mutableStateOf(setOf(1)) } // Home is preloaded by default
 
     // Collect user's anime lists
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
@@ -108,11 +154,38 @@ fun MainScreen(
     val prefetchedStreams by viewModel.prefetchedStreams.collectAsState()
     val prefetchedEpisodeInfo by viewModel.prefetchedEpisodeInfo.collectAsState()
 
+    // Collect skip duration settings
+    val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
+    val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
+
     // Pre-fetch streams for currently watching when lists load
     LaunchedEffect(currentlyWatching) {
         if (currentlyWatching.isNotEmpty()) {
             currentlyWatching.take(3).forEach { anime ->
                 viewModel.prefetchCurrentEpisodeStream(anime)
+            }
+        }
+    }
+
+    // Preload adjacent pages when swiping
+    LaunchedEffect(pagerState.currentPage, pagerState.currentPageOffsetFraction) {
+        val currentPage = pagerState.currentPage
+        val offset = pagerState.currentPageOffsetFraction
+
+        // Determine which adjacent page we're approaching
+        val approachingPage = when {
+            offset > 0.3f -> currentPage + 1  // Swiping left, approaching next page
+            offset < -0.3f -> currentPage - 1 // Swiping right, approaching previous page
+            else -> currentPage
+        }
+
+        // Preload data for the approaching page if not already loaded
+        if (approachingPage in 0..2 && approachingPage !in preloadedPages) {
+            preloadedPages = preloadedPages + approachingPage
+            when (approachingPage) {
+                0 -> { /* Explore data is already fetched in init, just mark as preloaded */ }
+                1 -> { viewModel.refreshHome() }
+                2 -> { /* Settings doesn't need preloading */ }
             }
         }
     }
@@ -311,6 +384,8 @@ fun MainScreen(
                 episodeInfo = currentEpisodeInfo,
                 currentServerName = currentServerName,
                 currentCategory = currentCategory,
+                forwardSkipSeconds = forwardSkipSeconds,
+                backwardSkipSeconds = backwardSkipSeconds,
                 onProgressUpdate = { percentage ->
                     val trackingPercent = viewModel.trackingPercentage.value
                     if (percentage >= trackingPercent && anime.id > 0) {
@@ -350,7 +425,11 @@ fun MainScreen(
                             },
                             label = { Text(item, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) },
                             selected = pagerState.currentPage == index,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
                                 unselectedIconColor = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -364,11 +443,9 @@ fun MainScreen(
             }
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // HorizontalPager for swipe navigation
                 HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = true,
-                    pageSpacing = 8.dp,
-                    beyondViewportPageCount = 1
+                    state = pagerState
                 ) { page ->
                     when (page) {
                         0 -> ExploreScreen(
@@ -376,6 +453,7 @@ fun MainScreen(
                             onAnimeClick = { },
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
+                            showStatusColors = showStatusColors,
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
                             planningToWatch = planningToWatch,
@@ -387,10 +465,17 @@ fun MainScreen(
                             viewModel = viewModel,
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
+                            showStatusColors = showStatusColors,
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() }
                         )
-                        2 -> SettingsScreen(viewModel = viewModel, isOled = isOled, isLoggedIn = isLoggedIn)
+                        2 -> SettingsScreen(
+                            viewModel = viewModel,
+                            isOled = isOled,
+                            isLoggedIn = isLoggedIn,
+                            showStatusColors = showStatusColors,
+                            forceHighRefreshRate = forceHighRefreshRate
+                        )
                     }
                 }
 

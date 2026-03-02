@@ -62,6 +62,8 @@ fun PlayerScreen(
     episodeInfo: EpisodeStreams? = null,
     currentServerName: String = "",
     currentCategory: String = "sub",
+    forwardSkipSeconds: Int = 10,
+    backwardSkipSeconds: Int = 10,
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
     onNextEpisode: (() -> Unit)? = null,
@@ -247,11 +249,11 @@ fun PlayerScreen(
                 .fillMaxHeight()
                 .fillMaxWidth(0.3f)
                 .align(Alignment.CenterStart)
-                .pointerInput(Unit) {
+                .pointerInput(backwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { showControls = !showControls },
                         onDoubleTap = {
-                            seekBy(-5000)
+                            seekBy(-(backwardSkipSeconds * 1000L))
                         }
                     )
                 }
@@ -276,11 +278,11 @@ fun PlayerScreen(
                 .fillMaxHeight()
                 .fillMaxWidth(0.3f)
                 .align(Alignment.CenterEnd)
-                .pointerInput(Unit) {
+                .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { showControls = !showControls },
                         onDoubleTap = {
-                            seekBy(5000)
+                            seekBy(forwardSkipSeconds * 1000L)
                         }
                     )
                 }

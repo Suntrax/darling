@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,6 +55,7 @@ fun HomeScreen(
     viewModel: MainViewModel,
     isLoggedIn: Boolean,
     isOled: Boolean = false,
+    showStatusColors: Boolean = true,
     onPlayerStateChange: (Boolean) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     onLoginClick: () -> Unit = {}
@@ -217,7 +219,7 @@ fun HomeScreen(
                 ) {
                     // Currently Watching
                     if (currentlyWatching.isNotEmpty()) {
-                        item {
+                        item(key = "header_current") {
                             SectionHeader(
                                 title = "Currently Watching",
                                 icon = Icons.Default.PlayArrow,
@@ -226,11 +228,12 @@ fun HomeScreen(
                                 iconTint = Color(0xFF2196F3) // Blue
                             )
                         }
-                        item {
+                        item(key = "list_current") {
                             HomeAnimeHorizontalList(
                                 animeList = currentlyWatching,
                                 listType = "CURRENT",
                                 isOled = isOled,
+                                showStatusColors = showStatusColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime
                                     showEpisodeSheet = true
@@ -249,7 +252,7 @@ fun HomeScreen(
 
                     // Planning to Watch
                     if (planningToWatch.isNotEmpty()) {
-                        item {
+                        item(key = "header_planning") {
                             SectionHeader(
                                 title = "Planning to Watch",
                                 icon = Icons.Default.Bookmark,
@@ -258,11 +261,12 @@ fun HomeScreen(
                                 iconTint = Color(0xFF9C27B0) // Purple
                             )
                         }
-                        item {
+                        item(key = "list_planning") {
                             HomeAnimeHorizontalList(
                                 animeList = planningToWatch,
                                 listType = "PLANNING",
                                 isOled = isOled,
+                                showStatusColors = showStatusColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime
                                     showEpisodeSheet = true
@@ -280,7 +284,7 @@ fun HomeScreen(
 
                     // Completed
                     if (completed.isNotEmpty()) {
-                        item {
+                        item(key = "header_completed") {
                             SectionHeader(
                                 title = "Completed",
                                 icon = Icons.Default.Check,
@@ -289,11 +293,12 @@ fun HomeScreen(
                                 iconTint = Color(0xFF4CAF50)
                             )
                         }
-                        item {
+                        item(key = "list_completed") {
                             HomeAnimeHorizontalList(
                                 animeList = completed,
                                 listType = "COMPLETED",
                                 isOled = isOled,
+                                showStatusColors = showStatusColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime
                                     showEpisodeSheet = true
@@ -311,7 +316,7 @@ fun HomeScreen(
 
                     // On Hold
                     if (onHold.isNotEmpty()) {
-                        item {
+                        item(key = "header_onhold") {
                             SectionHeader(
                                 title = "On Hold",
                                 icon = Icons.Default.Pause,
@@ -320,11 +325,12 @@ fun HomeScreen(
                                 iconTint = Color(0xFFFFC107)
                             )
                         }
-                        item {
+                        item(key = "list_onhold") {
                             HomeAnimeHorizontalList(
                                 animeList = onHold,
                                 listType = "PAUSED",
                                 isOled = isOled,
+                                showStatusColors = showStatusColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime
                                     showEpisodeSheet = true
@@ -343,7 +349,7 @@ fun HomeScreen(
 
                     // Dropped
                     if (dropped.isNotEmpty()) {
-                        item {
+                        item(key = "header_dropped") {
                             SectionHeader(
                                 title = "Dropped",
                                 icon = Icons.Default.Delete,
@@ -352,11 +358,12 @@ fun HomeScreen(
                                 iconTint = Color(0xFFF44336)
                             )
                         }
-                        item {
+                        item(key = "list_dropped") {
                             HomeAnimeHorizontalList(
                                 animeList = dropped,
                                 listType = "DROPPED",
                                 isOled = isOled,
+                                showStatusColors = showStatusColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime
                                     showEpisodeSheet = true
@@ -374,7 +381,7 @@ fun HomeScreen(
 
                     // Empty state
                     if (allListsEmpty && !isLoading) {
-                        item {
+                        item(key = "empty_state") {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
@@ -575,6 +582,7 @@ fun HomeAnimeHorizontalList(
     animeList: List<AnimeMedia>,
     listType: String,
     isOled: Boolean,
+    showStatusColors: Boolean = false,
     onAnimeClick: (AnimeMedia) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
     onStatusClick: (AnimeMedia) -> Unit
@@ -582,11 +590,15 @@ fun HomeAnimeHorizontalList(
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(animeList) { anime ->
+        items(
+            items = animeList,
+            key = { "${listType}_${it.id}" }
+        ) { anime ->
             HomeAnimeCard(
                 anime = anime,
                 listType = listType,
                 isOled = isOled,
+                showStatusColors = showStatusColors,
                 onClick = { onAnimeClick(anime) },
                 onPlayClick = { onPlayClick(anime) },
                 onStatusClick = { onStatusClick(anime) }
@@ -600,10 +612,21 @@ fun HomeAnimeCard(
     anime: AnimeMedia,
     listType: String,
     isOled: Boolean,
+    showStatusColors: Boolean = false,
     onClick: () -> Unit,
     onPlayClick: () -> Unit,
     onStatusClick: () -> Unit
 ) {
+    // Status colors matching ExploreScreen
+    val statusColor = when (listType) {
+        "CURRENT" -> Color(0xFF2196F3)    // Blue - Watching
+        "PLANNING" -> Color(0xFF9C27B0)   // Purple - Planning
+        "COMPLETED" -> Color(0xFF4CAF50)  // Green - Completed
+        "PAUSED" -> Color(0xFFFFC107)     // Amber - On Hold
+        "DROPPED" -> Color(0xFFF44336)    // Red - Dropped
+        else -> Color.Transparent
+    }
+
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val isFinished = total in 1..released
@@ -627,16 +650,6 @@ fun HomeAnimeCard(
                 else -> "??"
             }
         }
-    }
-
-    // Status indicator color
-    val statusColor = when (listType) {
-        "CURRENT" -> Color(0xFF2196F3) // Blue for watching
-        "PLANNING" -> Color(0xFF9C27B0) // Purple for planning
-        "COMPLETED" -> Color(0xFF4CAF50) // Green for completed
-        "PAUSED" -> Color(0xFFFFC107) // Amber for on hold
-        "DROPPED" -> Color(0xFFF44336) // Red for dropped
-        else -> MaterialTheme.colorScheme.primary
     }
 
     Column(
@@ -670,14 +683,16 @@ fun HomeAnimeCard(
                         )
                 )
 
-                // Status indicator bar at top
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(statusColor)
-                )
+                // Status indicator bar at top (only if showStatusColors is enabled)
+                if (showStatusColors) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(statusColor)
+                    )
+                }
 
                 FilledTonalIconButton(
                     onClick = onStatusClick,
@@ -735,14 +750,21 @@ fun HomeAnimeCard(
             }
         }
 
-        Text(
-            text = anime.title,
-            modifier = Modifier.padding(top = 6.dp),
-            maxLines = 2,
-            style = MaterialTheme.typography.labelMedium,
-            overflow = TextOverflow.Ellipsis,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
-        )
+        // Fixed height for title to prevent layout jumping
+        Box(
+            modifier = Modifier
+                .width(130.dp)
+                .height(36.dp)
+        ) {
+            Text(
+                text = anime.title,
+                modifier = Modifier.padding(top = 6.dp),
+                maxLines = 2,
+                style = MaterialTheme.typography.labelMedium,
+                overflow = TextOverflow.Ellipsis,
+                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+            )
+        }
     }
 }
 

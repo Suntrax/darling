@@ -12,13 +12,11 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkAdd
@@ -37,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.blissless.anime.AnimeMedia
 import com.blissless.anime.ExploreAnime
 import com.blissless.anime.MainViewModel
@@ -66,6 +65,7 @@ fun ExploreScreen(
     onAnimeClick: (ExploreAnime) -> Unit,
     isLoggedIn: Boolean = false,
     isOled: Boolean = false,
+    showStatusColors: Boolean = true,
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     currentlyWatching: List<AnimeMedia> = emptyList(),
     planningToWatch: List<AnimeMedia> = emptyList(),
@@ -73,7 +73,6 @@ fun ExploreScreen(
     onHold: List<AnimeMedia> = emptyList(),
     dropped: List<AnimeMedia> = emptyList()
 ) {
-    val scrollState = rememberScrollState()
     val featuredAnime by viewModel.featuredAnime.collectAsState()
     val seasonalAnime by viewModel.seasonalAnime.collectAsState()
     val topSeries by viewModel.topSeries.collectAsState()
@@ -85,7 +84,7 @@ fun ExploreScreen(
     val scifiAnime by viewModel.scifiAnime.collectAsState()
     val isLoading by viewModel.isLoadingExplore.collectAsState()
 
-    // Create a map of animeId -> status for quick lookup
+    // Create a map of animeId -> status for quick lookup - use derivedStateOf for stability
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
@@ -104,6 +103,7 @@ fun ExploreScreen(
             anime = selectedAnime!!,
             isOled = isOled,
             currentStatus = animeStatusMap[selectedAnime!!.id],
+            showStatusColors = showStatusColors,
             onDismiss = { showDialog = false },
             onAddToPlanning = {
                 viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING")
@@ -136,229 +136,207 @@ fun ExploreScreen(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
+    // Use LazyColumn instead of Column + verticalScroll for better performance
+    val listState = rememberLazyListState()
+
+    // Stable callbacks to avoid recomposition
+    val onAnimeClickStable = remember<(ExploreAnime) -> Unit> {
+        { anime ->
+            selectedAnime = anime
+            showDialog = true
+        }
+    }
+
+    val onBookmarkClickStable = remember<(ExploreAnime) -> Unit> {
+        { anime ->
+            val status = animeStatusMap[anime.id]
+            if (status != null) {
+                viewModel.removeAnimeFromList(anime.id)
+            } else {
+                viewModel.addExploreAnimeToList(anime, "PLANNING")
+            }
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         // Featured Carousel
-        if (featuredAnime.isNotEmpty()) {
-            FeaturedCarousel(
-                animeList = featuredAnime,
-                onAnimeClick = { anime ->
-                    selectedAnime = anime
-                    showDialog = true
+        item(
+            contentType = "featured"
+        ) {
+            if (featuredAnime.isNotEmpty()) {
+                FeaturedCarousel(
+                    animeList = featuredAnime,
+                    onAnimeClick = onAnimeClickStable
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
                 }
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
             }
         }
 
         // This Season
-        SectionTitle("This Season", isOled)
-
+        item(
+            contentType = "section_title"
+        ) {
+            SectionTitle("This Season", isOled)
+        }
         if (seasonalAnime.isNotEmpty()) {
-            ExploreAnimeHorizontalList(
-                animeList = seasonalAnime,
-                animeStatusMap = animeStatusMap,
-                onAnimeClick = { anime ->
-                    selectedAnime = anime
-                    showDialog = true
-                },
-                onBookmarkClick = { anime ->
-                    val status = animeStatusMap[anime.id]
-                    if (status != null) {
-                        viewModel.removeAnimeFromList(anime.id)
-                    } else {
-                        viewModel.addExploreAnimeToList(anime, "PLANNING")
-                    }
-                },
-                isLoggedIn = isLoggedIn,
-                isOled = isOled
-            )
+            item(
+                contentType = "anime_row"
+            ) {
+                ExploreAnimeHorizontalList(
+                    animeList = seasonalAnime,
+                    animeStatusMap = animeStatusMap,
+                    showStatusColors = showStatusColors,
+                    onAnimeClick = onAnimeClickStable,
+                    onBookmarkClick = onBookmarkClickStable,
+                    isLoggedIn = isLoggedIn,
+                    isOled = isOled
+                )
+            }
         } else {
-            LoadingPlaceholder(isOled)
+            item(contentType = "loading") { LoadingPlaceholder(isOled) }
         }
 
         // Top Rated Series
-        SectionTitle("Top Rated Series", isOled)
-
+        item(contentType = "section_title") {
+            SectionTitle("Top Rated Series", isOled)
+        }
         if (topSeries.isNotEmpty()) {
-            ExploreAnimeHorizontalList(
-                animeList = topSeries,
-                animeStatusMap = animeStatusMap,
-                onAnimeClick = { anime ->
-                    selectedAnime = anime
-                    showDialog = true
-                },
-                onBookmarkClick = { anime ->
-                    val status = animeStatusMap[anime.id]
-                    if (status != null) {
-                        viewModel.removeAnimeFromList(anime.id)
-                    } else {
-                        viewModel.addExploreAnimeToList(anime, "PLANNING")
-                    }
-                },
-                isLoggedIn = isLoggedIn,
-                isOled = isOled
-            )
+            item(contentType = "anime_row") {
+                ExploreAnimeHorizontalList(
+                    animeList = topSeries,
+                    animeStatusMap = animeStatusMap,
+                    showStatusColors = showStatusColors,
+                    onAnimeClick = onAnimeClickStable,
+                    onBookmarkClick = onBookmarkClickStable,
+                    isLoggedIn = isLoggedIn,
+                    isOled = isOled
+                )
+            }
         } else if (isLoading) {
-            LoadingPlaceholder(isOled)
+            item(contentType = "loading") { LoadingPlaceholder(isOled) }
         } else {
-            EmptySectionText("No top series found", isOled)
+            item(contentType = "empty") { EmptySectionText("No top series found", isOled) }
         }
 
         // Top Rated Movies
-        SectionTitle("Top Rated Movies", isOled)
-
+        item(contentType = "section_title") {
+            SectionTitle("Top Rated Movies", isOled)
+        }
         if (topMovies.isNotEmpty()) {
-            ExploreAnimeHorizontalList(
-                animeList = topMovies,
-                animeStatusMap = animeStatusMap,
-                onAnimeClick = { anime ->
-                    selectedAnime = anime
-                    showDialog = true
-                },
-                onBookmarkClick = { anime ->
-                    val status = animeStatusMap[anime.id]
-                    if (status != null) {
-                        viewModel.removeAnimeFromList(anime.id)
-                    } else {
-                        viewModel.addExploreAnimeToList(anime, "PLANNING")
-                    }
-                },
-                isLoggedIn = isLoggedIn,
-                isOled = isOled
-            )
+            item(contentType = "anime_row") {
+                ExploreAnimeHorizontalList(
+                    animeList = topMovies,
+                    animeStatusMap = animeStatusMap,
+                    showStatusColors = showStatusColors,
+                    onAnimeClick = onAnimeClickStable,
+                    onBookmarkClick = onBookmarkClickStable,
+                    isLoggedIn = isLoggedIn,
+                    isOled = isOled
+                )
+            }
         } else if (isLoading) {
-            LoadingPlaceholder(isOled)
+            item(contentType = "loading") { LoadingPlaceholder(isOled) }
         } else {
-            EmptySectionText("No top movies found", isOled)
+            item(contentType = "empty") { EmptySectionText("No top movies found", isOled) }
         }
 
         // Genre Sections
-        GenreSection(
-            title = "Action",
-            animeList = actionAnime,
-            animeStatusMap = animeStatusMap,
-            isLoading = isLoading,
-            isOled = isOled,
-            isLoggedIn = isLoggedIn,
-            onAnimeClick = { anime ->
-                selectedAnime = anime
-                showDialog = true
-            },
-            onBookmarkClick = { anime ->
-                val status = animeStatusMap[anime.id]
-                if (status != null) {
-                    viewModel.removeAnimeFromList(anime.id)
-                } else {
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
-                }
-            }
-        )
+        item(contentType = "genre_section") {
+            GenreSectionLazy(
+                title = "Action",
+                animeList = actionAnime,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                isLoading = isLoading,
+                isOled = isOled,
+                isLoggedIn = isLoggedIn,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable
+            )
+        }
 
-        GenreSection(
-            title = "Romance",
-            animeList = romanceAnime,
-            animeStatusMap = animeStatusMap,
-            isLoading = isLoading,
-            isOled = isOled,
-            isLoggedIn = isLoggedIn,
-            onAnimeClick = { anime ->
-                selectedAnime = anime
-                showDialog = true
-            },
-            onBookmarkClick = { anime ->
-                val status = animeStatusMap[anime.id]
-                if (status != null) {
-                    viewModel.removeAnimeFromList(anime.id)
-                } else {
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
-                }
-            }
-        )
+        item(contentType = "genre_section") {
+            GenreSectionLazy(
+                title = "Romance",
+                animeList = romanceAnime,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                isLoading = isLoading,
+                isOled = isOled,
+                isLoggedIn = isLoggedIn,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable
+            )
+        }
 
-        GenreSection(
-            title = "Comedy",
-            animeList = comedyAnime,
-            animeStatusMap = animeStatusMap,
-            isLoading = isLoading,
-            isOled = isOled,
-            isLoggedIn = isLoggedIn,
-            onAnimeClick = { anime ->
-                selectedAnime = anime
-                showDialog = true
-            },
-            onBookmarkClick = { anime ->
-                val status = animeStatusMap[anime.id]
-                if (status != null) {
-                    viewModel.removeAnimeFromList(anime.id)
-                } else {
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
-                }
-            }
-        )
+        item(contentType = "genre_section") {
+            GenreSectionLazy(
+                title = "Comedy",
+                animeList = comedyAnime,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                isLoading = isLoading,
+                isOled = isOled,
+                isLoggedIn = isLoggedIn,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable
+            )
+        }
 
-        GenreSection(
-            title = "Fantasy",
-            animeList = fantasyAnime,
-            animeStatusMap = animeStatusMap,
-            isLoading = isLoading,
-            isOled = isOled,
-            isLoggedIn = isLoggedIn,
-            onAnimeClick = { anime ->
-                selectedAnime = anime
-                showDialog = true
-            },
-            onBookmarkClick = { anime ->
-                val status = animeStatusMap[anime.id]
-                if (status != null) {
-                    viewModel.removeAnimeFromList(anime.id)
-                } else {
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
-                }
-            }
-        )
+        item(contentType = "genre_section") {
+            GenreSectionLazy(
+                title = "Fantasy",
+                animeList = fantasyAnime,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                isLoading = isLoading,
+                isOled = isOled,
+                isLoggedIn = isLoggedIn,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable
+            )
+        }
 
-        GenreSection(
-            title = "Sci-Fi",
-            animeList = scifiAnime,
-            animeStatusMap = animeStatusMap,
-            isLoading = isLoading,
-            isOled = isOled,
-            isLoggedIn = isLoggedIn,
-            onAnimeClick = { anime ->
-                selectedAnime = anime
-                showDialog = true
-            },
-            onBookmarkClick = { anime ->
-                val status = animeStatusMap[anime.id]
-                if (status != null) {
-                    viewModel.removeAnimeFromList(anime.id)
-                } else {
-                    viewModel.addExploreAnimeToList(anime, "PLANNING")
-                }
-            }
-        )
+        item(contentType = "genre_section") {
+            GenreSectionLazy(
+                title = "Sci-Fi",
+                animeList = scifiAnime,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                isLoading = isLoading,
+                isOled = isOled,
+                isLoggedIn = isLoggedIn,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable
+            )
+        }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        // Bottom spacer
+        item(contentType = "spacer") {
+            Spacer(modifier = Modifier.height(20.dp))
+        }
     }
 }
 
 @Composable
-private fun GenreSection(
+private fun GenreSectionLazy(
     title: String,
     animeList: List<ExploreAnime>,
     animeStatusMap: Map<Int, String>,
+    showStatusColors: Boolean,
     isLoading: Boolean,
     isOled: Boolean,
     isLoggedIn: Boolean,
@@ -380,6 +358,7 @@ private fun GenreSection(
             ExploreAnimeHorizontalList(
                 animeList = animeList,
                 animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
                 onAnimeClick = onAnimeClick,
                 onBookmarkClick = onBookmarkClick,
                 isLoggedIn = isLoggedIn,
@@ -418,7 +397,7 @@ private fun LoadingPlaceholder(isOled: Boolean = false) {
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(5) {
+        items(5, key = { "loading_$it" }) {
             Card(
                 modifier = Modifier
                     .width(130.dp)
@@ -428,15 +407,8 @@ private fun LoadingPlaceholder(isOled: Boolean = false) {
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                }
+                // Simple placeholder without progress indicator
+                Box(modifier = Modifier.fillMaxSize())
             }
         }
     }
@@ -447,34 +419,37 @@ fun FeaturedCarousel(
     animeList: List<ExploreAnime>,
     onAnimeClick: (ExploreAnime) -> Unit
 ) {
-    val pagerState = rememberPagerState(pageCount = { animeList.size })
+    // Simple auto-rotating banner without HorizontalPager for better performance
+    var currentIndex by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         while (true) {
             delay(5000)
-            val nextPage = (pagerState.currentPage + 1) % animeList.size
-            pagerState.animateScrollToPage(nextPage, animationSpec = tween(1000))
+            currentIndex = (currentIndex + 1) % animeList.size
         }
     }
 
-    Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
-        val currentAnime = animeList.getOrElse(pagerState.currentPage) { animeList.first() }
+    val currentAnime = animeList.getOrElse(currentIndex) { animeList.first() }
 
-        AnimatedContent(
-            targetState = currentAnime,
-            transitionSpec = {
-                fadeIn(animationSpec = tween(600)) togetherWith fadeOut(animationSpec = tween(600))
-            },
-            label = "BannerTransition"
-        ) { anime ->
-            AsyncImage(
-                model = anime.banner ?: anime.cover,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(280.dp)
+            .clickable { onAnimeClick(currentAnime) }
+    ) {
+        // Banner image
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(currentAnime.banner ?: currentAnime.cover)
+                .crossfade(false)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
 
+        // Gradient overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -487,86 +462,78 @@ fun FeaturedCarousel(
                 ))
         )
 
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize()
-        ) { page ->
-            val anime = animeList[page]
-
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomStart
+        // Info card at bottom
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .align(Alignment.BottomStart),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Black.copy(alpha = 0.7f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Card(
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(currentAnime.cover)
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = currentAnime.title,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .clickable { onAnimeClick(anime) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.Black.copy(alpha = 0.7f)
+                        .width(50.dp)
+                        .height(70.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        currentAnime.title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AsyncImage(
-                            model = anime.cover,
-                            contentDescription = anime.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .width(50.dp)
-                                .height(70.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                        )
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                        Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        currentAnime.genres.take(3).joinToString(" - "),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        currentAnime.averageScore?.let { score ->
+                            val displayScore = score / 10.0
                             Text(
-                                anime.title,
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                                "★ ${String.format(Locale.US, "%.1f", displayScore)}",
+                                color = Color(0xFFFFD700),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
                             )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
 
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Text(
-                                anime.genres.take(3).joinToString(" - "),
-                                color = Color.White.copy(alpha = 0.7f),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                anime.averageScore?.let { score ->
-                                    val displayScore = score / 10.0
-                                    Text(
-                                        "★ ${String.format(Locale.US, "%.1f", displayScore)}",
-                                        color = Color(0xFFFFD700),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                }
-
-                                anime.latestEpisode?.let { ep ->
-                                    val releasedEp = ep - 1
-                                    if (releasedEp > 0) {
-                                        Text(
-                                            "Ep $releasedEp ${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}",
-                                            color = Color.White.copy(alpha = 0.8f),
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    }
-                                }
+                        currentAnime.latestEpisode?.let { ep ->
+                            val releasedEp = ep - 1
+                            if (releasedEp > 0) {
+                                Text(
+                                    "Ep $releasedEp ${if (currentAnime.episodes > 0) "/ ${currentAnime.episodes}" else ""}",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
                             }
                         }
                     }
@@ -574,6 +541,7 @@ fun FeaturedCarousel(
             }
         }
 
+        // Page indicators
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -584,10 +552,10 @@ fun FeaturedCarousel(
                 Box(
                     modifier = Modifier
                         .height(4.dp)
-                        .width(if (index == pagerState.currentPage) 24.dp else 8.dp)
+                        .width(if (index == currentIndex) 24.dp else 8.dp)
                         .clip(RoundedCornerShape(2.dp))
                         .background(
-                            if (index == pagerState.currentPage) Color.White
+                            if (index == currentIndex) Color.White
                             else Color.White.copy(alpha = 0.4f)
                         )
                 )
@@ -600,6 +568,7 @@ fun FeaturedCarousel(
 fun ExploreAnimeHorizontalList(
     animeList: List<ExploreAnime>,
     animeStatusMap: Map<Int, String>,
+    showStatusColors: Boolean,
     onAnimeClick: (ExploreAnime) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
     isLoggedIn: Boolean = false,
@@ -609,10 +578,14 @@ fun ExploreAnimeHorizontalList(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(animeList) { anime ->
+        items(
+            items = animeList,
+            key = { it.id }
+        ) { anime ->
             ExploreAnimeCard(
                 anime = anime,
                 currentStatus = animeStatusMap[anime.id],
+                showStatusColors = showStatusColors,
                 onClick = { onAnimeClick(anime) },
                 onBookmarkClick = { onBookmarkClick(anime) },
                 isLoggedIn = isLoggedIn,
@@ -626,16 +599,16 @@ fun ExploreAnimeHorizontalList(
 fun ExploreAnimeCard(
     anime: ExploreAnime,
     currentStatus: String?,
+    showStatusColors: Boolean,
     onClick: () -> Unit,
     onBookmarkClick: () -> Unit,
     isLoggedIn: Boolean = false,
     isOled: Boolean = false
 ) {
     val context = LocalContext.current
-    val statusColor = currentStatus?.let { StatusColors[it] } ?: Color.Transparent
 
     var showAnimation by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
+    val bookmarkScale by animateFloatAsState(
         targetValue = if (showAnimation) 1.3f else 1f,
         animationSpec = tween(200),
         finishedListener = {
@@ -646,6 +619,44 @@ fun ExploreAnimeCard(
         label = "bookmarkScale"
     )
 
+    // Cache the image request to avoid recreation - no crossfade for performance
+    val imageRequest = remember(anime.cover) {
+        ImageRequest.Builder(context)
+            .data(anime.cover)
+            .crossfade(false) // Disable crossfade for smoother scrolling
+            .build()
+    }
+
+    // Pre-calculate values to avoid recomposition
+    val statusIndicatorColor = remember(currentStatus, showStatusColors) {
+        if (showStatusColors && currentStatus != null) {
+            StatusColors[currentStatus] ?: Color.Transparent
+        } else {
+            Color.Transparent
+        }
+    }
+
+    val displayScore = remember(anime.averageScore) {
+        anime.averageScore?.let { it / 10.0 }
+    }
+
+    val episodeText = remember(anime.latestEpisode, anime.episodes) {
+        val releasedEpisodes = anime.latestEpisode?.let { it - 1 }
+        when {
+            releasedEpisodes != null && releasedEpisodes > 0 -> "Ep $releasedEpisodes"
+            anime.episodes > 0 -> "${anime.episodes} Ep"
+            else -> ""
+        }
+    }
+
+    val buttonContainerColor = remember(showStatusColors, currentStatus) {
+        if (showStatusColors && currentStatus != null) {
+            (StatusColors[currentStatus] ?: Color.Black).copy(alpha = 0.8f)
+        } else {
+            Color.Black.copy(alpha = 0.6f)
+        }
+    }
+
     Column(modifier = Modifier.width(130.dp)) {
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -654,7 +665,7 @@ fun ExploreAnimeCard(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
-                    model = anime.cover,
+                    model = imageRequest,
                     contentDescription = anime.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -675,19 +686,18 @@ fun ExploreAnimeCard(
                         )
                 )
 
-                // Status indicator bar at top (only if anime is in a list)
-                if (currentStatus != null) {
+                // Status indicator bar at top (only if showStatusColors is enabled and anime is in a list)
+                if (statusIndicatorColor != Color.Transparent) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
                             .height(3.dp)
-                            .background(statusColor)
+                            .background(statusIndicatorColor)
                     )
                 }
 
-                anime.averageScore?.let { score ->
-                    val displayScore = score / 10.0
+                displayScore?.let { score ->
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -696,7 +706,7 @@ fun ExploreAnimeCard(
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
-                            "★ ${String.format(Locale.US, "%.1f", displayScore)}",
+                            "★ ${String.format(Locale.US, "%.1f", score)}",
                             color = Color(0xFFFFD700),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
@@ -706,7 +716,7 @@ fun ExploreAnimeCard(
                 }
 
                 // Episode badge
-                if (anime.latestEpisode != null || anime.episodes > 0) {
+                if (episodeText.isNotEmpty()) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -714,22 +724,14 @@ fun ExploreAnimeCard(
                         shape = RoundedCornerShape(6.dp),
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
-                        val releasedEpisodes = anime.latestEpisode?.let { it - 1 }
-                        val episodeText = when {
-                            releasedEpisodes != null && releasedEpisodes > 0 -> "Ep $releasedEpisodes"
-                            anime.episodes > 0 -> "${anime.episodes} Ep"
-                            else -> ""
-                        }
-                        if (episodeText.isNotEmpty()) {
-                            Text(
-                                episodeText,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            )
-                        }
+                        Text(
+                            episodeText,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
                     }
                 }
 
@@ -754,14 +756,10 @@ fun ExploreAnimeCard(
                             },
                             modifier = Modifier
                                 .size(32.dp)
-                                .scale(if (showAnimation) scale else 1f),
+                                .scale(if (showAnimation) bookmarkScale else 1f),
                             shape = RoundedCornerShape(10.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = if (currentStatus != null) {
-                                    statusColor.copy(alpha = 0.8f)
-                                } else {
-                                    Color.Black.copy(alpha = 0.6f)
-                                },
+                                containerColor = buttonContainerColor,
                                 contentColor = Color.White
                             )
                         ) {
@@ -806,7 +804,9 @@ fun ExploreAnimeCard(
 
         Text(
             text = anime.title,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .height(32.dp), // Fixed height to prevent jumping
             maxLines = 2,
             style = MaterialTheme.typography.labelMedium,
             overflow = TextOverflow.Ellipsis,
@@ -820,6 +820,7 @@ fun ExploreAnimeDialog(
     anime: ExploreAnime,
     isOled: Boolean = false,
     currentStatus: String?,
+    showStatusColors: Boolean = true,
     onDismiss: () -> Unit,
     onAddToPlanning: () -> Unit,
     onRemoveFromList: () -> Unit = {},
@@ -843,6 +844,7 @@ fun ExploreAnimeDialog(
     )
 
     val isCurrentlySaved = currentStatus != null || hasAddedToPlanning
+    val statusColor = currentStatus?.let { StatusColors[it] } ?: MaterialTheme.colorScheme.primary
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -919,7 +921,7 @@ fun ExploreAnimeDialog(
                             )
                         }
 
-                        // Show current status if anime is in a list
+                        // Show current status if anime is in a list - always visible
                         if (currentStatus != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Surface(
@@ -958,7 +960,7 @@ fun ExploreAnimeDialog(
                         onClick = {
                             showAnimation = true
                             if (isCurrentlySaved) {
-                                Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Removed from ${StatusLabels[currentStatus] ?: "list"}", Toast.LENGTH_SHORT).show()
                                 onRemoveFromList()
                             } else {
                                 hasAddedToPlanning = true
@@ -972,10 +974,8 @@ fun ExploreAnimeDialog(
                         shape = RoundedCornerShape(10.dp),
                         colors = if (isCurrentlySaved) {
                             ButtonDefaults.outlinedButtonColors(
-                                containerColor = (currentStatus?.let { StatusColors[it] }
-                                    ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.2f),
-                                contentColor = currentStatus?.let { StatusColors[it] }
-                                    ?: MaterialTheme.colorScheme.primary
+                                containerColor = if (showStatusColors) statusColor.copy(alpha = 0.2f) else Color.Transparent,
+                                contentColor = if (showStatusColors) statusColor else MaterialTheme.colorScheme.primary
                             )
                         } else {
                             ButtonDefaults.outlinedButtonColors(
@@ -989,26 +989,15 @@ fun ExploreAnimeDialog(
                                 (scaleIn(animationSpec = tween(200)) + fadeIn())
                                     .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
                             },
-                            label = "buttonIcon"
+                            label = "bookmarkTransition"
                         ) { saved ->
                             if (saved) {
-                                Icon(Icons.Filled.Bookmark, contentDescription = null)
+                                Text("Remove from ${StatusLabels[currentStatus] ?: "List"}")
                             } else {
-                                Icon(Icons.Outlined.BookmarkAdd, contentDescription = null)
+                                Text("Add to Planning")
                             }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isCurrentlySaved) StatusLabels[currentStatus] ?: "Saved" else "Add to Planning")
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Close")
                 }
             }
         }

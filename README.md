@@ -40,7 +40,8 @@
 - **Episode Navigation** – Seamless "Previous" and "Next" controls within the player.
 
 #### Player Gestures and Controls
-- **Skip Time** – Double-tap left/right to skip 5 seconds.
+- **Customizable Skip Time** – Configure skip forward/backward duration (5-30 seconds).
+- **Double-Tap to Skip** – Double-tap left side to rewind, right side to fast-forward.
 - **Visibility** – Single tap to show or hide playback controls.
 - **Precision Seek** – Interactive seek bar with real-time time display.
 - **Aspect Ratio** – Toggle between Fit, Stretch, and 16:9 modes.
@@ -49,6 +50,7 @@
 ### UI/UX
 - **Material Design 3** – Modern, clean interface following the latest Android standards.
 - **OLED Dark Mode** – Pure black theme designed to save battery on AMOLED screens.
+- **High Refresh Rate** – Force 120Hz display mode for buttery smooth scrolling.
 - **Swipe Navigation** – Smooth page transitions and intuitive gestures.
 - **Responsive Layouts** – Fully optimized for both phone and tablet form factors.
 - **Smooth Animations** – Visual feedback for all user interactions and state changes.
@@ -83,7 +85,10 @@ Each anime list category has a distinct color for easy visual identification:
 - **AniList Account:** Optional (required for tracking and list features).
 
 ### Installation
-1. Download the latest APK from the [Releases](https://github.com/Suntrax/darling/releases) page.
+1. Download the appropriate APK from the [Releases](https://github.com/Suntrax/darling/releases) page:
+   - **arm64-v8a** – For most modern devices (recommended)
+   - **armeabi-v7a** – For older 32-bit devices
+   - **universal** – Compatible with all devices (larger file size)
 2. Enable **"Install from unknown sources"** in your Android settings.
 3. Open the APK and install.
 
@@ -130,7 +135,16 @@ app/src/main/java/com/blissless/anime/
 
 ## Changelog
 
-### v1.4 (Current)
+### v1.5 (Current)
+- **Customizable Skip Durations** – Set skip forward/backward time independently (5-30 seconds).
+- **High Refresh Rate Mode** – New setting to force 120Hz for smoother scrolling.
+- **Major Performance Overhaul** – Complete rewrite of Explore screen for buttery smooth scrolling.
+- **Optimized Image Loading** – Disabled crossfade animations for instant image display.
+- **Fixed Card Layout** – Anime cards no longer jump when scrolling horizontally.
+- **Multi-ABI APKs** – Separate builds for arm64-v8a, armeabi-v7a, and universal.
+- **Cleaner Defaults** – OLED mode and status colors now default to off.
+
+### v1.4
 - **Genre Recommendations:** Added browse-by-genre sections (Action, Romance, Comedy, Fantasy, Sci-Fi).
 - **Enhanced Status Display:** Status indicators now show on anime cards and detail dialogs for all sections.
 - **Episode Info Everywhere:** All anime detail dialogs now display accurate episode information.
