@@ -26,6 +26,12 @@ android {
         versionName = "1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
+        val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
+
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
     }
 
     // 1. ADD THIS: Configure your signing keys here
@@ -69,6 +75,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

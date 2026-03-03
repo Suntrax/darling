@@ -1,4 +1,5 @@
 package com.blissless.anime.api
+import com.blissless.anime.BuildConfig
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +34,7 @@ data class EpisodeStreams(
 
 object AniwatchService {
     private const val TAG = "AniwatchService"
-    private const val API_BASE = "https://aniwatch-cxjn.vercel.app/api/v2/hianime"
+    private const val API_BASE = BuildConfig.API_BASE_URL
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
