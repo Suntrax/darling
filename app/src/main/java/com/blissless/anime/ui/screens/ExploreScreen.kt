@@ -16,13 +16,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkAdd
@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -41,8 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import coil.imageLoader
-import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import com.blissless.anime.AnimeMedia
 import com.blissless.anime.ExploreAnime
@@ -79,7 +78,8 @@ fun ExploreScreen(
     planningToWatch: List<AnimeMedia> = emptyList(),
     completed: List<AnimeMedia> = emptyList(),
     onHold: List<AnimeMedia> = emptyList(),
-    dropped: List<AnimeMedia> = emptyList()
+    dropped: List<AnimeMedia> = emptyList(),
+    isVisible: Boolean = true
 ) {
     val featuredAnime by viewModel.featuredAnime.collectAsState()
     val seasonalAnime by viewModel.seasonalAnime.collectAsState()
@@ -92,7 +92,7 @@ fun ExploreScreen(
     val scifiAnime by viewModel.scifiAnime.collectAsState()
     val isLoading by viewModel.isLoadingExplore.collectAsState()
 
-    // Create a map of animeId -> status for quick lookup - use derivedStateOf for stability
+    // Create a map of animeId -> status for quick lookup
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
@@ -109,13 +109,19 @@ fun ExploreScreen(
     if (showDialog && selectedAnime != null) {
         ExploreAnimeDialog(
             anime = selectedAnime!!,
+            viewModel = viewModel,
             isOled = isOled,
             currentStatus = animeStatusMap[selectedAnime!!.id],
             showStatusColors = showStatusColors,
             onDismiss = { showDialog = false },
             onAddToPlanning = {
                 viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING")
-                showDialog = false
+            },
+            onAddToDropped = {
+                viewModel.addExploreAnimeToList(selectedAnime!!, "DROPPED")
+            },
+            onAddToOnHold = {
+                viewModel.addExploreAnimeToList(selectedAnime!!, "PAUSED")
             },
             onRemoveFromList = {
                 viewModel.removeAnimeFromList(selectedAnime!!.id)
@@ -144,9 +150,6 @@ fun ExploreScreen(
         )
     }
 
-    // Use LazyColumn instead of Column + verticalScroll for better performance
-    val listState = rememberLazyListState()
-
     // Stable callbacks to avoid recomposition
     val onAnimeClickStable = remember<(ExploreAnime) -> Unit> {
         { anime ->
@@ -166,181 +169,149 @@ fun ExploreScreen(
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp)
+    val scrollState = rememberScrollState()
+
+    // Use Column + verticalScroll instead of LazyColumn for smoother scrolling
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(bottom = 80.dp)
     ) {
-        // Featured Carousel
-        item(
-            contentType = "featured"
-        ) {
-            if (featuredAnime.isNotEmpty()) {
-                FeaturedCarousel(
-                    animeList = featuredAnime,
-                    onAnimeClick = onAnimeClickStable
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+        // Featured Carousel with HorizontalPager
+        if (featuredAnime.isNotEmpty()) {
+            FeaturedCarousel(
+                animeList = featuredAnime,
+                onAnimeClick = onAnimeClickStable,
+                autoScrollEnabled = isVisible
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
         }
 
         // This Season
-        item(
-            contentType = "section_title"
-        ) {
-            SectionTitle("This Season", isOled)
-        }
+        SectionTitle("This Season", isOled)
         if (seasonalAnime.isNotEmpty()) {
-            item(
-                contentType = "anime_row"
-            ) {
-                ExploreAnimeHorizontalList(
-                    animeList = seasonalAnime,
-                    animeStatusMap = animeStatusMap,
-                    showStatusColors = showStatusColors,
-                    onAnimeClick = onAnimeClickStable,
-                    onBookmarkClick = onBookmarkClickStable,
-                    isLoggedIn = isLoggedIn,
-                    isOled = isOled
-                )
-            }
-        } else {
-            item(contentType = "loading") { LoadingPlaceholder(isOled) }
+            ExploreAnimeHorizontalList(
+                animeList = seasonalAnime,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable,
+                isLoggedIn = isLoggedIn,
+                isOled = isOled
+            )
+        } else if (isLoading) {
+            LoadingPlaceholder(isOled)
         }
 
         // Top Rated Series
-        item(contentType = "section_title") {
-            SectionTitle("Top Rated Series", isOled)
-        }
+        SectionTitle("Top Rated Series", isOled)
         if (topSeries.isNotEmpty()) {
-            item(contentType = "anime_row") {
-                ExploreAnimeHorizontalList(
-                    animeList = topSeries,
-                    animeStatusMap = animeStatusMap,
-                    showStatusColors = showStatusColors,
-                    onAnimeClick = onAnimeClickStable,
-                    onBookmarkClick = onBookmarkClickStable,
-                    isLoggedIn = isLoggedIn,
-                    isOled = isOled
-                )
-            }
+            ExploreAnimeHorizontalList(
+                animeList = topSeries,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable,
+                isLoggedIn = isLoggedIn,
+                isOled = isOled
+            )
         } else if (isLoading) {
-            item(contentType = "loading") { LoadingPlaceholder(isOled) }
-        } else {
-            item(contentType = "empty") { EmptySectionText("No top series found", isOled) }
+            LoadingPlaceholder(isOled)
         }
 
         // Top Rated Movies
-        item(contentType = "section_title") {
-            SectionTitle("Top Rated Movies", isOled)
-        }
+        SectionTitle("Top Rated Movies", isOled)
         if (topMovies.isNotEmpty()) {
-            item(contentType = "anime_row") {
-                ExploreAnimeHorizontalList(
-                    animeList = topMovies,
-                    animeStatusMap = animeStatusMap,
-                    showStatusColors = showStatusColors,
-                    onAnimeClick = onAnimeClickStable,
-                    onBookmarkClick = onBookmarkClickStable,
-                    isLoggedIn = isLoggedIn,
-                    isOled = isOled
-                )
-            }
+            ExploreAnimeHorizontalList(
+                animeList = topMovies,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable,
+                isLoggedIn = isLoggedIn,
+                isOled = isOled
+            )
         } else if (isLoading) {
-            item(contentType = "loading") { LoadingPlaceholder(isOled) }
-        } else {
-            item(contentType = "empty") { EmptySectionText("No top movies found", isOled) }
+            LoadingPlaceholder(isOled)
         }
 
         // Genre Sections
-        item(contentType = "genre_section") {
-            GenreSectionLazy(
-                title = "Action",
-                animeList = actionAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
-            )
-        }
+        GenreSection(
+            title = "Action",
+            animeList = actionAnime,
+            animeStatusMap = animeStatusMap,
+            showStatusColors = showStatusColors,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = onAnimeClickStable,
+            onBookmarkClick = onBookmarkClickStable
+        )
 
-        item(contentType = "genre_section") {
-            GenreSectionLazy(
-                title = "Romance",
-                animeList = romanceAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
-            )
-        }
+        GenreSection(
+            title = "Romance",
+            animeList = romanceAnime,
+            animeStatusMap = animeStatusMap,
+            showStatusColors = showStatusColors,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = onAnimeClickStable,
+            onBookmarkClick = onBookmarkClickStable
+        )
 
-        item(contentType = "genre_section") {
-            GenreSectionLazy(
-                title = "Comedy",
-                animeList = comedyAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
-            )
-        }
+        GenreSection(
+            title = "Comedy",
+            animeList = comedyAnime,
+            animeStatusMap = animeStatusMap,
+            showStatusColors = showStatusColors,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = onAnimeClickStable,
+            onBookmarkClick = onBookmarkClickStable
+        )
 
-        item(contentType = "genre_section") {
-            GenreSectionLazy(
-                title = "Fantasy",
-                animeList = fantasyAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
-            )
-        }
+        GenreSection(
+            title = "Fantasy",
+            animeList = fantasyAnime,
+            animeStatusMap = animeStatusMap,
+            showStatusColors = showStatusColors,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = onAnimeClickStable,
+            onBookmarkClick = onBookmarkClickStable
+        )
 
-        item(contentType = "genre_section") {
-            GenreSectionLazy(
-                title = "Sci-Fi",
-                animeList = scifiAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
-            )
-        }
+        GenreSection(
+            title = "Sci-Fi",
+            animeList = scifiAnime,
+            animeStatusMap = animeStatusMap,
+            showStatusColors = showStatusColors,
+            isLoading = isLoading,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            onAnimeClick = onAnimeClickStable,
+            onBookmarkClick = onBookmarkClickStable
+        )
 
-        // Bottom spacer
-        item(contentType = "spacer") {
-            Spacer(modifier = Modifier.height(20.dp))
-        }
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
 @Composable
-private fun GenreSectionLazy(
+private fun GenreSection(
     title: String,
     animeList: List<ExploreAnime>,
     animeStatusMap: Map<Int, String>,
@@ -354,14 +325,7 @@ private fun GenreSectionLazy(
     if (animeList.isEmpty() && !isLoading) return
 
     Column {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
-        )
-
+        SectionTitle(title, isOled)
         if (animeList.isNotEmpty()) {
             ExploreAnimeHorizontalList(
                 animeList = animeList,
@@ -390,16 +354,6 @@ private fun SectionTitle(title: String, isOled: Boolean = false) {
 }
 
 @Composable
-private fun EmptySectionText(text: String, isOled: Boolean) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-    )
-}
-
-@Composable
 private fun LoadingPlaceholder(isOled: Boolean = false) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -415,7 +369,6 @@ private fun LoadingPlaceholder(isOled: Boolean = false) {
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                // Simple placeholder without progress indicator
                 Box(modifier = Modifier.fillMaxSize())
             }
         }
@@ -425,38 +378,20 @@ private fun LoadingPlaceholder(isOled: Boolean = false) {
 @Composable
 fun FeaturedCarousel(
     animeList: List<ExploreAnime>,
-    onAnimeClick: (ExploreAnime) -> Unit
+    onAnimeClick: (ExploreAnime) -> Unit,
+    autoScrollEnabled: Boolean = true
 ) {
     val pagerState = rememberPagerState(pageCount = { animeList.size })
     val context = LocalContext.current
 
-    // Pre-cache all banner images
-    LaunchedEffect(animeList) {
-        animeList.forEach { anime ->
-            val bannerUrl = anime.banner ?: anime.cover
-            val request = ImageRequest.Builder(context)
-                .data(bannerUrl)
-                .memoryCacheKey(bannerUrl)
-                .diskCacheKey(bannerUrl)
-                .build()
-            context.imageLoader.enqueue(request)
-
-            // Also cache cover images
-            val coverRequest = ImageRequest.Builder(context)
-                .data(anime.cover)
-                .memoryCacheKey(anime.cover)
-                .diskCacheKey(anime.cover)
-                .build()
-            context.imageLoader.enqueue(coverRequest)
-        }
-    }
-
-    // Auto-scroll
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5000)
-            val nextPage = (pagerState.currentPage + 1) % animeList.size
-            pagerState.animateScrollToPage(nextPage, animationSpec = tween(800))
+    // Auto-scroll - only when page is visible
+    LaunchedEffect(autoScrollEnabled) {
+        if (autoScrollEnabled) {
+            while (true) {
+                delay(5000)
+                val nextPage = (pagerState.currentPage + 1) % animeList.size
+                pagerState.animateScrollToPage(nextPage, animationSpec = tween(800))
+            }
         }
     }
 
@@ -465,7 +400,7 @@ fun FeaturedCarousel(
             .fillMaxWidth()
             .height(280.dp)
     ) {
-        // Animated banner transition
+        // Animated banner background
         val currentAnime = animeList.getOrElse(pagerState.currentPage) { animeList.first() }
 
         AnimatedContent(
@@ -473,6 +408,7 @@ fun FeaturedCarousel(
             transitionSpec = {
                 (fadeIn(animationSpec = tween(400)) + slideInHorizontally(animationSpec = tween(400)) { it })
                     .togetherWith(fadeOut(animationSpec = tween(400)) + slideOutHorizontally(animationSpec = tween(400)) { -it })
+                    .using(SizeTransform(clip = false))
             },
             label = "BannerTransition"
         ) { anime ->
@@ -493,13 +429,15 @@ fun FeaturedCarousel(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Black.copy(alpha = 0.3f),
-                        Color.Black.copy(alpha = 0.5f),
-                        Color.Black.copy(alpha = 0.9f)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.3f),
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.9f)
+                        )
                     )
-                ))
+                )
         )
 
         // Swipeable pager for info cards
@@ -678,7 +616,6 @@ fun ExploreAnimeCard(
         label = "bookmarkScale"
     )
 
-    // Cache the image request to avoid recreation - no crossfade for performance
     val imageRequest = remember(anime.cover) {
         ImageRequest.Builder(context)
             .data(anime.cover)
@@ -688,7 +625,6 @@ fun ExploreAnimeCard(
             .build()
     }
 
-    // Pre-calculate values to avoid recomposition
     val statusIndicatorColor = remember(currentStatus, showStatusColors) {
         if (showStatusColors && currentStatus != null) {
             StatusColors[currentStatus] ?: Color.Transparent
@@ -747,7 +683,6 @@ fun ExploreAnimeCard(
                         )
                 )
 
-                // Status indicator bar at top (only if showStatusColors is enabled and anime is in a list)
                 if (statusIndicatorColor != Color.Transparent) {
                     Box(
                         modifier = Modifier
@@ -776,7 +711,6 @@ fun ExploreAnimeCard(
                     }
                 }
 
-                // Episode badge
                 if (episodeText.isNotEmpty()) {
                     Surface(
                         modifier = Modifier
@@ -804,7 +738,6 @@ fun ExploreAnimeCard(
                             .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Bookmark/status button
                         FilledTonalIconButton(
                             onClick = {
                                 showAnimation = true
@@ -842,7 +775,6 @@ fun ExploreAnimeCard(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Play button
                         FilledTonalIconButton(
                             onClick = onClick,
                             modifier = Modifier.size(32.dp),
@@ -867,7 +799,7 @@ fun ExploreAnimeCard(
             text = anime.title,
             modifier = Modifier
                 .padding(top = 6.dp)
-                .height(32.dp), // Fixed height to prevent jumping
+                .height(32.dp),
             maxLines = 2,
             style = MaterialTheme.typography.labelMedium,
             overflow = TextOverflow.Ellipsis,
@@ -879,17 +811,21 @@ fun ExploreAnimeCard(
 @Composable
 fun ExploreAnimeDialog(
     anime: ExploreAnime,
+    viewModel: MainViewModel,
     isOled: Boolean = false,
     currentStatus: String?,
     showStatusColors: Boolean = true,
     onDismiss: () -> Unit,
     onAddToPlanning: () -> Unit,
+    onAddToDropped: () -> Unit = {},
+    onAddToOnHold: () -> Unit = {},
     onRemoveFromList: () -> Unit = {},
     onStartWatching: (Int) -> Unit,
     isLoggedIn: Boolean = false
 ) {
     val context = LocalContext.current
     val displayScore = anime.averageScore?.let { it / 10.0 }
+    var selectedStatus by remember { mutableStateOf(currentStatus ?: "") }
 
     var showAnimation by remember { mutableStateOf(false) }
     var hasAddedToPlanning by remember { mutableStateOf(false) }
@@ -949,7 +885,6 @@ fun ExploreAnimeDialog(
                             )
                         }
 
-                        // Episode info - show for all anime
                         val episodeText = when {
                             anime.latestEpisode != null && anime.latestEpisode > 0 -> {
                                 val releasedEp = anime.latestEpisode - 1
@@ -982,18 +917,25 @@ fun ExploreAnimeDialog(
                             )
                         }
 
-                        // Show current status if anime is in a list - always visible
                         if (currentStatus != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = StatusColors[currentStatus]?.copy(alpha = 0.2f)
-                                    ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                color = if (showStatusColors) {
+                                    StatusColors[currentStatus]?.copy(alpha = 0.2f)
+                                        ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                } else {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                }
                             ) {
                                 Text(
                                     text = StatusLabels[currentStatus] ?: currentStatus,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = StatusColors[currentStatus] ?: MaterialTheme.colorScheme.primary,
+                                    color = if (showStatusColors) {
+                                        StatusColors[currentStatus] ?: MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                 )
                             }
@@ -1009,58 +951,123 @@ fun ExploreAnimeDialog(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Start Watching")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Add to Planning / Remove button
-                    OutlinedButton(
-                        onClick = {
-                            showAnimation = true
-                            if (isCurrentlySaved) {
-                                Toast.makeText(context, "Removed from ${StatusLabels[currentStatus] ?: "list"}", Toast.LENGTH_SHORT).show()
-                                onRemoveFromList()
-                            } else {
-                                hasAddedToPlanning = true
-                                Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
-                                onAddToPlanning()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .scale(scale),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = if (isCurrentlySaved) {
-                            ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (showStatusColors) statusColor.copy(alpha = 0.2f) else Color.Transparent,
-                                contentColor = if (showStatusColors) statusColor else MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            ButtonDefaults.outlinedButtonColors(
-                                contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    // Status buttons row 1: Watching, Planning
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        AnimatedContent(
-                            targetState = isCurrentlySaved,
-                            transitionSpec = {
-                                (scaleIn(animationSpec = tween(200)) + fadeIn())
-                                    .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
+                        StatusButtonSmall(
+                            icon = Icons.Default.PlayArrow,
+                            label = "Watching",
+                            color = StatusColors["CURRENT"]!!,
+                            isActive = currentStatus == "CURRENT",
+                            onClick = {
+                                viewModel.addExploreAnimeToList(anime, "CURRENT")
+                                Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
                             },
-                            label = "bookmarkTransition"
-                        ) { saved ->
-                            if (saved) {
-                                Text("Remove from ${StatusLabels[currentStatus] ?: "List"}")
-                            } else {
-                                Text("Add to Planning")
-                            }
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        StatusButtonSmall(
+                            icon = Icons.Default.Bookmark,
+                            label = "Planning",
+                            color = StatusColors["PLANNING"]!!,
+                            isActive = currentStatus == "PLANNING",
+                            onClick = {
+                                onAddToPlanning()
+                                Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Status buttons row 2: On Hold, Dropped
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatusButtonSmall(
+                            icon = Icons.Default.Pause,
+                            label = "On Hold",
+                            color = StatusColors["PAUSED"]!!,
+                            isActive = currentStatus == "PAUSED",
+                            onClick = {
+                                onAddToOnHold()
+                                Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        StatusButtonSmall(
+                            icon = Icons.Default.Delete,
+                            label = "Dropped",
+                            color = StatusColors["DROPPED"]!!,
+                            isActive = currentStatus == "DROPPED",
+                            onClick = {
+                                onAddToDropped()
+                                Toast.makeText(context, "Added to Dropped", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Remove button (only if in a list)
+                    if (currentStatus != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                Toast.makeText(context, "Removed from ${StatusLabels[currentStatus]}", Toast.LENGTH_SHORT).show()
+                                onRemoveFromList()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color.Red
+                            )
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Remove from List")
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// Need to pass viewModel - will use a different approach
+@Composable
+private fun StatusButtonSmall(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    isActive: Boolean = false,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(44.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isActive) color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
+            contentColor = if (isActive) color else Color.White.copy(alpha = 0.7f)
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium)
     }
 }

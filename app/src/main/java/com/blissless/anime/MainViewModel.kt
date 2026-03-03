@@ -1,5 +1,4 @@
 package com.blissless.anime
-import com.blissless.anime.BuildConfig
 
 import android.content.Context
 import android.content.Intent
@@ -7,6 +6,11 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.core.net.toUri
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +35,7 @@ class MainViewModel : ViewModel() {
 
     companion object {
         private const val TAG = "MainViewModel"
-        private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
+        private const val CLIENT_ID = "36313"
         private const val PREFS_NAME = "anilist_prefs"
         private const val TOKEN_KEY = "auth_token"
 
@@ -320,6 +324,15 @@ class MainViewModel : ViewModel() {
         _forceHighRefreshRate.value = enabled
         sharedPreferences.edit().putBoolean("force_high_refresh_rate", enabled).apply()
         Log.d(TAG, "Force high refresh rate set to: $enabled")
+    }
+
+    private val _hideNavbarText = MutableStateFlow(false)
+    val hideNavbarText: StateFlow<Boolean> = _hideNavbarText.asStateFlow()
+
+    fun setHideNavbarText(enabled: Boolean) {
+        _hideNavbarText.value = enabled
+        sharedPreferences.edit().putBoolean("hide_navbar_text", enabled).apply()
+        Log.d(TAG, "Hide navbar text set to: $enabled")
     }
 
     fun loginWithAniList() {

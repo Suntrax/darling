@@ -157,6 +157,7 @@ fun MainScreen(
     // Collect skip duration settings
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
+    val hideNavbarText by viewModel.hideNavbarText.collectAsState(initial = false)
 
     // Pre-fetch streams for currently watching when lists load
     LaunchedEffect(currentlyWatching) {
@@ -419,7 +420,8 @@ fun MainScreen(
             bottomBar = {
                 NavigationBar(
                     containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface,
-                    contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                    modifier = if (hideNavbarText) Modifier.height(64.dp) else Modifier
                 ) {
                     val items = listOf("Explore", "Home", "Settings")
                     val icons = listOf(Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
@@ -430,10 +432,13 @@ fun MainScreen(
                                 Icon(
                                     icons[index],
                                     contentDescription = item,
-                                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = if (hideNavbarText) Modifier.size(26.dp) else Modifier
                                 )
                             },
-                            label = { Text(item, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) },
+                            label = if (hideNavbarText) null else {
+                                { Text(item, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) }
+                            },
                             selected = pagerState.currentPage == index,
                             onClick = {
                                 scope.launch {
@@ -454,9 +459,12 @@ fun MainScreen(
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 // HorizontalPager for swipe navigation
+                // beyondViewportPageCount = 2 keeps all 3 pages pre-composed at all times
                 HorizontalPager(
-                    state = pagerState
+                    state = pagerState,
+                    beyondViewportPageCount = 2
                 ) { page ->
+                    val isCurrentPage = pagerState.currentPage == page
                     when (page) {
                         0 -> ExploreScreen(
                             viewModel = viewModel,
@@ -469,7 +477,8 @@ fun MainScreen(
                             planningToWatch = planningToWatch,
                             completed = completed,
                             onHold = onHold,
-                            dropped = dropped
+                            dropped = dropped,
+                            isVisible = isCurrentPage
                         )
                         1 -> HomeScreen(
                             viewModel = viewModel,
@@ -484,7 +493,8 @@ fun MainScreen(
                             isOled = isOled,
                             isLoggedIn = isLoggedIn,
                             showStatusColors = showStatusColors,
-                            forceHighRefreshRate = forceHighRefreshRate
+                            forceHighRefreshRate = forceHighRefreshRate,
+                            hideNavbarText = hideNavbarText
                         )
                     }
                 }

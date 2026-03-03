@@ -21,6 +21,7 @@
 - **Color-Coded Categories** – Each list type has its own distinct color for easy identification.
 - **Quick Status Management** – Change anime status directly from cards with visual feedback.
 - **Status Indicators** – Visual status bars on cards show your list status at a glance.
+- **Remove from List** – Properly remove anime from your AniList with confirmation dialog.
 - **User Profile Display** – See your AniList avatar and username in settings.
 
 ### Explore and Discovery
@@ -31,6 +32,7 @@
 - **Genre Recommendations** – Browse anime by genre: Action, Romance, Comedy, Fantasy, and Sci-Fi.
 - **Episode Info** – Accurate episode counts displayed in all anime detail dialogs.
 - **Search** – Find any anime with debounced, real-time search and detail previews.
+- **Add to Any List** – Add anime directly to Watching, Planning, On Hold, or Dropped from explore.
 
 ### Streaming and Video Player
 - **Built-in Player** – Stream anime directly in the app using Media3 ExoPlayer.
@@ -52,9 +54,11 @@
 - **Material Design 3** – Modern, clean interface following the latest Android standards.
 - **OLED Dark Mode** – Pure black theme designed to save battery on AMOLED screens.
 - **High Refresh Rate** – Force 120Hz display mode for buttery smooth scrolling.
+- **Compact Navigation** – Hide navbar text labels for a cleaner look.
 - **Swipe Navigation** – Smooth page transitions and intuitive gestures.
 - **Responsive Layouts** – Fully optimized for both phone and tablet form factors.
 - **Smooth Animations** – Visual feedback for all user interactions and state changes.
+- **Instant Tab Switching** – Pre-composed pages eliminate lag between tabs.
 - **Smart Caching** – Data cached for 24 hours with images fetched on-demand.
 
 ---
@@ -139,7 +143,17 @@ app/src/main/java/com/blissless/anime/
 
 ## Changelog
 
-### v1.6 (Current)
+### v2.0 (Current)
+- **Complete UI Redesign** – Redesigned status dialogs with colorful buttons for all list types.
+- **Compact Navigation Mode** – New option to hide navbar text labels for a cleaner look.
+- **Instant Tab Switching** – Pre-composed pages eliminate lag when switching between screens.
+- **Enhanced Search Overlay** – M3 primary color accents, cleaner status badges, improved text field.
+- **Proper Remove Functionality** – "Remove from List" now correctly uses AniList's delete mutation.
+- **Performance Optimizations** – Featured carousel pauses when not visible, improved caching.
+- **Improved Status Buttons** – Added On Hold and Dropped buttons to search dialogs.
+- **Better Button Layouts** – Fixed text wrapping and sizing in all status dialogs.
+
+### v1.6
 - **User Avatar Display** – Your AniList avatar now appears in the Settings screen.
 - **Organized Settings** – Settings reorganized into Appearance and Player Settings sections.
 - **Smart Caching** – Data cached for 24 hours; images fetched on-demand if not cached.
@@ -187,6 +201,7 @@ The app uses the **AniList GraphQL API** for:
 - User authentication (OAuth 2.0 implicit flow)
 - Fetching and updating user anime lists
 - Real-time search and discovery
+- Deleting entries from user lists
 
 [AniList API Documentation](https://anilist.gitbook.io/anilist-apiv2-docs/)
 

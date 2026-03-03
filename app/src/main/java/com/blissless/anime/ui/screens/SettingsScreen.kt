@@ -31,7 +31,8 @@ fun SettingsScreen(
     isOled: Boolean,
     isLoggedIn: Boolean,
     showStatusColors: Boolean = true,
-    forceHighRefreshRate: Boolean = false
+    forceHighRefreshRate: Boolean = false,
+    hideNavbarText: Boolean = false
 ) {
     val scrollState = rememberScrollState()
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
@@ -87,6 +88,17 @@ fun SettingsScreen(
                 description = "Force 120Hz for smoother scrolling",
                 checked = forceHighRefreshRate,
                 onCheckedChange = { viewModel.setForceHighRefreshRate(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Hide Navbar Text Toggle
+            SettingsToggle(
+                title = "Compact Navigation",
+                description = "Hide text labels in bottom navigation",
+                checked = hideNavbarText,
+                onCheckedChange = { viewModel.setHideNavbarText(it) },
                 isOled = isOled
             )
         }

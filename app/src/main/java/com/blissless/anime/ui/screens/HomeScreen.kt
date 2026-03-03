@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -450,7 +451,13 @@ fun HomeScreen(
         HomeAnimeStatusDialog(
             anime = selectedAnime!!,
             isOled = isOled,
+            showStatusColors = showStatusColors,
             onDismiss = { showStatusDialog = false },
+            onRemove = {
+                viewModel.removeAnimeFromList(selectedAnime!!.id)
+                showStatusDialog = false
+                viewModel.refreshHome()
+            },
             onUpdate = { status, progress ->
                 if (progress != null) {
                     viewModel.updateAnimeStatus(selectedAnime!!.id, status, progress)
@@ -1022,112 +1029,258 @@ private fun EpisodeButton(
 fun HomeAnimeStatusDialog(
     anime: AnimeMedia,
     isOled: Boolean,
+    showStatusColors: Boolean = false,
     onDismiss: () -> Unit,
+    onRemove: () -> Unit,
     onUpdate: (String, Int?) -> Unit
 ) {
+    val context = LocalContext.current
     var selectedStatus by remember { mutableStateOf(anime.listStatus) }
     var selectedProgress by remember { mutableStateOf(anime.progress.toString()) }
+    var markedForRemoval by remember { mutableStateOf(false) }
+
+    // Animation state
+    var showAnimation by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (showAnimation) 1.05f else 1f,
+        animationSpec = tween(150),
+        finishedListener = {
+            if (showAnimation) {
+                showAnimation = false
+            }
+        },
+        label = "statusScale"
+    )
+
+    // Status colors
+    val statusColorMap = mapOf(
+        "CURRENT" to Color(0xFF2196F3),
+        "PLANNING" to Color(0xFF9C27B0),
+        "COMPLETED" to Color(0xFF4CAF50),
+        "PAUSED" to Color(0xFFFFC107),
+        "DROPPED" to Color(0xFFF44336)
+    )
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface
+                containerColor = if (isOled) Color.Black else Color(0xFF1A1A1A)
             )
         ) {
             Column(
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(20.dp)
             ) {
-                Text(
-                    anime.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    "Status",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val statuses = listOf(
-                    "CURRENT" to "Watching",
-                    "PLANNING" to "Plan to Watch",
-                    "COMPLETED" to "Completed",
-                    "DROPPED" to "Dropped",
-                    "PAUSED" to "On Hold"
-                )
-
-                statuses.forEach { (value, label) ->
-                    Row(
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = anime.cover,
+                        contentDescription = anime.title,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedStatus = value }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedStatus == value,
-                            onClick = { selectedStatus = value },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-                                unselectedColor = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
+                            .width(60.dp)
+                            .height(85.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            label,
-                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                            anime.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Progress: ${anime.progress} / ${anime.totalEpisodes.takeIf { it > 0 } ?: "?"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Status buttons row 1
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatusButton(
+                        icon = Icons.Default.PlayArrow,
+                        label = "Watching",
+                        selected = selectedStatus == "CURRENT" && !markedForRemoval,
+                        selectedColor = statusColorMap["CURRENT"]!!,
+                        onClick = {
+                            selectedStatus = "CURRENT"
+                            markedForRemoval = false
+                            showAnimation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "CURRENT" && showAnimation && !markedForRemoval) scale else 1f)
+                    )
+                    StatusButton(
+                        icon = Icons.Default.Bookmark,
+                        label = "Planning",
+                        selected = selectedStatus == "PLANNING" && !markedForRemoval,
+                        selectedColor = statusColorMap["PLANNING"]!!,
+                        onClick = {
+                            selectedStatus = "PLANNING"
+                            markedForRemoval = false
+                            showAnimation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "PLANNING" && showAnimation && !markedForRemoval) scale else 1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Status buttons row 2
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatusButton(
+                        icon = Icons.Default.Check,
+                        label = "Completed",
+                        selected = selectedStatus == "COMPLETED" && !markedForRemoval,
+                        selectedColor = statusColorMap["COMPLETED"]!!,
+                        onClick = {
+                            selectedStatus = "COMPLETED"
+                            markedForRemoval = false
+                            showAnimation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "COMPLETED" && showAnimation && !markedForRemoval) scale else 1f)
+                    )
+                    StatusButton(
+                        icon = Icons.Default.Pause,
+                        label = "On Hold",
+                        selected = selectedStatus == "PAUSED" && !markedForRemoval,
+                        selectedColor = statusColorMap["PAUSED"]!!,
+                        onClick = {
+                            selectedStatus = "PAUSED"
+                            markedForRemoval = false
+                            showAnimation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "PAUSED" && showAnimation && !markedForRemoval) scale else 1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Status buttons row 3
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatusButton(
+                        icon = Icons.Default.Delete,
+                        label = "Dropped",
+                        selected = selectedStatus == "DROPPED" && !markedForRemoval,
+                        selectedColor = statusColorMap["DROPPED"]!!,
+                        onClick = {
+                            selectedStatus = "DROPPED"
+                            markedForRemoval = false
+                            showAnimation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "DROPPED" && showAnimation && !markedForRemoval) scale else 1f)
+                    )
+                    // Remove button
+                    Button(
+                        onClick = {
+                            markedForRemoval = !markedForRemoval
+                            showAnimation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .scale(if (markedForRemoval && showAnimation) scale else 1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (markedForRemoval) Color.Red.copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.15f),
+                            contentColor = if (markedForRemoval) Color.Red else Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Remove", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Episode Progress
                 Text(
                     "Episode Progress",
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.7f)
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
                 OutlinedTextField(
                     value = selectedProgress,
-                    onValueChange = { selectedProgress = it },
+                    onValueChange = { selectedProgress = it.filter { c -> c.isDigit() } },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                        focusedBorderColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline
-                    )
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(10.dp)
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                // Save button
+                Button(
+                    onClick = {
+                        if (markedForRemoval) {
+                            Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
+                            onRemove()
+                        } else {
+                            val progress = selectedProgress.toIntOrNull()
+                            onUpdate(selectedStatus, progress)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (markedForRemoval) Color.Red else MaterialTheme.colorScheme.primary
+                    )
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        val progress = selectedProgress.toIntOrNull()
-                        onUpdate(selectedStatus, progress)
-                    }) {
-                        Text("Save")
-                    }
+                    Text(if (markedForRemoval) "Remove from List" else "Save Changes", fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
                 }
             }
         }
@@ -1227,14 +1380,20 @@ fun SearchOverlay(
                             color = Color.White,
                             fontSize = MaterialTheme.typography.bodyLarge.fontSize
                         ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         decorationBox = { innerTextField ->
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    "Search AniList...",
-                                    color = Color.White.copy(alpha = 0.4f)
-                                )
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        "Search AniList...",
+                                        color = Color.White.copy(alpha = 0.4f)
+                                    )
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
                         }
                     )
 
@@ -1384,19 +1543,18 @@ private fun SearchResultItem(
                     )
 
                     if (currentStatus != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
                         Icon(
                             Icons.Filled.Bookmark,
                             contentDescription = "Saved",
                             tint = when (currentStatus) {
-                                "CURRENT" -> Color(0xFF2196F3) // Blue
-                                "PLANNING" -> Color(0xFF9C27B0) // Purple
+                                "CURRENT" -> Color(0xFF2196F3)
+                                "PLANNING" -> Color(0xFF9C27B0)
                                 "COMPLETED" -> Color(0xFF4CAF50)
                                 "PAUSED" -> Color(0xFFFFC107)
                                 "DROPPED" -> Color(0xFFF44336)
                                 else -> MaterialTheme.colorScheme.primary
                             },
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -1434,32 +1592,45 @@ private fun SearchResultItem(
 
                 if (currentStatus != null) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = when(currentStatus) {
-                            "CURRENT" -> "▶ Watching"
-                            "PLANNING" -> "📋 Planning"
-                            "COMPLETED" -> "✓ Completed"
-                            "PAUSED" -> "⏸ On Hold"
-                            "DROPPED" -> "✕ Dropped"
-                            else -> currentStatus
-                        },
-                        style = MaterialTheme.typography.labelSmall,
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
                         color = when (currentStatus) {
-                            "CURRENT" -> Color(0xFF2196F3) // Blue
-                            "PLANNING" -> Color(0xFF9C27B0) // Purple
-                            "COMPLETED" -> Color(0xFF4CAF50)
-                            "PAUSED" -> Color(0xFFFFC107)
-                            "DROPPED" -> Color(0xFFF44336)
-                            else -> MaterialTheme.colorScheme.primary
+                            "CURRENT" -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                            "PLANNING" -> Color(0xFF9C27B0).copy(alpha = 0.2f)
+                            "COMPLETED" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                            "PAUSED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
+                            "DROPPED" -> Color(0xFFF44336).copy(alpha = 0.2f)
+                            else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                         }
-                    )
+                    ) {
+                        Text(
+                            text = when(currentStatus) {
+                                "CURRENT" -> "Watching"
+                                "PLANNING" -> "Planning"
+                                "COMPLETED" -> "Completed"
+                                "PAUSED" -> "On Hold"
+                                "DROPPED" -> "Dropped"
+                                else -> currentStatus
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (currentStatus) {
+                                "CURRENT" -> Color(0xFF2196F3)
+                                "PLANNING" -> Color(0xFF9C27B0)
+                                "COMPLETED" -> Color(0xFF4CAF50)
+                                "PAUSED" -> Color(0xFFFFC107)
+                                "DROPPED" -> Color(0xFFF44336)
+                                else -> MaterialTheme.colorScheme.primary
+                            },
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = "View",
-                tint = Color.White.copy(alpha = 0.4f),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -1628,7 +1799,7 @@ fun SearchAnimeDetailDialog(
                 // Row 1: Watching and Planning
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     StatusButton(
                         icon = Icons.Default.PlayArrow,
@@ -1663,12 +1834,12 @@ fun SearchAnimeDetailDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                // Row 2: Completed and Remove
+                // Row 2: Completed and On Hold
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     StatusButton(
                         icon = Icons.Default.Check,
@@ -1686,6 +1857,46 @@ fun SearchAnimeDetailDialog(
                             .scale(if (selectedStatus == "COMPLETED" && showAnimation) scale else 1f)
                     )
 
+                    StatusButton(
+                        icon = Icons.Default.Pause,
+                        label = "On Hold",
+                        selected = selectedStatus == "PAUSED",
+                        selectedColor = Color(0xFFFFC107),
+                        onClick = {
+                            selectedStatus = "PAUSED"
+                            showAnimation = true
+                            Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
+                            onUpdateStatus("PAUSED")
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "PAUSED" && showAnimation) scale else 1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Row 3: Dropped and Remove
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatusButton(
+                        icon = Icons.Default.Delete,
+                        label = "Dropped",
+                        selected = selectedStatus == "DROPPED",
+                        selectedColor = Color(0xFFF44336),
+                        onClick = {
+                            selectedStatus = "DROPPED"
+                            showAnimation = true
+                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
+                            onUpdateStatus("DROPPED")
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(if (selectedStatus == "DROPPED" && showAnimation) scale else 1f)
+                    )
+
                     // Remove button - only show if anime is in a list
                     if (currentStatus != null) {
                         Button(
@@ -1696,23 +1907,24 @@ fun SearchAnimeDetailDialog(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
+                                .height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Red.copy(alpha = 0.15f),
-                                contentColor = Color.Red
+                                containerColor = Color.Gray.copy(alpha = 0.15f),
+                                contentColor = Color.White
                             ),
                             elevation = ButtonDefaults.buttonElevation(
                                 defaultElevation = 0.dp
-                            )
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Icon(
-                                Icons.Default.Delete,
+                                Icons.Default.Close,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Remove", fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Remove", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
                         }
                     } else {
                         // Empty placeholder when no remove button
@@ -1770,8 +1982,8 @@ private fun StatusButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.height(44.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (selected)
                 selectedColor
@@ -1784,15 +1996,16 @@ private fun StatusButton(
         ),
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = if (selected) 4.dp else 0.dp
-        )
+        ),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Icon(
             icon,
             contentDescription = null,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(16.dp)
         )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(label, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(label, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
 }
 
