@@ -79,9 +79,9 @@ Each anime list category has a distinct color for easy visual identification:
 
 ## Screenshots
 
-| Home Screen | Explore Screen | Video Player | Settings Screen |
+| Home Screen | Explore Screen | Video Player | Airing Schedule Screen |
 |:---:|:---:|:---:|:---:|
-| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) | ![Airing](screenshots/airing.png) |
+| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) | ![AiringSchedule](screenshots/airing.png) |
 
 ---
 
