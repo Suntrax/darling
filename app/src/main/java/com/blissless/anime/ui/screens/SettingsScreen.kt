@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,12 +33,23 @@ fun SettingsScreen(
     isLoggedIn: Boolean,
     showStatusColors: Boolean = true,
     forceHighRefreshRate: Boolean = false,
-    hideNavbarText: Boolean = false
+    hideNavbarText: Boolean = false,
+    autoSkipOpening: Boolean = false,
+    autoSkipEnding: Boolean = false,
+    autoPlayNextEpisode: Boolean = false,
+    disableMaterialColors: Boolean = false,
+    preferredCategory: String = "sub",
+    simplifyEpisodeMenu: Boolean = true,
+    simplifyAnimeDetails: Boolean = true
 ) {
     val scrollState = rememberScrollState()
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
+
+    // Collect the new settings from ViewModel
+    val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
+    val simplifyAnimeDetailsState by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
 
     Column(
         modifier = Modifier
@@ -60,7 +72,6 @@ fun SettingsScreen(
             icon = Icons.Default.Palette,
             isOled = isOled
         ) {
-            // OLED Mode Toggle
             SettingsToggle(
                 title = "OLED Mode",
                 description = "Pure black background for AMOLED screens",
@@ -71,7 +82,16 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Status Colors Toggle
+            SettingsToggle(
+                title = "Monochrome Theme",
+                description = "Disable Material3 colors for neutral appearance",
+                checked = disableMaterialColors,
+                onCheckedChange = { viewModel.setDisableMaterialColors(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             SettingsToggle(
                 title = "Status Color Indicators",
                 description = "Show colored status bars on anime cards",
@@ -82,7 +102,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // High Refresh Rate Toggle
             SettingsToggle(
                 title = "High Refresh Rate",
                 description = "Force 120Hz for smoother scrolling",
@@ -93,7 +112,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Hide Navbar Text Toggle
             SettingsToggle(
                 title = "Compact Navigation",
                 description = "Hide text labels in bottom navigation",
@@ -101,6 +119,66 @@ fun SettingsScreen(
                 onCheckedChange = { viewModel.setHideNavbarText(it) },
                 isOled = isOled
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsToggle(
+                title = "Simple Episode Menu",
+                description = "Use compact episode grid (disable for detailed cards)",
+                checked = simplifyEpisodeMenuState,
+                onCheckedChange = { viewModel.setSimplifyEpisodeMenu(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsToggle(
+                title = "Simple Anime Details",
+                description = "Use compact dialog (disable for full info page)",
+                checked = simplifyAnimeDetailsState,
+                onCheckedChange = { viewModel.setSimplifyAnimeDetails(it) },
+                isOled = isOled
+            )
+        }
+
+        // Stream Settings Section
+        SettingsSection(
+            title = "Stream Settings",
+            icon = Icons.Default.Subtitles,
+            isOled = isOled
+        ) {
+            // Preferred Category Selection
+            Text(
+                "Preferred Audio Category",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "Try servers from this category first when playing",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CategoryChip(
+                    label = "SUB",
+                    isSelected = preferredCategory == "sub",
+                    onClick = { viewModel.setPreferredCategory("sub") },
+                    isOled = isOled
+                )
+                CategoryChip(
+                    label = "DUB",
+                    isSelected = preferredCategory == "dub",
+                    onClick = { viewModel.setPreferredCategory("dub") },
+                    isOled = isOled
+                )
+            }
         }
 
         // Player Settings Section
@@ -109,7 +187,6 @@ fun SettingsScreen(
             icon = Icons.Default.PlayArrow,
             isOled = isOled
         ) {
-            // Episode Tracking
             SettingsSlider(
                 title = "Episode Tracking",
                 description = "Auto-update AniList progress when you've watched this percentage",
@@ -127,7 +204,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Skip Forward Duration
             SettingsSlider(
                 title = "Skip Forward",
                 description = "Double-tap right side to skip forward",
@@ -146,7 +222,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Skip Backward Duration
             SettingsSlider(
                 title = "Skip Backward",
                 description = "Double-tap left side to skip backward",
@@ -161,6 +236,36 @@ fun SettingsScreen(
                 minLabel = "5s",
                 maxLabel = "30s",
                 leadingIcon = Icons.Default.FastRewind
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingsToggle(
+                title = "Auto Skip Opening",
+                description = "Automatically skip anime openings",
+                checked = autoSkipOpening,
+                onCheckedChange = { viewModel.setAutoSkipOpening(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsToggle(
+                title = "Auto Skip Ending",
+                description = "Automatically skip anime endings",
+                checked = autoSkipEnding,
+                onCheckedChange = { viewModel.setAutoSkipEnding(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsToggle(
+                title = "Auto Play Next Episode",
+                description = "Automatically play the next episode when current one ends",
+                checked = autoPlayNextEpisode,
+                onCheckedChange = { viewModel.setAutoPlayNextEpisode(it) },
+                isOled = isOled
             )
         }
 
@@ -178,7 +283,6 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    // Avatar image or placeholder
                     if (userAvatar != null) {
                         AsyncImage(
                             model = userAvatar,
@@ -243,7 +347,6 @@ private fun SettingsSection(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Section Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -268,7 +371,6 @@ private fun SettingsSection(
                 color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
             )
 
-            // Section Content
             content()
         }
     }
@@ -374,4 +476,29 @@ private fun SettingsSlider(
             Text(maxLabel, style = MaterialTheme.typography.labelSmall)
         }
     }
+}
+
+@Composable
+private fun CategoryChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    isOled: Boolean
+) {
+    FilterChip(
+        selected = isSelected,
+        onClick = onClick,
+        label = {
+            Text(
+                label,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            )
+        },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            labelColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+            selectedLabelColor = Color.White
+        )
+    )
 }

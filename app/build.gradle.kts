@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "2.0"
+        versionCode = 9
+        versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -32,6 +32,7 @@ android {
 
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
+        buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey\"")
     }
 
     // 1. ADD THIS: Configure your signing keys here

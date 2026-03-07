@@ -3,6 +3,8 @@ package com.blissless.anime.ui.screens
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,6 +13,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -25,43 +28,59 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.imageLoader
 import com.blissless.anime.AnimeMedia
 import com.blissless.anime.ExploreAnime
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.ui.screens.DetailedAnimeScreen
+import com.blissless.anime.ui.screens.toDetailedAnimeData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
     isLoggedIn: Boolean,
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
+    simplifyEpisodeMenu: Boolean = true,
+    simplifyAnimeDetails: Boolean = true,  // NEW: Add this parameter
+    localFavorites: Set<Int> = emptySet(),
+    canAddFavorite: Boolean = true,
+    onToggleFavorite: (Int) -> Unit = {},
     onPlayerStateChange: (Boolean) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
-    onLoginClick: () -> Unit = {}
+    onLoginClick: () -> Unit = {},
+    onShowAnimeDialog: (ExploreAnime) -> Unit = {}
 ) {
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
@@ -70,358 +89,411 @@ fun HomeScreen(
     val dropped by viewModel.dropped.collectAsState()
     val isLoading by viewModel.isLoadingHome.collectAsState()
 
+    // User profile state
+    val userName by viewModel.userName.collectAsState()
+    val userAvatar by viewModel.userAvatar.collectAsState()
+
     var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
     var showEpisodeSheet by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
     var showSearchOverlay by remember { mutableStateOf(false) }
+    var showUserProfileDialog by remember { mutableStateOf(false) }
 
     // Check if all lists are empty
     val allListsEmpty = currentlyWatching.isEmpty() && planningToWatch.isEmpty() &&
             completed.isEmpty() && onHold.isEmpty() && dropped.isEmpty()
 
+    // Pull-to-refresh state
+    var isRefreshing by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
-                .padding(horizontal = 16.dp)
+        // Pull-to-refresh wrapper
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                isRefreshing = true
+                viewModel.refreshHome()
+            },
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Header
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 16.dp)
             ) {
-                Text(
-                    "My Anime",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                if (isLoggedIn) {
-                    IconButton(onClick = { showSearchOverlay = true }) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                }
-            }
-
-            if (!isLoggedIn) {
-                // Redesigned Login Card
-                Card(
+                // Header with user profile
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
-                    )
+                        .padding(vertical = 16.dp)
+                        .clickable(enabled = isLoggedIn) { showUserProfileDialog = true },
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                                    )
-                                )
-                            )
-                            .padding(24.dp)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            // AniList Icon/Logo
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AccountCircle,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(40.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                    // User avatar or placeholder
+                    if (isLoggedIn && userAvatar != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(userAvatar)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "User Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                    } else if (isLoggedIn) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "User",
+                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(42.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
 
-                            Spacer(modifier = Modifier.height(16.dp))
-
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (isLoggedIn) (userName ?: "My Anime") else "My Anime",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                        )
+                        if (isLoggedIn) {
                             Text(
-                                "Welcome to Darling",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                "Tap to view profile",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.weight(1f))
 
-                            Text(
-                                "Sign in with AniList to sync your anime list and track your progress",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            // Login Button
-                            Button(
-                                onClick = onLoginClick,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF02A9FF) // AniList blue
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Login,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Login with AniList",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Text(
-                                "Don't have an account? Sign up for free at anilist.co",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    if (isLoggedIn) {
+                        IconButton(onClick = { showSearchOverlay = true }) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
                             )
                         }
                     }
                 }
-            } else if (isLoading && allListsEmpty) {
-                LoadingSkeleton(isOled)
-            } else {
-                // Use LazyColumn with weight to make it scrollable
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    // Currently Watching
-                    if (currentlyWatching.isNotEmpty()) {
-                        item(key = "header_current") {
-                            SectionHeader(
-                                title = "Currently Watching",
-                                icon = Icons.Default.PlayArrow,
-                                count = currentlyWatching.size,
-                                isOled = isOled,
-                                iconTint = Color(0xFF2196F3) // Blue
-                            )
-                        }
-                        item(key = "list_current") {
-                            HomeAnimeHorizontalList(
-                                animeList = currentlyWatching,
-                                listType = "CURRENT",
-                                isOled = isOled,
-                                showStatusColors = showStatusColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime
-                                    showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    val nextEp = anime.progress + 1
-                                    onPlayEpisode(anime, nextEp)
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime
-                                    showStatusDialog = true
-                                }
-                            )
-                        }
-                    }
 
-                    // Planning to Watch
-                    if (planningToWatch.isNotEmpty()) {
-                        item(key = "header_planning") {
-                            SectionHeader(
-                                title = "Planning to Watch",
-                                icon = Icons.Default.Bookmark,
-                                count = planningToWatch.size,
-                                isOled = isOled,
-                                iconTint = Color(0xFF9C27B0) // Purple
-                            )
-                        }
-                        item(key = "list_planning") {
-                            HomeAnimeHorizontalList(
-                                animeList = planningToWatch,
-                                listType = "PLANNING",
-                                isOled = isOled,
-                                showStatusColors = showStatusColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime
-                                    showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    onPlayEpisode(anime, 1)
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime
-                                    showStatusDialog = true
-                                }
-                            )
-                        }
-                    }
-
-                    // Completed
-                    if (completed.isNotEmpty()) {
-                        item(key = "header_completed") {
-                            SectionHeader(
-                                title = "Completed",
-                                icon = Icons.Default.Check,
-                                count = completed.size,
-                                isOled = isOled,
-                                iconTint = Color(0xFF4CAF50)
-                            )
-                        }
-                        item(key = "list_completed") {
-                            HomeAnimeHorizontalList(
-                                animeList = completed,
-                                listType = "COMPLETED",
-                                isOled = isOled,
-                                showStatusColors = showStatusColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime
-                                    showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    onPlayEpisode(anime, 1)
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime
-                                    showStatusDialog = true
-                                }
-                            )
-                        }
-                    }
-
-                    // On Hold
-                    if (onHold.isNotEmpty()) {
-                        item(key = "header_onhold") {
-                            SectionHeader(
-                                title = "On Hold",
-                                icon = Icons.Default.Pause,
-                                count = onHold.size,
-                                isOled = isOled,
-                                iconTint = Color(0xFFFFC107)
-                            )
-                        }
-                        item(key = "list_onhold") {
-                            HomeAnimeHorizontalList(
-                                animeList = onHold,
-                                listType = "PAUSED",
-                                isOled = isOled,
-                                showStatusColors = showStatusColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime
-                                    showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    val nextEp = anime.progress + 1
-                                    onPlayEpisode(anime, nextEp)
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime
-                                    showStatusDialog = true
-                                }
-                            )
-                        }
-                    }
-
-                    // Dropped
-                    if (dropped.isNotEmpty()) {
-                        item(key = "header_dropped") {
-                            SectionHeader(
-                                title = "Dropped",
-                                icon = Icons.Default.Delete,
-                                count = dropped.size,
-                                isOled = isOled,
-                                iconTint = Color(0xFFF44336)
-                            )
-                        }
-                        item(key = "list_dropped") {
-                            HomeAnimeHorizontalList(
-                                animeList = dropped,
-                                listType = "DROPPED",
-                                isOled = isOled,
-                                showStatusColors = showStatusColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime
-                                    showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    onPlayEpisode(anime, 1)
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime
-                                    showStatusDialog = true
-                                }
-                            )
-                        }
-                    }
-
-                    // Empty state
-                    if (allListsEmpty && !isLoading) {
-                        item(key = "empty_state") {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+                if (!isLoggedIn) {
+                    // Redesigned Login Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                                        )
+                                    )
                                 )
+                                .padding(24.dp)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                // AniList Icon/Logo
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        "Your lists are empty",
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "Check out the Explore tab to discover anime!",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Icon(
+                                        imageVector = Icons.Default.AccountCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Text(
+                                    "Welcome to Darling",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    "Sign in with AniList to sync your anime list and track your progress",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.height(20.dp))
+
+                                // Login Button
+                                Button(
+                                    onClick = onLoginClick,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF02A9FF) // AniList blue
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Login,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Login with AniList",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    "Don't have an account? Sign up for free at anilist.co",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
+                } else if (isLoading && allListsEmpty) {
+                    LoadingSkeleton(isOled)
+                } else {
+                    // Use LazyColumn with weight to make it scrollable
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        // Currently Watching
+                        if (currentlyWatching.isNotEmpty()) {
+                            item(key = "header_current") {
+                                SectionHeader(
+                                    title = "Currently Watching",
+                                    icon = Icons.Default.PlayArrow,
+                                    count = currentlyWatching.size,
+                                    isOled = isOled,
+                                    iconTint = Color(0xFF2196F3) // Blue
+                                )
+                            }
+                            item(key = "list_current") {
+                                HomeAnimeHorizontalList(
+                                    animeList = currentlyWatching,
+                                    listType = "CURRENT",
+                                    isOled = isOled,
+                                    showStatusColors = showStatusColors,
+                                    onAnimeClick = { anime ->
+                                        selectedAnime = anime
+                                        showEpisodeSheet = true
+                                    },
+                                    onPlayClick = { anime ->
+                                        val nextEp = anime.progress + 1
+                                        onPlayEpisode(anime, nextEp)
+                                    },
+                                    onStatusClick = { anime ->
+                                        selectedAnime = anime
+                                        showStatusDialog = true
+                                    }
+                                )
+                            }
+                        }
 
-                    // Bottom spacer
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        // Planning to Watch
+                        if (planningToWatch.isNotEmpty()) {
+                            item(key = "header_planning") {
+                                SectionHeader(
+                                    title = "Planning to Watch",
+                                    icon = Icons.Default.Bookmark,
+                                    count = planningToWatch.size,
+                                    isOled = isOled,
+                                    iconTint = Color(0xFF9C27B0) // Purple
+                                )
+                            }
+                            item(key = "list_planning") {
+                                HomeAnimeHorizontalList(
+                                    animeList = planningToWatch,
+                                    listType = "PLANNING",
+                                    isOled = isOled,
+                                    showStatusColors = showStatusColors,
+                                    onAnimeClick = { anime ->
+                                        selectedAnime = anime
+                                        showEpisodeSheet = true
+                                    },
+                                    onPlayClick = { anime ->
+                                        onPlayEpisode(anime, 1)
+                                    },
+                                    onStatusClick = { anime ->
+                                        selectedAnime = anime
+                                        showStatusDialog = true
+                                    }
+                                )
+                            }
+                        }
+
+                        // Completed
+                        if (completed.isNotEmpty()) {
+                            item(key = "header_completed") {
+                                SectionHeader(
+                                    title = "Completed",
+                                    icon = Icons.Default.Check,
+                                    count = completed.size,
+                                    isOled = isOled,
+                                    iconTint = Color(0xFF4CAF50)
+                                )
+                            }
+                            item(key = "list_completed") {
+                                HomeAnimeHorizontalList(
+                                    animeList = completed,
+                                    listType = "COMPLETED",
+                                    isOled = isOled,
+                                    showStatusColors = showStatusColors,
+                                    onAnimeClick = { anime ->
+                                        selectedAnime = anime
+                                        showEpisodeSheet = true
+                                    },
+                                    onPlayClick = { anime ->
+                                        onPlayEpisode(anime, 1)
+                                    },
+                                    onStatusClick = { anime ->
+                                        selectedAnime = anime
+                                        showStatusDialog = true
+                                    }
+                                )
+                            }
+                        }
+
+                        // On Hold
+                        if (onHold.isNotEmpty()) {
+                            item(key = "header_onhold") {
+                                SectionHeader(
+                                    title = "On Hold",
+                                    icon = Icons.Default.Pause,
+                                    count = onHold.size,
+                                    isOled = isOled,
+                                    iconTint = Color(0xFFFFC107)
+                                )
+                            }
+                            item(key = "list_onhold") {
+                                HomeAnimeHorizontalList(
+                                    animeList = onHold,
+                                    listType = "PAUSED",
+                                    isOled = isOled,
+                                    showStatusColors = showStatusColors,
+                                    onAnimeClick = { anime ->
+                                        selectedAnime = anime
+                                        showEpisodeSheet = true
+                                    },
+                                    onPlayClick = { anime ->
+                                        val nextEp = anime.progress + 1
+                                        onPlayEpisode(anime, nextEp)
+                                    },
+                                    onStatusClick = { anime ->
+                                        selectedAnime = anime
+                                        showStatusDialog = true
+                                    }
+                                )
+                            }
+                        }
+
+                        // Dropped
+                        if (dropped.isNotEmpty()) {
+                            item(key = "header_dropped") {
+                                SectionHeader(
+                                    title = "Dropped",
+                                    icon = Icons.Default.Delete,
+                                    count = dropped.size,
+                                    isOled = isOled,
+                                    iconTint = Color(0xFFF44336)
+                                )
+                            }
+                            item(key = "list_dropped") {
+                                HomeAnimeHorizontalList(
+                                    animeList = dropped,
+                                    listType = "DROPPED",
+                                    isOled = isOled,
+                                    showStatusColors = showStatusColors,
+                                    onAnimeClick = { anime ->
+                                        selectedAnime = anime
+                                        showEpisodeSheet = true
+                                    },
+                                    onPlayClick = { anime ->
+                                        onPlayEpisode(anime, 1)
+                                    },
+                                    onStatusClick = { anime ->
+                                        selectedAnime = anime
+                                        showStatusDialog = true
+                                    }
+                                )
+                            }
+                        }
+
+                        // Empty state
+                        if (allListsEmpty && !isLoading) {
+                            item(key = "empty_state") {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            "Your lists are empty",
+                                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Check out the Explore tab to discover anime!",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom spacer
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                     }
                 }
             }
-        }
+        }  // End PullToRefreshBox
 
         // Search Overlay
         if (showSearchOverlay) {
             SearchOverlay(
                 viewModel = viewModel,
                 isOled = isOled,
+                simplifyAnimeDetails = simplifyAnimeDetails,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,
                 completed = completed,
@@ -433,25 +505,45 @@ fun HomeScreen(
         }
     }
 
-    // Episode Selection Dialog
+    // Episode Selection Dialog - FIXED: Use setting to determine which dialog to show
     if (showEpisodeSheet && selectedAnime != null) {
-        EpisodeSelectionDialog(
-            anime = selectedAnime!!,
-            isOled = isOled,
-            onDismiss = { showEpisodeSheet = false },
-            onEpisodeSelect = { episode ->
-                onPlayEpisode(selectedAnime!!, episode)
-                showEpisodeSheet = false
-            }
-        )
+        val isAnimeFavorite = localFavorites.contains(selectedAnime!!.id)
+        if (simplifyEpisodeMenu) {
+            // Simple grid dialog
+            EpisodeSelectionDialog(
+                anime = selectedAnime!!,
+                isOled = isOled,
+                onDismiss = { showEpisodeSheet = false },
+                onEpisodeSelect = { episode: Int ->
+                    onPlayEpisode(selectedAnime!!, episode)
+                    showEpisodeSheet = false
+                }
+            )
+        } else {
+            // Rich detailed episode screen
+            RichEpisodeScreen(
+                anime = selectedAnime!!,
+                viewModel = viewModel,
+                isOled = isOled,
+                onDismiss = { showEpisodeSheet = false },
+                onEpisodeSelect = { episode: Int ->
+                    onPlayEpisode(selectedAnime!!, episode)
+                    showEpisodeSheet = false
+                }
+            )
+        }
     }
 
     // Status Dialog
     if (showStatusDialog && selectedAnime != null) {
+        val isAnimeFavorite = localFavorites.contains(selectedAnime!!.id)
         HomeAnimeStatusDialog(
             anime = selectedAnime!!,
             isOled = isOled,
             showStatusColors = showStatusColors,
+            isFavorite = isAnimeFavorite,
+            canAddFavorite = canAddFavorite || isAnimeFavorite,
+            onToggleFavorite = { onToggleFavorite(selectedAnime!!.id) },
             onDismiss = { showStatusDialog = false },
             onRemove = {
                 viewModel.removeAnimeFromList(selectedAnime!!.id)
@@ -468,6 +560,23 @@ fun HomeScreen(
                 viewModel.refreshHome()
             }
         )
+    }
+
+    // User Profile Dialog
+    if (showUserProfileDialog) {
+        UserProfileDialog(
+            viewModel = viewModel,
+            isOled = isOled,
+            onDismiss = { showUserProfileDialog = false },
+            onShowAnimeDialog = onShowAnimeDialog
+        )
+    }
+
+    // Stop refreshing when loading completes
+    LaunchedEffect(isLoading) {
+        if (!isLoading && isRefreshing) {
+            isRefreshing = false
+        }
     }
 }
 
@@ -861,6 +970,14 @@ fun EpisodeSelectionDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        // ADDED: Release year beneath episode progress
+                        anime.year?.let { year ->
+                            Text(
+                                "Released: $year",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
 
@@ -972,8 +1089,9 @@ private fun EpisodeButton(
     isOled: Boolean,
     onClick: () -> Unit
 ) {
+    // FIXED: Darker current episode color for better differentiation
     val backgroundColor = when {
-        isWatched -> MaterialTheme.colorScheme.primary
+        isWatched -> MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) // Darker watched color
         hasAired -> if (isOled) Color(0xFF2A2A2A) else MaterialTheme.colorScheme.surfaceVariant
         else -> Color.Gray.copy(alpha = 0.2f)
     }
@@ -984,8 +1102,9 @@ private fun EpisodeButton(
         else -> Color.Gray.copy(alpha = 0.5f)
     }
 
+    // FIXED: Darker border for current episode
     val borderColor = when {
-        isWatched -> MaterialTheme.colorScheme.primary
+        isWatched -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
         hasAired -> Color.Transparent
         else -> Color.Gray.copy(alpha = 0.3f)
     }
@@ -1030,6 +1149,9 @@ fun HomeAnimeStatusDialog(
     anime: AnimeMedia,
     isOled: Boolean,
     showStatusColors: Boolean = false,
+    isFavorite: Boolean = false,
+    canAddFavorite: Boolean = true,
+    onToggleFavorite: () -> Unit = {},
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onUpdate: (String, Int?) -> Unit
@@ -1104,6 +1226,14 @@ fun HomeAnimeStatusDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.7f)
                         )
+                        // ADDED: Release year beneath episode progress
+                        anime.year?.let { year ->
+                            Text(
+                                "Released: $year",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
 
@@ -1276,6 +1406,7 @@ fun HomeAnimeStatusDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Cancel button - REMOVED favorite button from simplified episode menu
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth()
@@ -1291,6 +1422,7 @@ fun HomeAnimeStatusDialog(
 fun SearchOverlay(
     viewModel: MainViewModel,
     isOled: Boolean,
+    simplifyAnimeDetails: Boolean = true,
     currentlyWatching: List<AnimeMedia>,
     planningToWatch: List<AnimeMedia>,
     completed: List<AnimeMedia>,
@@ -1302,8 +1434,6 @@ fun SearchOverlay(
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    var debounceJob by remember { mutableStateOf<Job?>(null) }
 
     // Selected anime for detail dialog
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
@@ -1320,20 +1450,17 @@ fun SearchOverlay(
         map
     }
 
-    // Debounced search
+    // Debounced search - LaunchedEffect automatically cancels when searchQuery changes
     LaunchedEffect(searchQuery) {
-        debounceJob?.cancel()
         if (searchQuery.isEmpty()) {
             searchResults = emptyList()
             isSearching = false
         } else {
             isSearching = true
-            debounceJob = scope.launch {
-                delay(500)
-                val results = viewModel.searchAnime(searchQuery)
-                searchResults = results
-                isSearching = false
-            }
+            delay(500) // Debounce delay - if searchQuery changes, this coroutine is cancelled
+            val results = viewModel.searchAnime(searchQuery)
+            searchResults = results
+            isSearching = false
         }
     }
 
@@ -1341,6 +1468,11 @@ fun SearchOverlay(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.92f))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ) // Consume all clicks to make background unclickable
     ) {
         Column(
             modifier = Modifier
@@ -1449,37 +1581,80 @@ fun SearchOverlay(
 
     // Detail Dialog
     if (showDetailDialog && selectedAnime != null) {
-        SearchAnimeDetailDialog(
-            anime = selectedAnime!!,
-            isOled = isOled,
-            currentStatus = savedAnimeMap[selectedAnime!!.id],
-            onDismiss = { showDetailDialog = false },
-            onPlayEpisode = { episode ->
-                val animeMedia = AnimeMedia(
-                    id = selectedAnime!!.id,
-                    title = selectedAnime!!.title,
-                    cover = selectedAnime!!.cover,
-                    banner = selectedAnime!!.banner,
-                    progress = 0,
-                    totalEpisodes = selectedAnime!!.episodes,
-                    latestEpisode = selectedAnime!!.latestEpisode,
-                    status = "",
-                    averageScore = selectedAnime!!.averageScore,
-                    genres = selectedAnime!!.genres,
-                    listStatus = "",
-                    listEntryId = 0
-                )
-                onPlayEpisode(animeMedia, episode)
-                showDetailDialog = false
-                onClose()
-            },
-            onUpdateStatus = { status ->
-                viewModel.addExploreAnimeToList(selectedAnime!!, status)
-            },
-            onRemove = {
-                viewModel.removeAnimeFromList(selectedAnime!!.id)
-            }
-        )
+        if (simplifyAnimeDetails) {
+            // Simple dialog
+            SearchAnimeDetailDialog(
+                anime = selectedAnime!!,
+                isOled = isOled,
+                currentStatus = savedAnimeMap[selectedAnime!!.id],
+                onDismiss = { showDetailDialog = false },
+                onPlayEpisode = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = selectedAnime!!.id,
+                        title = selectedAnime!!.title,
+                        cover = selectedAnime!!.cover,
+                        banner = selectedAnime!!.banner,
+                        progress = 0,
+                        totalEpisodes = selectedAnime!!.episodes,
+                        latestEpisode = selectedAnime!!.latestEpisode,
+                        status = "",
+                        averageScore = selectedAnime!!.averageScore,
+                        genres = selectedAnime!!.genres,
+                        listStatus = "",
+                        listEntryId = 0
+                    )
+                    onPlayEpisode(animeMedia, episode)
+                    showDetailDialog = false
+                    onClose()
+                },
+                onUpdateStatus = { status ->
+                    viewModel.addExploreAnimeToList(selectedAnime!!, status)
+                },
+                onRemove = {
+                    viewModel.removeAnimeFromList(selectedAnime!!.id)
+                }
+            )
+        } else {
+            // Rich detailed dialog
+            DetailedAnimeScreen(
+                anime = selectedAnime!!.toDetailedAnimeData(),
+                viewModel = viewModel,
+                isOled = isOled,
+                currentStatus = savedAnimeMap[selectedAnime!!.id],
+                showStatusColors = true,
+                onDismiss = { showDetailDialog = false },
+                onPlayEpisode = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = selectedAnime!!.id,
+                        title = selectedAnime!!.title,
+                        cover = selectedAnime!!.cover,
+                        banner = selectedAnime!!.banner,
+                        progress = 0,
+                        totalEpisodes = selectedAnime!!.episodes,
+                        latestEpisode = selectedAnime!!.latestEpisode,
+                        status = "",
+                        averageScore = selectedAnime!!.averageScore,
+                        genres = selectedAnime!!.genres,
+                        listStatus = "",
+                        listEntryId = 0
+                    )
+                    viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                    onPlayEpisode(animeMedia, episode)
+                    showDetailDialog = false
+                    onClose()
+                },
+                onUpdateStatus = { status ->
+                    if (status != null) {
+                        viewModel.addExploreAnimeToList(selectedAnime!!, status)
+                    }
+                },
+                onRemove = {
+                    viewModel.removeAnimeFromList(selectedAnime!!.id)
+                    showDetailDialog = false
+                },
+                isLoggedIn = true
+            )
+        }
     }
 }
 
@@ -1569,6 +1744,16 @@ private fun SearchResultItem(
                             "★ ${String.format(Locale.US, "%.1f", score)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFFFD700)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+
+                    // ADDED: Year before episode count
+                    anime.year?.let { year ->
+                        Text(
+                            "$year",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -1749,37 +1934,78 @@ fun SearchAnimeDetailDialog(
 
                         if (currentStatus != null) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = when (currentStatus) {
-                                    "CURRENT" -> Color(0xFF2196F3).copy(alpha = 0.2f) // Blue
-                                    "PLANNING" -> Color(0xFF9C27B0).copy(alpha = 0.2f) // Purple
-                                    "COMPLETED" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
-                                    "PAUSED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
-                                    "DROPPED" -> Color(0xFFF44336).copy(alpha = 0.2f)
-                                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = when(currentStatus) {
-                                        "CURRENT" -> "▶ Watching"
-                                        "PLANNING" -> "📋 Planning"
-                                        "COMPLETED" -> "✓ Completed"
-                                        "PAUSED" -> "⏸ On Hold"
-                                        "DROPPED" -> "✕ Dropped"
-                                        else -> currentStatus
-                                    },
-                                    style = MaterialTheme.typography.labelMedium,
+                                // Year on the left side
+                                anime.year?.let { year ->
+                                    Text(
+                                        "$year",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
                                     color = when (currentStatus) {
-                                        "CURRENT" -> Color(0xFF2196F3) // Blue
-                                        "PLANNING" -> Color(0xFF9C27B0) // Purple
-                                        "COMPLETED" -> Color(0xFF4CAF50)
-                                        "PAUSED" -> Color(0xFFFFC107)
-                                        "DROPPED" -> Color(0xFFF44336)
-                                        else -> MaterialTheme.colorScheme.primary
-                                    },
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
+                                        "CURRENT" -> Color(0xFF2196F3).copy(alpha = 0.2f) // Blue
+                                        "PLANNING" -> Color(0xFF9C27B0).copy(alpha = 0.2f) // Purple
+                                        "COMPLETED" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                        "PAUSED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
+                                        "DROPPED" -> Color(0xFFF44336).copy(alpha = 0.2f)
+                                        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    ) {
+                                        // Icon based on status
+                                        Icon(
+                                            imageVector = when(currentStatus) {
+                                                "CURRENT" -> Icons.Default.PlayArrow
+                                                "PLANNING" -> Icons.Default.Bookmark
+                                                "COMPLETED" -> Icons.Default.Check
+                                                "PAUSED" -> Icons.Default.Pause
+                                                "DROPPED" -> Icons.Default.Close
+                                                else -> Icons.Default.Info
+                                            },
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = when (currentStatus) {
+                                                "CURRENT" -> Color(0xFF2196F3)
+                                                "PLANNING" -> Color(0xFF9C27B0)
+                                                "COMPLETED" -> Color(0xFF4CAF50)
+                                                "PAUSED" -> Color(0xFFFFC107)
+                                                "DROPPED" -> Color(0xFFF44336)
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = when(currentStatus) {
+                                                "CURRENT" -> "Watching"
+                                                "PLANNING" -> "Planning"
+                                                "COMPLETED" -> "Completed"
+                                                "PAUSED" -> "On Hold"
+                                                "DROPPED" -> "Dropped"
+                                                else -> currentStatus
+                                            },
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = when (currentStatus) {
+                                                "CURRENT" -> Color(0xFF2196F3)
+                                                "PLANNING" -> Color(0xFF9C27B0)
+                                                "COMPLETED" -> Color(0xFF4CAF50)
+                                                "PAUSED" -> Color(0xFFFFC107)
+                                                "DROPPED" -> Color(0xFFF44336)
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -2033,4 +2259,332 @@ private fun StatusChip(
             labelColor = Color.White.copy(alpha = 0.7f)
         )
     )
+}
+
+/**
+ * Rich Episode Details Screen with episode title, image, description, and swipe-to-dismiss
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RichEpisodeScreen(
+    anime: AnimeMedia,
+    viewModel: MainViewModel,
+    isOled: Boolean,
+    onDismiss: () -> Unit,
+    onEpisodeSelect: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    val total = anime.totalEpisodes
+    val released = anime.latestEpisode?.let { it - 1 } ?: total
+    val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
+    val currentProgress = anime.progress
+
+    // Episode data state
+    var selectedEpisode by remember { mutableStateOf<Int?>(null) }
+    var episodeTitle by remember { mutableStateOf<String?>(null) }
+    var episodeImage by remember { mutableStateOf<String?>(null) }
+    var episodeDescription by remember { mutableStateOf<String?>(null) }
+    var isLoadingEpisode by remember { mutableStateOf(false) }
+
+    // Swipe-to-dismiss state
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var totalDrag by remember { mutableFloatStateOf(0f) }
+    val dismissThreshold = 200f
+
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = offsetY,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "offsetY"
+    )
+
+    // Fetch episode details when selected
+    LaunchedEffect(selectedEpisode) {
+        selectedEpisode?.let { ep ->
+            isLoadingEpisode = true
+            try {
+                // Fetch episode info from API
+                val episodeInfo = viewModel.getEpisodeInfo(anime.title, ep, anime.id)
+                // Set placeholder data since episode details aren't always available
+                episodeTitle = "Episode $ep"
+                episodeImage = anime.banner ?: anime.cover
+                episodeDescription = null // Would fetch from episode API if available
+            } catch (e: Exception) {
+                episodeTitle = "Episode $ep"
+                episodeImage = anime.banner ?: anime.cover
+                episodeDescription = null
+            }
+            isLoadingEpisode = false
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(y = animatedOffsetY.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (totalDrag > dismissThreshold) {
+                                onDismiss()
+                            } else {
+                                offsetY = 0f
+                                totalDrag = 0f
+                            }
+                        },
+                        onVerticalDrag = { _, dragAmount ->
+                            totalDrag += dragAmount
+                            offsetY = (offsetY + dragAmount).coerceAtLeast(0f)
+                        }
+                    )
+                }
+                .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+        ) {
+            // Banner/Image
+            AsyncImage(
+                model = episodeImage ?: anime.banner ?: anime.cover,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .blur(4.dp)
+            )
+
+            // Gradient overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                if (isOled) Color.Black else MaterialTheme.colorScheme.background
+                            )
+                        )
+                    )
+            )
+
+            // Close button
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .padding(top = 40.dp, start = 8.dp)
+                    .align(Alignment.TopStart)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
+
+            // Swipe indicator
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 50.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.width(40.dp).height(4.dp),
+                    shape = RoundedCornerShape(2.dp),
+                    color = Color.White.copy(alpha = 0.5f)
+                ) {}
+            }
+
+            // Content
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 160.dp, bottom = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                // Anime title
+                item {
+                    Text(
+                        anime.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                // Progress info
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Progress: $currentProgress / ${if (total > 0) total else "?"} episodes",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Episode grid header
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        "Select Episode",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Legend
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        RoundedCornerShape(2.dp)
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "Watched",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .background(Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(2.dp))
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "Not aired",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Episode grid
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(5),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.height(((episodeCount / 5 + 1) * 56).dp)
+                    ) {
+                        items(episodeCount) { index ->
+                            val episodeNum = index + 1
+                            val isWatched = episodeNum <= currentProgress
+                            val hasAired = episodeNum <= released
+
+                            RichEpisodeButton(
+                                episodeNumber = episodeNum,
+                                isWatched = isWatched,
+                                hasAired = hasAired,
+                                isOled = isOled,
+                                isSelected = selectedEpisode == episodeNum,
+                                onClick = {
+                                    if (hasAired) {
+                                        onEpisodeSelect(episodeNum)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Resume button
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    val nextEp = currentProgress + 1
+                    if (nextEp <= released) {
+                        Button(
+                            onClick = { onEpisodeSelect(nextEp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Resume Episode $nextEp")
+                        }
+                    }
+                }
+
+                // Bottom spacer
+                item {
+                    Spacer(modifier = Modifier.height(80.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RichEpisodeButton(
+    episodeNumber: Int,
+    isWatched: Boolean,
+    hasAired: Boolean,
+    isOled: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = when {
+        isWatched -> MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) // Darker watched
+        hasAired -> if (isOled) Color(0xFF2A2A2A) else MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Gray.copy(alpha = 0.2f)
+    }
+
+    val contentColor = when {
+        isWatched -> Color.White
+        hasAired -> if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+        else -> Color.Gray.copy(alpha = 0.5f)
+    }
+
+    val borderColor = when {
+        isWatched -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+        hasAired -> Color.Transparent
+        else -> Color.Gray.copy(alpha = 0.3f)
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = backgroundColor,
+        contentColor = contentColor,
+        modifier = Modifier
+            .size(48.dp)
+            .alpha(if (hasAired) 1f else 0.5f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "$episodeNumber",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (isWatched) FontWeight.Bold else FontWeight.Normal
+            )
+
+            if (isWatched) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(12.dp)
+                        .padding(2.dp),
+                    tint = Color.White
+                )
+            }
+        }
+    }
 }

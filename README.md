@@ -81,14 +81,14 @@ Each anime list category has a distinct color for easy visual identification:
 
 | Home Screen | Explore Screen | Video Player | Settings Screen |
 |:---:|:---:|:---:|:---:|
-| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) | ![Home](screenshots/settings.png) |
+| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Player](screenshots/player.png) | ![Airing](screenshots/airing.png) |
 
 ---
 
 ## Requirements and Setup
 
 - **Android Version:** 8.0 (API 26) or higher.
-- **AniList Account:** Optional (required for tracking and list features).
+- **AniList Account:** Optional (required for streaming, tracking and list features).
 
 ### Installation
 1. Download the appropriate APK from the [Releases](https://github.com/Suntrax/darling/releases) page:
@@ -97,12 +97,6 @@ Each anime list category has a distinct color for easy visual identification:
    - **universal** – Compatible with all devices (larger file size)
 2. Enable **"Install from unknown sources"** in your Android settings.
 3. Open the APK and install.
-
-### Developer Configuration
-To use your own **AniList OAuth** credentials:
-1. Visit [AniList Developer Settings](https://anilist.co/settings/developer) and create a new client.
-2. Set the Redirect URL to: `animescraper://success`
-3. Update the `clientId` in `MainViewModel.kt`.
 
 ---
 
@@ -124,77 +118,8 @@ To use your own **AniList OAuth** credentials:
 ## Project Structure
 
 ```
-app/src/main/java/com/blissless/anime/
-├── MainActivity.kt           # Main entry point and navigation
-├── MainViewModel.kt          # State management and API calls
-├── DarlingApplication.kt     # Coil image loader configuration
-├── AnimeMedia.kt             # Core data models
-├── api/
-│   ├── AniListApi.kt         # AniList GraphQL API implementation
-│   └── AniwatchService.kt    # Stream provider and scraper logic
-├── ui/
-│   ├── theme/                # Material 3 color schemes and typography
-│   └── screens/              # UI Composables (Home, Explore, Player, Settings)
-└── data/
-    └── models/               # Kotlin data classes
+X
 ```
-
----
-
-## Changelog
-
-### v2.0 (Current)
-- **Complete UI Redesign** – Redesigned status dialogs with colorful buttons for all list types.
-- **Compact Navigation Mode** – New option to hide navbar text labels for a cleaner look.
-- **Instant Tab Switching** – Pre-composed pages eliminate lag when switching between screens.
-- **Enhanced Search Overlay** – M3 primary color accents, cleaner status badges, improved text field.
-- **Proper Remove Functionality** – "Remove from List" now correctly uses AniList's delete mutation.
-- **Performance Optimizations** – Featured carousel pauses when not visible, improved caching.
-- **Improved Status Buttons** – Added On Hold and Dropped buttons to search dialogs.
-- **Better Button Layouts** – Fixed text wrapping and sizing in all status dialogs.
-
-### v1.6
-- **User Avatar Display** – Your AniList avatar now appears in the Settings screen.
-- **Organized Settings** – Settings reorganized into Appearance and Player Settings sections.
-- **Smart Caching** – Data cached for 24 hours; images fetched on-demand if not cached.
-- **Image Caching** – All images cached to disk and memory for instant loading.
-
-### v1.5
-- **Customizable Skip Durations** – Set skip forward/backward time independently (5-30 seconds).
-- **High Refresh Rate Mode** – New setting to force 120Hz for smoother scrolling.
-- **Major Performance Overhaul** – Complete rewrite of Explore screen for buttery smooth scrolling.
-- **Optimized Image Loading** – Disabled crossfade animations for instant image display.
-- **Fixed Card Layout** – Anime cards no longer jump when scrolling horizontally.
-- **Multi-ABI APKs** – Separate builds for arm64-v8a, armeabi-v7a, and universal.
-- **Cleaner Defaults** – OLED mode and status colors now default to off.
-
-### v1.4
-- **Genre Recommendations:** Added browse-by-genre sections (Action, Romance, Comedy, Fantasy, Sci-Fi).
-- **Enhanced Status Display:** Status indicators now show on anime cards and detail dialogs for all sections.
-- **Episode Info Everywhere:** All anime detail dialogs now display accurate episode information.
-- **Clean UI:** Removed icons from section headers for a cleaner look.
-- **Improved Status Colors:** Added purple color for Planning list to differentiate from Watching.
-
-### v1.3
-- **Full List Support:** Added Completed, On Hold, and Dropped anime lists to Home screen.
-- **Color-Coded Categories:** Each list type now has a distinct color for easy identification.
-- **OLED Mode Fix:** Dark mode now properly applies across all screens.
-- **Dialog Improvements:** "Saved" button in anime detail dialog now correctly removes anime from lists.
-- **Visual Indicators:** Status bars on anime cards show list category at a glance.
-
-### v1.2
-- **Player Upgrades:** Added Server Selection and SUB/DUB support.
-- **Reliability:** Implemented auto-server fallback and pre-fetched stream logic.
-- **UX:** Instant login state restoration and improved tracking slider.
-- **Stability:** Enhanced error handling and API connectivity patches.
-
-### v1.1
-- **Discovery:** Redesigned Explore page with Featured Carousel and new sections.
-- **Functionality:** Added working "Remove from list" feature.
-- **UI:** Added episode badges, animated bookmarks, and debounced search.
-- **Fixes:** Improved episode counters for long-running series.
-
----
 
 ## API Reference
 The app uses the **AniList GraphQL API** for:
@@ -215,9 +140,3 @@ The app uses the **AniList GraphQL API** for:
 5. **Open** a Pull Request.
 
 ---
-
-<div align="center">
-
-**Made with care for the Anime Community**
-
-</div>

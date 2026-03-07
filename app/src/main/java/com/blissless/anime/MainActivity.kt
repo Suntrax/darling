@@ -9,6 +9,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -23,14 +24,23 @@ import androidx.core.view.WindowCompat
 import android.util.Log
 import com.blissless.anime.api.EpisodeStreams
 import com.blissless.anime.api.ServerInfo
+import com.blissless.anime.ui.screens.DetailedAnimeScreen
+import com.blissless.anime.ui.screens.DetailedAnimeData
+import com.blissless.anime.ui.screens.ExploreAnimeDialog
 import com.blissless.anime.ui.screens.ExploreScreen
 import com.blissless.anime.ui.screens.HomeScreen
 import com.blissless.anime.ui.screens.PlayerScreen
+import com.blissless.anime.ui.screens.ScheduleScreen
 import com.blissless.anime.ui.screens.SettingsScreen
+import com.blissless.anime.ui.screens.StatusColors
+import com.blissless.anime.ui.screens.StatusLabels
+import com.blissless.anime.ui.screens.toDetailedAnimeData
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import android.widget.Toast
 
 class MainActivity : ComponentActivity() {
 
@@ -59,6 +69,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isOled by mainViewModel.isOled.collectAsState()
+            val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
             val forceHighRefreshRate by mainViewModel.forceHighRefreshRate.collectAsState()
             val token by mainViewModel.authToken.collectAsState(initial = if (hasToken) "loading" else null)
@@ -69,11 +80,6 @@ class MainActivity : ComponentActivity() {
             // Apply high refresh rate setting
             LaunchedEffect(forceHighRefreshRate) {
                 if (forceHighRefreshRate) {
-                    window.attributes = window.attributes.apply {
-                        // Try to set the preferred refresh rate to high (120Hz)
-                        // API 30+ uses preferredDisplayModeId
-                        // For older APIs, we use the WindowManager.LayoutParams approach
-                    }
                     // Request high refresh rate mode
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                         val display = display
@@ -100,7 +106,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            AppTheme(useOled = isOled) {
+            AppTheme(useOled = isOled, useMonochrome = disableMaterialColors) {
                 MainScreen(
                     viewModel = mainViewModel,
                     isOled = isOled,
@@ -137,10 +143,11 @@ fun MainScreen(
     forceHighRefreshRate: Boolean,
     isLoggedIn: Boolean
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Pager state for swipe navigation - start on Home (page 1)
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    // Pager state for swipe navigation - start on Home (page 2)
+    val pagerState = rememberPagerState(initialPage = 2, pageCount = { 4 })
 
     // Track which pages have been preloaded
     var preloadedPages by remember { mutableStateOf(setOf(1)) } // Home is preloaded by default
@@ -159,6 +166,23 @@ fun MainScreen(
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
     val hideNavbarText by viewModel.hideNavbarText.collectAsState(initial = false)
 
+    // UI settings - THESE ARE THE KEY SETTINGS
+    val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
+    val simplifyAnimeDetails by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
+
+    // Local favorites state
+    val localFavorites by viewModel.localFavorites.collectAsState()
+    val canAddFavorite = remember(localFavorites) { viewModel.canAddFavorite() }
+
+    // Auto-skip settings
+    val autoSkipOpening by viewModel.autoSkipOpening.collectAsState(initial = false)
+    val autoSkipEnding by viewModel.autoSkipEnding.collectAsState(initial = false)
+    val autoPlayNextEpisode by viewModel.autoPlayNextEpisode.collectAsState(initial = false)
+
+    // New settings
+    val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
+    val preferredCategory by viewModel.preferredCategory.collectAsState(initial = "sub")
+
     // Pre-fetch streams for currently watching when lists load
     LaunchedEffect(currentlyWatching) {
         if (currentlyWatching.isNotEmpty()) {
@@ -171,8 +195,6 @@ fun MainScreen(
     // Pre-render Explore page after Home finishes loading
     val isLoadingHome by viewModel.isLoadingHome.collectAsState()
     LaunchedEffect(isLoadingHome) {
-        // When Home finishes loading, mark Explore as preloaded
-        // This triggers the HorizontalPager to compose it in advance
         if (!isLoadingHome && 0 !in preloadedPages) {
             preloadedPages = preloadedPages + 0
         }
@@ -183,20 +205,19 @@ fun MainScreen(
         val currentPage = pagerState.currentPage
         val offset = pagerState.currentPageOffsetFraction
 
-        // Determine which adjacent page we're approaching
         val approachingPage = when {
-            offset > 0.3f -> currentPage + 1  // Swiping left, approaching next page
-            offset < -0.3f -> currentPage - 1 // Swiping right, approaching previous page
+            offset > 0.3f -> currentPage + 1
+            offset < -0.3f -> currentPage - 1
             else -> currentPage
         }
 
-        // Preload data for the approaching page if not already loaded
-        if (approachingPage in 0..2 && approachingPage !in preloadedPages) {
+        if (approachingPage in 0..3 && approachingPage !in preloadedPages) {
             preloadedPages = preloadedPages + approachingPage
             when (approachingPage) {
-                0 -> { /* Explore data is already fetched in init, just mark as preloaded */ }
-                1 -> { viewModel.refreshHome() }
-                2 -> { /* Settings doesn't need preloading */ }
+                0 -> { viewModel.fetchAiringSchedule() }
+                1 -> { }
+                2 -> { viewModel.refreshHome() }
+                3 -> { }
             }
         }
     }
@@ -218,6 +239,33 @@ fun MainScreen(
     var currentServerName by remember { mutableStateOf("") }
     var currentServerIndex by remember { mutableIntStateOf(0) }
 
+    // Fallback state for toast notification - FIXED: track actual vs manual selection
+    var isFallbackStream by remember { mutableStateOf(false) }
+    var requestedCategory by remember { mutableStateOf("sub") }
+    var actualCategory by remember { mutableStateOf("sub") }
+    var isManualServerChange by remember { mutableStateOf(false) }
+
+    // Anime dialog state
+    var selectedExploreAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+    var showExploreDialog by remember { mutableStateOf(false) }
+
+    // Create a map of animeId -> status for quick lookup
+    val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        val map = mutableMapOf<Int, String>()
+        currentlyWatching.forEach { map[it.id] = "CURRENT" }
+        planningToWatch.forEach { map[it.id] = "PLANNING" }
+        completed.forEach { map[it.id] = "COMPLETED" }
+        onHold.forEach { map[it.id] = "PAUSED" }
+        dropped.forEach { map[it.id] = "DROPPED" }
+        map
+    }
+
+    // Callback to show anime dialog
+    val onShowAnimeDialog: (ExploreAnime) -> Unit = { anime ->
+        selectedExploreAnime = anime
+        showExploreDialog = true
+    }
+
     // Helper function to load and play an episode
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int) {
         currentAnime = anime
@@ -236,36 +284,66 @@ fun MainScreen(
                 currentSubtitleUrl = cached.subtitleUrl
                 currentServerName = cached.serverName
                 currentCategory = cached.category
+                actualCategory = cached.category
+                requestedCategory = preferredCategory
+                isFallbackStream = cached.category != preferredCategory
                 showPlayer = true
 
                 prefetchedEpisodeInfo[cacheKey]?.let { currentEpisodeInfo = it }
                 currentServerIndex = 0
                 viewModel.prefetchAdjacentEpisodes(anime.title, episode, anime.id)
+
+                // Show fallback toast if needed
+                if (isFallbackStream) {
+                    val message = if (requestedCategory == "dub") {
+                        "Dub not available, playing sub"
+                    } else {
+                        "Sub not available, playing dub"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
                 return
             }
         }
 
-        // No cache, fetch new
+        // No cache, fetch new - use tryAllServersWithFallback for fallback info
         isLoadingStream = true
         scope.launch {
             Log.d("MainActivity", "Fetching stream for ${anime.title} ep $episode")
 
-            // First get episode info for server list
+            // Get episode info for server list
             val epInfo = viewModel.getEpisodeInfo(anime.title, episode, anime.id)
             currentEpisodeInfo = epInfo
 
-            val result = viewModel.getStreamLinkWithCache(anime.title, episode, anime.id)
+            // Use tryAllServersWithFallback to get fallback info
+            val result = viewModel.tryAllServersWithFallback(anime.title, episode, anime.id)
 
-            if (result != null) {
-                Log.d("MainActivity", "Stream URL found: ${result.url.take(50)}...")
-                currentVideoUrl = result.url
-                currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
-                currentSubtitleUrl = result.subtitleUrl
-                currentServerName = result.serverName
-                currentCategory = result.category
+            if (result.stream != null) {
+                Log.d("MainActivity", "Stream URL found: ${result.stream.url.take(50)}...")
+                currentVideoUrl = result.stream.url
+                currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                currentSubtitleUrl = result.stream.subtitleUrl
+                currentServerName = result.stream.serverName
+                currentCategory = result.actualCategory
                 currentServerIndex = 0
+
+                // Set fallback info
+                isFallbackStream = result.isFallback
+                requestedCategory = result.requestedCategory
+                actualCategory = result.actualCategory
+
                 showPlayer = true
                 viewModel.prefetchAdjacentEpisodes(anime.title, episode, anime.id)
+
+                // Show fallback toast if needed
+                if (result.isFallback) {
+                    val message = if (result.requestedCategory == "dub") {
+                        "Dub not available, playing sub"
+                    } else {
+                        "Sub not available, playing dub"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
             } else {
                 Log.e("MainActivity", "Failed to get stream for ${anime.title} ep $episode")
                 streamError = "Could not find stream for ${anime.title} episode $episode"
@@ -291,16 +369,30 @@ fun MainScreen(
                     val epInfo = viewModel.getEpisodeInfo(anime.title, prevEp, anime.id)
                     currentEpisodeInfo = epInfo
 
-                    val result = viewModel.getStreamLinkWithCache(anime.title, prevEp, anime.id)
-                    if (result != null) {
-                        currentVideoUrl = result.url
-                        currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
-                        currentSubtitleUrl = result.subtitleUrl
+                    val result = viewModel.tryAllServersWithFallback(anime.title, prevEp, anime.id)
+                    if (result.stream != null) {
+                        currentVideoUrl = result.stream.url
+                        currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                        currentSubtitleUrl = result.stream.subtitleUrl
                         currentEpisode = prevEp
-                        currentServerName = result.serverName
-                        currentCategory = result.category
+                        currentServerName = result.stream.serverName
+                        currentCategory = result.actualCategory
                         currentServerIndex = 0
+
+                        isFallbackStream = result.isFallback
+                        requestedCategory = result.requestedCategory
+                        actualCategory = result.actualCategory
+
                         viewModel.prefetchAdjacentEpisodes(anime.title, prevEp, anime.id)
+
+                        if (result.isFallback) {
+                            val message = if (result.requestedCategory == "dub") {
+                                "Dub not available, playing sub"
+                            } else {
+                                "Sub not available, playing dub"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
                     } else {
                         streamError = "Could not find stream for episode $prevEp"
                     }
@@ -320,16 +412,30 @@ fun MainScreen(
                     val epInfo = viewModel.getEpisodeInfo(anime.title, nextEp, anime.id)
                     currentEpisodeInfo = epInfo
 
-                    val result = viewModel.getStreamLinkWithCache(anime.title, nextEp, anime.id)
-                    if (result != null) {
-                        currentVideoUrl = result.url
-                        currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
-                        currentSubtitleUrl = result.subtitleUrl
+                    val result = viewModel.tryAllServersWithFallback(anime.title, nextEp, anime.id)
+                    if (result.stream != null) {
+                        currentVideoUrl = result.stream.url
+                        currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                        currentSubtitleUrl = result.stream.subtitleUrl
                         currentEpisode = nextEp
-                        currentServerName = result.serverName
-                        currentCategory = result.category
+                        currentServerName = result.stream.serverName
+                        currentCategory = result.actualCategory
                         currentServerIndex = 0
+
+                        isFallbackStream = result.isFallback
+                        requestedCategory = result.requestedCategory
+                        actualCategory = result.actualCategory
+
                         viewModel.prefetchAdjacentEpisodes(anime.title, nextEp, anime.id)
+
+                        if (result.isFallback) {
+                            val message = if (result.requestedCategory == "dub") {
+                                "Dub not available, playing sub"
+                            } else {
+                                "Sub not available, playing dub"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
                     } else {
                         streamError = "Could not find stream for episode $nextEp"
                     }
@@ -339,10 +445,11 @@ fun MainScreen(
         }
     }
 
-    // Handle server change
+    // Handle server change - FIXED: Don't show fallback toast for manual changes
     fun changeServer(serverName: String, category: String) {
         currentAnime?.let { anime ->
             isLoadingStream = true
+            isManualServerChange = true  // Mark as manual change
             scope.launch {
                 val result = viewModel.getStreamForServer(
                     anime.title,
@@ -358,11 +465,15 @@ fun MainScreen(
                     currentServerName = result.serverName
                     currentCategory = result.category
 
-                    // Update server index
                     val servers = if (category == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
                     currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
+
+                    // Update fallback state when manually changing server - but DON'T show toast
+                    actualCategory = result.category
+                    isFallbackStream = result.category != preferredCategory
                 }
                 isLoadingStream = false
+                isManualServerChange = false
             }
         }
     }
@@ -382,6 +493,119 @@ fun MainScreen(
         }
     }
 
+    // Show Anime Dialog - FIXED: Use simplifyAnimeDetails setting
+    if (showExploreDialog && selectedExploreAnime != null) {
+        if (simplifyAnimeDetails) {
+            // Simple dialog
+            val isAnimeFavorite = localFavorites.contains(selectedExploreAnime!!.id)
+            ExploreAnimeDialog(
+                anime = selectedExploreAnime!!,
+                viewModel = viewModel,
+                isOled = isOled,
+                currentStatus = animeStatusMap[selectedExploreAnime!!.id],
+                showStatusColors = showStatusColors,
+                isFavorite = isAnimeFavorite,
+                canAddFavorite = canAddFavorite || isAnimeFavorite,
+                onToggleFavorite = {
+                    viewModel.toggleLocalFavorite(selectedExploreAnime!!.id)
+                },
+                onDismiss = {
+                    showExploreDialog = false
+                    selectedExploreAnime = null
+                },
+                onAddToPlanning = {
+                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "PLANNING")
+                },
+                onAddToDropped = {
+                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "DROPPED")
+                },
+                onAddToOnHold = {
+                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "PAUSED")
+                },
+                onRemoveFromList = {
+                    viewModel.removeAnimeFromList(selectedExploreAnime!!.id)
+                },
+                onStartWatching = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = selectedExploreAnime!!.id,
+                        title = selectedExploreAnime!!.title,
+                        cover = selectedExploreAnime!!.cover,
+                        banner = selectedExploreAnime!!.banner,
+                        progress = 0,
+                        totalEpisodes = selectedExploreAnime!!.episodes,
+                        latestEpisode = selectedExploreAnime!!.latestEpisode,
+                        status = "",
+                        averageScore = selectedExploreAnime!!.averageScore,
+                        genres = selectedExploreAnime!!.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = selectedExploreAnime!!.year,
+                        malId = selectedExploreAnime!!.malId
+                    )
+                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "CURRENT")
+                    onPlayEpisode(animeMedia, episode)
+                    showExploreDialog = false
+                },
+                isLoggedIn = isLoggedIn
+            )
+        } else {
+            // Detailed dialog with swipe-to-dismiss and description
+            val isAnimeFavorite = localFavorites.contains(selectedExploreAnime!!.id)
+            DetailedAnimeScreen(
+                anime = selectedExploreAnime!!.toDetailedAnimeData(),
+                viewModel = viewModel,
+                isOled = isOled,
+                currentStatus = animeStatusMap[selectedExploreAnime!!.id],
+                showStatusColors = showStatusColors,
+                isFavorite = isAnimeFavorite,
+                canAddFavorite = canAddFavorite || isAnimeFavorite,
+                onDismiss = {
+                    showExploreDialog = false
+                    selectedExploreAnime = null
+                },
+                onPlayEpisode = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = selectedExploreAnime!!.id,
+                        title = selectedExploreAnime!!.title,
+                        cover = selectedExploreAnime!!.cover,
+                        banner = selectedExploreAnime!!.banner,
+                        progress = 0,
+                        totalEpisodes = selectedExploreAnime!!.episodes,
+                        latestEpisode = selectedExploreAnime!!.latestEpisode,
+                        status = "",
+                        averageScore = selectedExploreAnime!!.averageScore,
+                        genres = selectedExploreAnime!!.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = selectedExploreAnime!!.year,
+                        malId = selectedExploreAnime!!.malId
+                    )
+                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "CURRENT")
+                    onPlayEpisode(animeMedia, episode)
+                    showExploreDialog = false
+                },
+                onUpdateStatus = { status ->
+                    if (status != null) {
+                        viewModel.addExploreAnimeToList(selectedExploreAnime!!, status)
+                    }
+                },
+                onRemove = {
+                    viewModel.removeAnimeFromList(selectedExploreAnime!!.id)
+                    // FIXED: Don't close dialog when removing status
+                },
+                onToggleFavorite = {
+                    viewModel.toggleLocalFavorite(selectedExploreAnime!!.id)
+                    if (!isAnimeFavorite) {
+                        Toast.makeText(context, "Added to Favorites (${viewModel.getLocalFavoriteCount()}/10)", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Removed from Favorites", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                isLoggedIn = isLoggedIn
+            )
+        }
+    }
+
     // Show player
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
@@ -391,10 +615,16 @@ fun MainScreen(
                 subtitleUrl = currentSubtitleUrl,
                 currentEpisode = currentEpisode,
                 totalEpisodes = totalEpisodes,
+                animeName = anime.title,
+                animeId = anime.id,
+                malId = anime.malId ?: 0,
                 isLoadingStream = isLoadingStream,
                 episodeInfo = currentEpisodeInfo,
                 currentServerName = currentServerName,
                 currentCategory = currentCategory,
+                isFallbackStream = isFallbackStream && !isManualServerChange,  // Don't show fallback if manual change
+                requestedCategory = requestedCategory,
+                actualCategory = actualCategory,
                 forwardSkipSeconds = forwardSkipSeconds,
                 backwardSkipSeconds = backwardSkipSeconds,
                 onProgressUpdate = { percentage ->
@@ -406,7 +636,10 @@ fun MainScreen(
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
                 onNextEpisode = if (totalEpisodes == 0 || currentEpisode < totalEpisodes) onNextEpisode else null,
                 onServerChange = { server, category -> changeServer(server, category) },
-                onPlaybackError = { onPlaybackError() }
+                onPlaybackError = { onPlaybackError() },
+                autoSkipOpening = autoSkipOpening,
+                autoSkipEnding = autoSkipEnding,
+                autoPlayNextEpisode = autoPlayNextEpisode
             )
         }
 
@@ -423,8 +656,8 @@ fun MainScreen(
                     contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
                     modifier = if (hideNavbarText) Modifier.height(64.dp) else Modifier
                 ) {
-                    val items = listOf("Explore", "Home", "Settings")
-                    val icons = listOf(Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
+                    val items = listOf("Schedule", "Explore", "Home", "Settings")
+                    val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
 
                     items.forEachIndexed { index, item ->
                         NavigationBarItem(
@@ -458,20 +691,28 @@ fun MainScreen(
             }
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // HorizontalPager for swipe navigation
-                // beyondViewportPageCount = 2 keeps all 3 pages pre-composed at all times
                 HorizontalPager(
                     state = pagerState,
                     beyondViewportPageCount = 2
                 ) { page ->
                     val isCurrentPage = pagerState.currentPage == page
                     when (page) {
-                        0 -> ExploreScreen(
+                        0 -> ScheduleScreen(
                             viewModel = viewModel,
-                            onAnimeClick = { },
+                            isOled = isOled,
+                            onPlayEpisode = onPlayEpisode,
+                            onShowAnimeDialog = onShowAnimeDialog
+                        )
+                        1 -> ExploreScreen(
+                            viewModel = viewModel,
+                            onAnimeClick = { anime -> onShowAnimeDialog(anime) },
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
                             showStatusColors = showStatusColors,
+                            simplifyAnimeDetails = simplifyAnimeDetails,
+                            localFavorites = localFavorites,
+                            canAddFavorite = canAddFavorite,
+                            onToggleFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
                             planningToWatch = planningToWatch,
@@ -480,21 +721,32 @@ fun MainScreen(
                             dropped = dropped,
                             isVisible = isCurrentPage
                         )
-                        1 -> HomeScreen(
+                        2 -> HomeScreen(
                             viewModel = viewModel,
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
                             showStatusColors = showStatusColors,
+                            simplifyEpisodeMenu = simplifyEpisodeMenu,
+                            simplifyAnimeDetails = simplifyAnimeDetails,
+                            localFavorites = localFavorites,
+                            canAddFavorite = canAddFavorite,
+                            onToggleFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onPlayEpisode = onPlayEpisode,
-                            onLoginClick = { viewModel.loginWithAniList() }
+                            onLoginClick = { viewModel.loginWithAniList() },
+                            onShowAnimeDialog = onShowAnimeDialog
                         )
-                        2 -> SettingsScreen(
+                        3 -> SettingsScreen(
                             viewModel = viewModel,
                             isOled = isOled,
                             isLoggedIn = isLoggedIn,
                             showStatusColors = showStatusColors,
                             forceHighRefreshRate = forceHighRefreshRate,
-                            hideNavbarText = hideNavbarText
+                            hideNavbarText = hideNavbarText,
+                            autoSkipOpening = autoSkipOpening,
+                            autoSkipEnding = autoSkipEnding,
+                            autoPlayNextEpisode = autoPlayNextEpisode,
+                            disableMaterialColors = disableMaterialColors,
+                            preferredCategory = preferredCategory
                         )
                     }
                 }
@@ -513,8 +765,13 @@ fun MainScreen(
                     }
                 }
 
-                // Error dialog
+                // Error dialog - auto-dismiss after 3 seconds
                 streamError?.let { error ->
+                    LaunchedEffect(error) {
+                        delay(3000)
+                        streamError = null
+                    }
+
                     AlertDialog(
                         onDismissRequest = { streamError = null },
                         title = { Text("Stream Error") },

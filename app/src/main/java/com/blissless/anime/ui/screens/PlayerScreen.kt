@@ -6,13 +6,13 @@ import android.os.Build
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -43,12 +47,19 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.core.net.toUri
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.text.font.FontWeight
 import java.util.Locale
 import com.blissless.anime.api.EpisodeStreams
-import com.blissless.anime.api.ServerInfo
+import com.blissless.anime.api.AnimeSkipService
+import com.blissless.anime.api.EpisodeTimestamps
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -58,12 +69,23 @@ fun PlayerScreen(
     subtitleUrl: String? = null,
     currentEpisode: Int = 1,
     totalEpisodes: Int = 0,
+    animeName: String = "",
+    animeId: Int = 0,
+    malId: Int = 0,
+    episodeLength: Int = 1440,
     isLoadingStream: Boolean = false,
     episodeInfo: EpisodeStreams? = null,
     currentServerName: String = "",
     currentCategory: String = "sub",
+    // Fallback info
+    isFallbackStream: Boolean = false,
+    requestedCategory: String = "sub",
+    actualCategory: String = "sub",
     forwardSkipSeconds: Int = 10,
     backwardSkipSeconds: Int = 10,
+    autoSkipOpening: Boolean = false,
+    autoSkipEnding: Boolean = false,
+    autoPlayNextEpisode: Boolean = false,
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
     onNextEpisode: (() -> Unit)? = null,
@@ -76,7 +98,6 @@ fun PlayerScreen(
     var playbackError by remember { mutableStateOf<String?>(null) }
     var hasError by remember { mutableStateOf(false) }
 
-    // Resize mode state: 0 = FIT, 1 = FILL, 2 = 16:9
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to "Fit",
@@ -84,18 +105,48 @@ fun PlayerScreen(
         AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to "16:9"
     )
 
-    // Controls visibility state
     var showControls by remember { mutableStateOf(true) }
-
-    // Play state
     var isPlaying by remember { mutableStateOf(true) }
-
-    // Progress state
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
-
-    // Server selection state
     var showServerMenu by remember { mutableStateOf(false) }
+
+    var sliderValue by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    // Timestamps for auto-skip - key on videoUrl to ensure reset when video changes
+    val animeSkipService = remember { AnimeSkipService() }
+
+    // All timestamp-related states keyed on videoUrl to ensure proper reset on episode change
+    var episodeTimestamps by remember(videoUrl) { mutableStateOf<EpisodeTimestamps?>(null) }
+    var isFetchingTimestamps by remember(videoUrl) { mutableStateOf(false) }
+    var hasSkippedIntro by remember(videoUrl) { mutableStateOf(false) }
+    var hasSkippedOutro by remember(videoUrl) { mutableStateOf(false) }
+    var showSkipOpeningButton by remember(videoUrl) { mutableStateOf(false) }
+    var showSkipEndingButton by remember(videoUrl) { mutableStateOf(false) }
+    var hasFetchedTimestamps by remember(videoUrl) { mutableStateOf(false) }
+    var actualEpisodeLength by remember(videoUrl) { mutableStateOf<Int?>(null) }
+
+    val scope = rememberCoroutineScope()
+
+    // Show fallback toast once when stream starts with fallback
+    var hasShownFallbackToast by remember(videoUrl) { mutableStateOf(false) }
+
+    // Combined timestamps
+    val effectiveTimestamps by remember(episodeTimestamps) {
+        derivedStateOf {
+            episodeTimestamps ?: EpisodeTimestamps(
+                episodeNumber = currentEpisode,
+                introStart = null,
+                introEnd = null,
+                creditsStart = null,
+                creditsEnd = null,
+                recapStart = null,
+                recapEnd = null,
+                allTimestamps = emptyList()
+            )
+        }
+    }
 
     // Fullscreen & Orientation Logic
     LaunchedEffect(Unit) {
@@ -143,7 +194,6 @@ fun PlayerScreen(
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                         hasError = true
                         playbackError = error.message ?: "Unknown playback error"
-                        // Notify parent to try next server
                         onPlaybackError?.invoke()
                     }
 
@@ -151,6 +201,12 @@ fun PlayerScreen(
                         if (playbackState == Player.STATE_READY) {
                             hasError = false
                             playbackError = null
+                        }
+
+                        if (playbackState == Player.STATE_ENDED) {
+                            if (autoPlayNextEpisode && onNextEpisode != null) {
+                                onNextEpisode.invoke()
+                            }
                         }
                     }
                 })
@@ -179,27 +235,129 @@ fun PlayerScreen(
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
 
-        // Reset progress tracking for new episode
         hasTriggeredProgressUpdate = false
         currentPosition = 0L
+        sliderValue = 0f
     }
 
-    // Helper function to seek
+    // Show fallback toast when stream starts
+    LaunchedEffect(videoUrl, isFallbackStream) {
+        if (isFallbackStream && !hasShownFallbackToast && videoUrl.isNotEmpty()) {
+            hasShownFallbackToast = true
+            val message = if (requestedCategory == "dub") {
+                "Dub not available, playing sub"
+            } else {
+                "Sub not available, playing dub"
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     fun seekBy(milliseconds: Long) {
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
     }
 
-    // Update progress
-    LaunchedEffect(exoPlayer) {
+    // Update progress and capture actual duration
+    LaunchedEffect(exoPlayer, videoUrl) {
         while (true) {
             delay(500)
-            currentPosition = exoPlayer.currentPosition
-            duration = exoPlayer.duration
+            if (!isDragging) {
+                currentPosition = exoPlayer.currentPosition
+                duration = exoPlayer.duration
+                if (duration > 0) {
+                    sliderValue = currentPosition.toFloat()
+
+                    // Capture actual episode length once video is fully loaded
+                    // Check STATE_READY to ensure we're capturing the correct video's duration
+                    if (actualEpisodeLength == null &&
+                        duration > 60000 &&
+                        exoPlayer.playbackState == Player.STATE_READY) {
+                        actualEpisodeLength = (duration / 1000).toInt()
+                    }
+                }
+            }
         }
     }
 
-    // Progress monitoring effect
+    // Fetch timestamps ONLY after we have the actual video duration
+    LaunchedEffect(actualEpisodeLength, videoUrl, malId) {
+        val epLength = actualEpisodeLength
+        if (epLength == null || hasFetchedTimestamps) {
+            return@LaunchedEffect
+        }
+
+        isFetchingTimestamps = true
+
+        withContext(Dispatchers.IO) {
+            try {
+                var timestamps: EpisodeTimestamps? = null
+
+                // Try with MAL ID first
+                if (malId > 0) {
+                    timestamps = animeSkipService.getSkipTimestamps(
+                        malId = malId,
+                        episodeNumber = currentEpisode,
+                        episodeLength = epLength
+                    )
+                }
+
+                // Fallback: search by anime name
+                if (timestamps == null && animeName.isNotEmpty()) {
+                    timestamps = animeSkipService.getSkipTimestampsByName(
+                        animeName = animeName,
+                        episodeNumber = currentEpisode,
+                        episodeLength = epLength
+                    )
+                }
+
+                episodeTimestamps = timestamps
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        isFetchingTimestamps = false
+        hasFetchedTimestamps = true
+    }
+
+    // Auto-skip and skip button logic
+    LaunchedEffect(currentPosition, effectiveTimestamps) {
+        val ts = effectiveTimestamps
+        val posSeconds = currentPosition / 1000
+
+        // Check intro section - show button based on position only
+        if (ts.introStart != null && ts.introEnd != null) {
+            val isInIntro = posSeconds >= ts.introStart && posSeconds < ts.introEnd
+
+            if (isInIntro) {
+                if (autoSkipOpening && !hasSkippedIntro) {
+                    exoPlayer.seekTo(ts.introEnd * 1000)
+                    hasSkippedIntro = true
+                }
+                showSkipOpeningButton = !autoSkipOpening
+            } else {
+                showSkipOpeningButton = false
+            }
+        }
+
+        // Check credits section - show button based on position only
+        if (ts.creditsStart != null && onNextEpisode != null) {
+            val isInCredits = posSeconds >= ts.creditsStart
+
+            if (isInCredits) {
+                if (autoSkipEnding && !hasSkippedOutro) {
+                    onNextEpisode.invoke()
+                    hasSkippedOutro = true
+                }
+                showSkipEndingButton = !autoSkipEnding
+            } else {
+                showSkipEndingButton = false
+            }
+        }
+    }
+
+    // Progress monitoring
     LaunchedEffect(exoPlayer, hasTriggeredProgressUpdate) {
         while (!hasTriggeredProgressUpdate) {
             delay(1000)
@@ -210,9 +368,9 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-hide controls after 3 seconds
-    LaunchedEffect(showControls) {
-        if (showControls) {
+    // Auto-hide controls
+    LaunchedEffect(showControls, isPlaying) {
+        if (showControls && isPlaying) {
             delay(3000)
             showControls = false
         }
@@ -222,7 +380,6 @@ fun PlayerScreen(
         onDispose { exoPlayer.release() }
     }
 
-    // Format time helper with Locale.US
     fun formatTime(ms: Long): String {
         val seconds = (ms / 1000) % 60
         val minutes = (ms / (1000 * 60)) % 60
@@ -234,16 +391,26 @@ fun PlayerScreen(
         }
     }
 
-    // Get available servers
     val subServers = episodeInfo?.subServers ?: emptyList()
     val dubServers = episodeInfo?.dubServers ?: emptyList()
+
+    // Progress bar marker positions
+    val introStartRatio = if (duration > 0 && effectiveTimestamps.introStart != null) {
+        (effectiveTimestamps.introStart!! * 1000).toFloat() / duration.toFloat()
+    } else null
+    val introEndRatio = if (duration > 0 && effectiveTimestamps.introEnd != null) {
+        (effectiveTimestamps.introEnd!! * 1000).toFloat() / duration.toFloat()
+    } else null
+    val creditsStartRatio = if (duration > 0 && effectiveTimestamps.creditsStart != null) {
+        (effectiveTimestamps.creditsStart!! * 1000).toFloat() / duration.toFloat()
+    } else null
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Left side - double tap to rewind
+        // Touch areas
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -252,14 +419,11 @@ fun PlayerScreen(
                 .pointerInput(backwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { showControls = !showControls },
-                        onDoubleTap = {
-                            seekBy(-(backwardSkipSeconds * 1000L))
-                        }
+                        onDoubleTap = { seekBy(-(backwardSkipSeconds * 1000L)) }
                     )
                 }
         )
 
-        // Center - single tap to toggle controls
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -272,7 +436,6 @@ fun PlayerScreen(
                 }
         )
 
-        // Right side - double tap to forward
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -281,9 +444,7 @@ fun PlayerScreen(
                 .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { showControls = !showControls },
-                        onDoubleTap = {
-                            seekBy(forwardSkipSeconds * 1000L)
-                        }
+                        onDoubleTap = { seekBy(forwardSkipSeconds * 1000L) }
                     )
                 }
         )
@@ -293,12 +454,10 @@ fun PlayerScreen(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-
                     resizeMode = resizeModes[resizeModeIndex].first
 
                     val style = CaptionStyleCompat(
@@ -313,15 +472,55 @@ fun PlayerScreen(
                         setStyle(style)
                         setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
                     }
-
                     useController = false
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            update = { view ->
-                view.resizeMode = resizeModes[resizeModeIndex].first
-            }
+            update = { view -> view.resizeMode = resizeModes[resizeModeIndex].first }
         )
+
+        // Skip Opening Button - always show when in intro section
+        AnimatedVisibility(
+            visible = showSkipOpeningButton,
+            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+            exit = fadeOut() + scaleOut(targetScale = 0.8f),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp)
+        ) {
+            SkipIconButton(
+                icon = Icons.Default.FastForward,
+                label = "Skip\nOpening",
+                backgroundColor = Color.Black.copy(alpha = 0.6f),
+                iconTint = Color.White,
+                onClick = {
+                    val ts = effectiveTimestamps
+                    if (ts.introEnd != null) {
+                        exoPlayer.seekTo(ts.introEnd * 1000)
+                    }
+                }
+            )
+        }
+
+        // Skip Ending Button - always show when in credits section
+        AnimatedVisibility(
+            visible = showSkipEndingButton,
+            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+            exit = fadeOut() + scaleOut(targetScale = 0.8f),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp)
+        ) {
+            SkipIconButton(
+                icon = Icons.Default.SkipNext,
+                label = "Next\nEpisode",
+                backgroundColor = Color.Black.copy(alpha = 0.6f),
+                iconTint = Color.White,
+                onClick = {
+                    onNextEpisode?.invoke()
+                }
+            )
+        }
 
         // Controls overlay
         AnimatedVisibility(
@@ -331,94 +530,101 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Top bar - Episode info and controls
+                // Top bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.TopCenter)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.7f),
-                                    Color.Transparent
-                                )
+                                colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)
                             )
                         )
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Episode info
-                    Text(
-                        text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Column {
+                        if (animeName.isNotEmpty()) {
+                            Text(
+                                text = animeName,
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
+                                color = Color.White.copy(alpha = 0.8f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            // Show category badge - use theme colors for fallback
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (isFallbackStream)
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
+                                else
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            ) {
+                                Text(
+                                    text = actualCategory.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isFallbackStream)
+                                        MaterialTheme.colorScheme.secondary
+                                    else
+                                        MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            if (isFetchingTimestamps) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Server selection button
                         if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
                             Box {
                                 IconButton(
                                     onClick = { showServerMenu = true },
-                                    modifier = Modifier
-                                        .background(
-                                            Color.Black.copy(alpha = 0.5f),
-                                            shape = MaterialTheme.shapes.small
-                                        )
+                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = "Server Selection",
-                                        tint = Color.White
-                                    )
+                                    Icon(Icons.Default.Settings, "Server Selection", tint = Color.White)
                                 }
 
-                                // Server dropdown
                                 DropdownMenu(
                                     expanded = showServerMenu,
                                     onDismissRequest = { showServerMenu = false },
-                                    modifier = Modifier
-                                        .background(Color(0xFF1A1A1A))
-                                        .width(180.dp)
+                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                 ) {
-                                    // SUB servers
                                     if (subServers.isNotEmpty()) {
-                                        Text(
-                                            "SUB",
-                                            color = Color.Gray,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
+                                        Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                                         subServers.forEach { server ->
                                             ServerMenuItem(
                                                 serverName = server.name,
                                                 isSelected = server.name == currentServerName && currentCategory == "sub",
-                                                onClick = {
-                                                    onServerChange(server.name, "sub")
-                                                    showServerMenu = false
-                                                }
+                                                onClick = { onServerChange(server.name, "sub"); showServerMenu = false }
                                             )
                                         }
                                     }
-
-                                    // DUB servers
                                     if (dubServers.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            "DUB",
-                                            color = Color.Gray,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
+                                        Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                                         dubServers.forEach { server ->
                                             ServerMenuItem(
                                                 serverName = server.name,
                                                 isSelected = server.name == currentServerName && currentCategory == "dub",
-                                                onClick = {
-                                                    onServerChange(server.name, "dub")
-                                                    showServerMenu = false
-                                                }
+                                                onClick = { onServerChange(server.name, "dub"); showServerMenu = false }
                                             )
                                         }
                                     }
@@ -426,61 +632,32 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Resize button
                         IconButton(
-                            onClick = {
-                                resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
-                            },
-                            modifier = Modifier
-                                .background(
-                                    Color.Black.copy(alpha = 0.5f),
-                                    shape = MaterialTheme.shapes.small
-                                )
+                            onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
+                            modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AspectRatio,
-                                contentDescription = "Change aspect ratio",
-                                tint = Color.White
-                            )
+                            Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
                         }
                     }
                 }
 
-                // Center controls - Previous, Play/Pause, Next
+                // Center controls
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalArrangement = Arrangement.spacedBy(32.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Previous episode button
                     IconButton(
                         onClick = { onPreviousEpisode?.invoke() },
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .alpha(if (onPreviousEpisode != null && !isLoadingStream) 1f else 0.3f),
+                        modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream) 1f else 0.3f),
                         enabled = onPreviousEpisode != null && !isLoadingStream
                     ) {
-                        Icon(
-                            Icons.Default.SkipPrevious,
-                            contentDescription = "Previous Episode",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                     }
 
-                    // Play/Pause button
                     IconButton(
-                        onClick = {
-                            if (isPlaying) {
-                                exoPlayer.pause()
-                            } else {
-                                exoPlayer.play()
-                            }
-                        },
-                        modifier = Modifier
-                            .size(72.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
+                        modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -490,130 +667,107 @@ fun PlayerScreen(
                         )
                     }
 
-                    // Next episode button
                     IconButton(
                         onClick = { onNextEpisode?.invoke() },
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .alpha(if (onNextEpisode != null && !isLoadingStream) 1f else 0.3f),
+                        modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream) 1f else 0.3f),
                         enabled = onNextEpisode != null && !isLoadingStream
                     ) {
-                        Icon(
-                            Icons.Default.SkipNext,
-                            contentDescription = "Next Episode",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                     }
                 }
 
-                // Loading indicator when switching episodes
                 if (isLoadingStream) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .offset(y = 64.dp),
-                        color = Color.White
-                    )
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp), color = Color.White)
                 }
 
                 // Error indicator
                 if (hasError && playbackError != null) {
                     Card(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(16.dp),
+                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.Error,
-                                contentDescription = null,
-                                tint = Color.Red,
-                                modifier = Modifier.size(32.dp)
-                            )
+                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Error, null, tint = Color.Red, modifier = Modifier.size(32.dp))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Stream Error",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                playbackError ?: "Unknown error",
-                                color = Color.Gray,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
+                            Text("Stream Error", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                            Text(playbackError ?: "Unknown error", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
                             if (onServerChange != null && subServers.size > 1) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = {
-                                        // Find current server index and try next
                                         val currentIndex = subServers.indexOfFirst { it.name == currentServerName }
                                         val nextIndex = (currentIndex + 1) % subServers.size
                                         onServerChange(subServers[nextIndex].name, currentCategory)
                                     },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    )
-                                ) {
-                                    Text("Try Next Server")
-                                }
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) { Text("Try Next Server") }
                             }
                         }
                     }
                 }
 
-                // Bottom controls - Progress bar
+                // Bottom controls
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.7f)
-                                )
-                            )
-                        )
+                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    // Progress slider
-                    Slider(
-                        value = currentPosition.toFloat(),
-                        valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
-                        onValueChange = { newPosition ->
-                            exoPlayer.seekTo(newPosition.toLong())
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                        )
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
+                        Slider(
+                            value = sliderValue,
+                            valueRange = 0f..(if (duration > 0) duration.toFloat() else 1000f),
+                            onValueChange = { newValue ->
+                                isDragging = true
+                                sliderValue = newValue
+                                currentPosition = newValue.toLong()
+                            },
+                            onValueChangeFinished = {
+                                isDragging = false
+                                exoPlayer.seekTo(sliderValue.toLong())
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .drawBehind {
+                                    val sliderWidth = size.width
+                                    val trackHeight = 12.dp.toPx()
+                                    val trackTop = (size.height - trackHeight) / 2f
+                                    val cornerRadius = 6.dp.toPx()
 
-                    // Time display
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = formatTime(currentPosition),
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium
+                                    if (introStartRatio != null && introEndRatio != null) {
+                                        val startX = introStartRatio * sliderWidth
+                                        val endX = introEndRatio * sliderWidth
+                                        drawRoundRect(
+                                            color = Color(0xFF505050),
+                                            topLeft = Offset(startX, trackTop),
+                                            size = Size(endX - startX, trackHeight),
+                                            cornerRadius = CornerRadius(if (introStartRatio < 0.05f) cornerRadius else 2.dp.toPx())
+                                        )
+                                    }
+
+                                    if (creditsStartRatio != null) {
+                                        val startX = creditsStartRatio * sliderWidth
+                                        drawRoundRect(
+                                            color = Color(0xFF505050),
+                                            topLeft = Offset(startX, trackTop),
+                                            size = Size(sliderWidth - startX, trackHeight),
+                                            cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius)
+                                        )
+                                    }
+                                },
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color.White,
+                                activeTrackColor = Color.White,
+                                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                            )
                         )
-                        Text(
-                            text = if (duration > 0) formatTime(duration) else "--:--",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium
-                        )
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(formatTime(currentPosition), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -622,32 +776,36 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun ServerMenuItem(
-    serverName: String,
-    isSelected: Boolean,
+private fun SkipIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    backgroundColor: Color,
+    iconTint: Color,
     onClick: () -> Unit
 ) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(48.dp).background(backgroundColor, shape = MaterialTheme.shapes.small)
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(28.dp))
+        }
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+@Composable
+private fun ServerMenuItem(serverName: String, isSelected: Boolean, onClick: () -> Unit) {
     DropdownMenuItem(
         text = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (isSelected) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Text(
-                    serverName,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Text(serverName, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White)
             }
         },
-        onClick = onClick,
-        modifier = Modifier.background(if (isSelected) Color(0xFF2A2A2A) else Color.Transparent)
+        onClick = onClick
     )
 }
