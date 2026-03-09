@@ -1,27 +1,28 @@
 package com.blissless.anime.ui.screens
 
 import android.widget.Toast
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -30,25 +31,24 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.blissless.anime.ExploreAnime
 import com.blissless.anime.MainViewModel
+import kotlinx.coroutines.launch
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class DetailedAnimeData(
@@ -83,11 +83,12 @@ data class DetailedAnimeData(
     val trailerUrl: String? = null,
     val recommendations: List<ExploreAnime> = emptyList(),
     val latestEpisode: Int? = null,
-    val malId: Int? = null
+    val malId: Int? = null,
 )
 
 data class TagData(val name: String, val rank: Int? = null, val isMediaSpoiler: Boolean = false)
 data class StudioData(val id: Int, val name: String, val isAnimationStudio: Boolean = true)
+
 
 fun ExploreAnime.toDetailedAnimeData(): DetailedAnimeData = DetailedAnimeData(
     id = this.id, title = this.title, cover = this.cover, banner = this.banner,
@@ -102,7 +103,6 @@ fun DetailedAnimeScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     currentStatus: String? = null,
-    showStatusColors: Boolean = true,
     isLoggedIn: Boolean = false,
     isFavorite: Boolean = false,
     canAddFavorite: Boolean = true,
@@ -110,7 +110,7 @@ fun DetailedAnimeScreen(
     onPlayEpisode: (Int) -> Unit = {},
     onUpdateStatus: (String?) -> Unit = {},
     onRemove: () -> Unit = {},
-    onToggleFavorite: () -> Unit = {}
+    onToggleFavorite: (DetailedAnimeData) -> Unit = {},
 ) {
     val context = LocalContext.current
     var showFullDescription by remember { mutableStateOf(false) }
@@ -126,55 +126,19 @@ fun DetailedAnimeScreen(
 
     val displayData = detailedData ?: anime
 
-    // Get screen dimensions for dismiss calculations
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val windowInfo = LocalWindowInfo.current
+    val screenHeightPx = windowInfo.containerSize.height.toFloat()
     val dismissThreshold = screenHeightPx / 2f
-    val velocityThreshold = 500f // pixels per second - fast swipe detection
 
-    // Swipe state - like iOS initialTouchPoint
-    var offsetY by remember { mutableFloatStateOf(0f) }
-    var isDismissing by remember { mutableStateOf(false) }
-    var isUserDragging by remember { mutableStateOf(false) }
+    val offsetY = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
 
-    // Velocity tracker for fast swipe detection
-    val velocityTracker = remember { VelocityTracker() }
-
-    // LazyList state
     val lazyListState = rememberLazyListState()
 
-    // Check if the LazyColumn is at the very top
     val isAtTop by remember {
         derivedStateOf {
             lazyListState.firstVisibleItemIndex == 0 &&
                     lazyListState.firstVisibleItemScrollOffset == 0
-        }
-    }
-
-    // Animation for offset - smooth snap back or slide out
-    val animatedOffsetY by animateFloatAsState(
-        targetValue = if (isDismissing) screenHeightPx else offsetY,
-        animationSpec = if (isDismissing) {
-            tween(250, easing = FastOutSlowInEasing)
-        } else {
-            spring(
-                stiffness = Spring.StiffnessMediumLow,
-                dampingRatio = Spring.DampingRatioMediumBouncy
-            )
-        },
-        label = "offsetY",
-        finishedListener = {
-            if (isDismissing) {
-                onDismiss()
-            }
-        }
-    )
-
-    // Reset offsetY when animation snaps back to 0
-    LaunchedEffect(animatedOffsetY, isUserDragging) {
-        if (animatedOffsetY == 0f && offsetY != 0f && !isDismissing && !isUserDragging) {
-            offsetY = 0f
         }
     }
 
@@ -198,24 +162,53 @@ fun DetailedAnimeScreen(
         else -> displayData.format ?: "Unknown"
     }
 
-    // Nested scroll connection - handles scroll from LazyColumn
-    // This is like the iOS "disable scrollView while dragging main view" fix
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Only intercept when at top, not dismissing, and scrolling down (positive y)
-                if (isAtTop && available.y > 0 && !isDismissing && !isUserDragging) {
-                    val newOffset = (offsetY + available.y).coerceAtLeast(0f)
-                    offsetY = newOffset
+                val currentOffset = offsetY.value
 
-                    // Check if we should dismiss based on position
-                    if (offsetY > dismissThreshold) {
-                        isDismissing = true
+                if (currentOffset > 0) {
+                    if (available.y < 0) {
+                        scope.launch {
+                            offsetY.snapTo((currentOffset + available.y).coerceAtLeast(0f))
+                        }
+                        return available
                     }
-
-                    return available // Consume the scroll
+                    if (available.y > 0) {
+                        scope.launch {
+                            offsetY.snapTo(currentOffset + available.y)
+                        }
+                        return available
+                    }
                 }
-                return Offset.Zero // Don't consume
+
+                if (isAtTop && currentOffset == 0f && available.y > 0) {
+                    scope.launch { offsetY.snapTo(available.y) }
+                    return available
+                }
+
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                val currentOffset = offsetY.value
+
+                if (currentOffset == 0f) return Velocity.Zero
+
+                val shouldDismiss = currentOffset > dismissThreshold || available.y > 2000f
+
+                if (shouldDismiss) {
+                    scope.launch {
+                        offsetY.animateTo(screenHeightPx, tween(250, easing = FastOutSlowInEasing))
+                        onDismiss()
+                    }
+                } else {
+                    scope.launch {
+                        offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                    }
+                }
+
+                return available
             }
         }
     }
@@ -231,62 +224,10 @@ fun DetailedAnimeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, animatedOffsetY.roundToInt()) }
+                .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
                 .nestedScroll(nestedScrollConnection)
-                .pointerInput(Unit) {
-                    // iOS-style pan gesture handler
-                    detectVerticalDragGestures(
-                        onDragStart = {
-                            // 1. Store the starting position (like iOS .began)
-                            isUserDragging = true
-                            velocityTracker.resetTracking()
-                        },
-                        onDragEnd = {
-                            // 3. Decide whether to dismiss or snap back (like iOS .ended)
-                            isUserDragging = false
-
-                            // Calculate velocity
-                            val velocity = velocityTracker.calculateVelocity().y
-                            velocityTracker.resetTracking()
-
-                            // Logic: Dismiss if dragged past half screen OR swiped down fast
-                            // This matches the iOS: if self.view.frame.origin.y > threshold || velocity.y > 500
-                            if (offsetY > dismissThreshold || velocity > velocityThreshold) {
-                                // Dismiss the view
-                                isDismissing = true
-                            } else {
-                                // FIX FOR "GETTING STUCK": Snap back to the top (y = 0)
-                                offsetY = 0f
-                            }
-                        },
-                        onDragCancel = {
-                            isUserDragging = false
-                            velocityTracker.resetTracking()
-                            // Snap back on cancel
-                            offsetY = 0f
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            // 2. Move the view with the finger (like iOS .changed)
-                            if (!isDismissing) {
-                                // Track velocity
-                                velocityTracker.addPointerInputChange(change)
-
-                                // Calculate new position
-                                val newOffset = offsetY + dragAmount
-
-                                // Constraint: Don't let the view drag higher than the top (y < 0)
-                                // This matches iOS: if newY >= 0 { self.view.frame.origin.y = newY }
-                                offsetY = newOffset.coerceAtLeast(0f)
-
-                                // Consume the gesture to prevent it from passing through
-                                change.consume()
-                            }
-                        }
-                    )
-                }
         ) {
-            // Banner
             if (!displayData.banner.isNullOrEmpty() || displayData.cover.isNotEmpty()) {
                 AsyncImage(
                     model = displayData.banner ?: displayData.cover,
@@ -303,7 +244,6 @@ fun DetailedAnimeScreen(
                 )
             }
 
-            // Close button
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier.padding(top = 40.dp, end = 8.dp).align(Alignment.TopEnd)
@@ -312,7 +252,6 @@ fun DetailedAnimeScreen(
                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(28.dp))
             }
 
-            // Drag indicator - shows user they can swipe to dismiss
             Box(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
                     .width(40.dp).height(4.dp)
@@ -331,7 +270,6 @@ fun DetailedAnimeScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 200.dp, bottom = 24.dp)
             ) {
-                // Header
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-40).dp),
@@ -423,27 +361,31 @@ fun DetailedAnimeScreen(
                     }
                 }
 
-                // Buttons
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
-                            onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Start Watching", fontWeight = FontWeight.Medium)
-                        }
                         if (isLoggedIn) {
+                            Button(
+                                onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Start Watching", fontWeight = FontWeight.Medium)
+                            }
+
                             OutlinedButton(
                                 onClick = {
-                                    onToggleFavorite()
-                                    Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
+                                    if (!isFavorite && !canAddFavorite) {
+                                        Toast.makeText(context, "Maximum 10 favorites! Remove one first.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        onToggleFavorite(displayData)
+                                        Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isFavorite) Color(0xFFFFD700) else MaterialTheme.colorScheme.primary),
@@ -454,11 +396,23 @@ fun DetailedAnimeScreen(
                                     tint = if (isFavorite) Color(0xFFFFD700) else MaterialTheme.colorScheme.primary
                                 )
                             }
+                        } else {
+                            Button(
+                                onClick = { },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = false,
+                                colors = ButtonDefaults.buttonColors(
+                                    disabledContainerColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
+                                    disabledContentColor = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Text("Log in to AniList first", fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
                 }
 
-                // Status chips
                 if (isLoggedIn) {
                     item {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -467,23 +421,72 @@ fun DetailedAnimeScreen(
                                 color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.height(8.dp))
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                item { StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), currentStatus == "CURRENT") { if (currentStatus == "CURRENT") { onRemove(); Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show() } else onUpdateStatus("CURRENT") } }
-                                item { StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), currentStatus == "PLANNING") { if (currentStatus == "PLANNING") { onRemove(); Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show() } else onUpdateStatus("PLANNING") } }
-                                item { StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), currentStatus == "COMPLETED") { if (currentStatus == "COMPLETED") { onRemove(); Toast.makeText(context, "Removed from Completed", Toast.LENGTH_SHORT).show() } else onUpdateStatus("COMPLETED") } }
-                                item { StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), currentStatus == "PAUSED") { if (currentStatus == "PAUSED") { onRemove(); Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show() } else onUpdateStatus("PAUSED") } }
-                                item { StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), currentStatus == "DROPPED") { if (currentStatus == "DROPPED") { onRemove(); Toast.makeText(context, "Removed from Dropped", Toast.LENGTH_SHORT).show() } else onUpdateStatus("DROPPED") } }
+                                item {
+                                    StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), currentStatus == "CURRENT") {
+                                        if (currentStatus == "CURRENT") {
+                                            onRemove()
+                                            Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onUpdateStatus("CURRENT")
+                                            Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                item {
+                                    StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), currentStatus == "PLANNING") {
+                                        if (currentStatus == "PLANNING") {
+                                            onRemove()
+                                            Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onUpdateStatus("PLANNING")
+                                            Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                item {
+                                    StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), currentStatus == "COMPLETED") {
+                                        if (currentStatus == "COMPLETED") {
+                                            onRemove()
+                                            Toast.makeText(context, "Removed from Completed", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onUpdateStatus("COMPLETED")
+                                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                item {
+                                    StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), currentStatus == "PAUSED") {
+                                        if (currentStatus == "PAUSED") {
+                                            onRemove()
+                                            Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onUpdateStatus("PAUSED")
+                                            Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                item {
+                                    StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), currentStatus == "DROPPED") {
+                                        if (currentStatus == "DROPPED") {
+                                            onRemove()
+                                            Toast.makeText(context, "Removed from Dropped", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onUpdateStatus("DROPPED")
+                                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // Info
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
-                    InfoSection("Information", isOled) {
+                    InfoSection(isOled) {
                         InfoGrid(listOfNotNull(
                             if (displayData.episodes > 0) "Episodes" to "${displayData.episodes}" else null,
-                            displayData.duration?.let { "Duration" to "${it} min per ep" },
+                            displayData.duration?.let { "Duration" to "$it min per ep" },
                             if (displayData.format != null) "Format" to formatDisplay else null,
                             if (displayData.status != null) "Status" to statusDisplay else null,
                             if (displayData.season != null && displayData.year != null) "Season" to "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}" else null,
@@ -496,7 +499,6 @@ fun DetailedAnimeScreen(
                     }
                 }
 
-                // Genres
                 if (displayData.genres.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
@@ -516,7 +518,6 @@ fun DetailedAnimeScreen(
                     }
                 }
 
-                // Synopsis
                 if (!displayData.description.isNullOrEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
@@ -539,11 +540,15 @@ fun DetailedAnimeScreen(
                     }
                 }
 
+
+
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
     }
 }
+
+
 
 @Composable
 private fun StatusChip(label: String, icon: ImageVector, color: Color, selected: Boolean, onClick: () -> Unit) {
@@ -556,9 +561,9 @@ private fun StatusChip(label: String, icon: ImageVector, color: Color, selected:
 }
 
 @Composable
-private fun InfoSection(title: String, isOled: Boolean, content: @Composable ColumnScope.() -> Unit) {
+private fun InfoSection(isOled: Boolean, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+        Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
             color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
         Spacer(modifier = Modifier.height(12.dp))
         content()

@@ -63,6 +63,7 @@ private sealed class TimelineItem {
 fun ScheduleScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
+    isVisible: Boolean = false, // Added parameter
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     onShowAnimeDialog: (ExploreAnime) -> Unit = {}
 ) {
@@ -319,6 +320,17 @@ fun ScheduleScreen(
         if (isProgrammaticScroll) {
             kotlinx.coroutines.delay(300)
             isProgrammaticScroll = false
+        }
+    }
+
+    // **NEW**: Automatically scroll to NOW indicator when screen becomes visible or data loads
+    LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay) {
+        if (isVisible) {
+            val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
+            if (targetIndex >= 0) {
+                isProgrammaticScroll = true
+                listState.animateScrollToItem(targetIndex, scrollOffset = -100)
+            }
         }
     }
 

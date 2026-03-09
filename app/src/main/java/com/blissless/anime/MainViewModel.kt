@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import com.blissless.anime.api.AniwatchService
+import com.blissless.anime.api.AniwatchAnimeInfo
 import java.util.Calendar
 import com.blissless.anime.api.AniwatchStreamResult
 import com.blissless.anime.api.EpisodeStreams
@@ -31,6 +33,7 @@ import com.blissless.anime.ui.screens.DetailedAnimeData
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Deferred
+import java.net.URLEncoder
 
 private val DayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
@@ -48,6 +51,12 @@ data class StreamFetchResult(
 data class GraphQLCacheEntry(
     val response: String,
     val timestamp: Long
+)
+
+// Playback position cache entry
+@Serializable
+data class PlaybackPositionCache(
+    val positions: Map<String, Long>
 )
 
 class MainViewModel : ViewModel() {
@@ -76,6 +85,7 @@ class MainViewModel : ViewModel() {
         private const val CACHE_STREAM_DATA = "cache_stream_data"
         private const val CACHE_AIRING_TIME = "cache_airing_time"
         private const val CACHE_AIRING_DATA = "cache_airing_data"
+        private const val CACHE_PLAYBACK_POSITIONS = "cache_playback_positions"
     }
 
     private val json = Json {
@@ -87,14 +97,8 @@ class MainViewModel : ViewModel() {
     // ============================================
     // STRATEGY 1: Dual Client ID Rotation
     // ============================================
-    // Atomic counter for round-robin client ID selection
-    // This effectively doubles the rate limit from 90 to 180 requests per minute
     private val clientIdCounter = AtomicInteger(0)
 
-    /**
-     * Get the next client ID in rotation.
-     * Alternates between CLIENT_ID and CLIENT_ID2 for each request.
-     */
     private fun getNextClientId(): String {
         val index = clientIdCounter.getAndIncrement() % 2
         val clientId = if (index == 0) CLIENT_ID else CLIENT_ID2
@@ -105,12 +109,8 @@ class MainViewModel : ViewModel() {
     // ============================================
     // STRATEGY 3: In-Memory GraphQL Request Cache
     // ============================================
-    // Cache for GraphQL responses to avoid duplicate requests
     private val graphqlCache = ConcurrentHashMap<String, GraphQLCacheEntry>()
 
-    /**
-     * Generate a cache key from query and variables
-     */
     private fun generateCacheKey(query: String, variables: Map<String, Any?>): String {
         val varsStr = variables.entries
             .sortedBy { it.key }
@@ -118,9 +118,6 @@ class MainViewModel : ViewModel() {
         return "${query.hashCode()}_$varsStr"
     }
 
-    /**
-     * Check if a cached response exists and is still valid
-     */
     private fun getCachedGraphqlResponse(cacheKey: String): String? {
         val entry = graphqlCache[cacheKey] ?: return null
         val now = System.currentTimeMillis()
@@ -128,22 +125,16 @@ class MainViewModel : ViewModel() {
             Log.d(TAG, "Using in-memory cached GraphQL response")
             return entry.response
         }
-        // Remove expired entry
         graphqlCache.remove(cacheKey)
         return null
     }
 
-    /**
-     * Cache a GraphQL response
-     */
     private fun cacheGraphqlResponse(cacheKey: String, response: String) {
         graphqlCache[cacheKey] = GraphQLCacheEntry(
             response = response,
             timestamp = System.currentTimeMillis()
         )
-        // Prevent cache from growing too large
         if (graphqlCache.size > 100) {
-            // Remove oldest 50 entries
             val sortedKeys = graphqlCache.entries
                 .sortedBy { it.value.timestamp }
                 .take(50)
@@ -152,28 +143,19 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Pending requests for deduplication (prevent concurrent identical requests)
+    // Pending requests for deduplication
     private val pendingRequests = ConcurrentHashMap<String, Deferred<String?>>()
 
     // ============================================
     // STRATEGY 4: Request Throttling & Rate Limiting
     // ============================================
     private var lastRequestTime = 0L
-    private val minRequestIntervalMs = 700L // Minimum 700ms between requests (~85 requests/min with 2 client IDs)
+    private val minRequestIntervalMs = 700L
     private val requestMutex = java.util.concurrent.Semaphore(1)
 
-    /**
-     * Invalidate all user-specific cache entries.
-     * Call this after any mutation (add, remove, update) to ensure fresh data.
-     */
     private fun invalidateUserCache() {
-        // Since cache keys use query.hashCode(), we can't easily filter by query content.
-        // Instead, clear all entries that have userId in variables (format: "userId=X")
-        // Also clear entries with variables patterns matching user-specific queries
         val keysToRemove = graphqlCache.keys.filter { key ->
-            // Variables are appended to the key after the hash, like: "12345_userId=123,status=CURRENT"
             key.contains("userId=") ||
-                    // Also match entries that might have user-specific variables
                     key.contains("status=") ||
                     key.contains("progress=") ||
                     key.contains("mediaId=")
@@ -181,17 +163,12 @@ class MainViewModel : ViewModel() {
         keysToRemove.forEach { graphqlCache.remove(it) }
         Log.d(TAG, "Invalidated ${keysToRemove.size} user-specific cache entries (total cache: ${graphqlCache.size})")
 
-        // Also clear the persistent cache
         sharedPreferences.edit()
             .remove(CACHE_HOME_DATA)
             .remove(CACHE_HOME_TIME)
             .apply()
     }
 
-    /**
-     * Throttle requests to avoid rate limiting.
-     * Ensures minimum interval between requests.
-     */
     private suspend fun throttleRequest() {
         requestMutex.acquire()
         try {
@@ -238,14 +215,12 @@ class MainViewModel : ViewModel() {
     private val _hideNavbarText = MutableStateFlow(false)
     val hideNavbarText: StateFlow<Boolean> = _hideNavbarText.asStateFlow()
 
-    // UI detail settings
     private val _simplifyEpisodeMenu = MutableStateFlow(true)
     val simplifyEpisodeMenu: StateFlow<Boolean> = _simplifyEpisodeMenu.asStateFlow()
 
     private val _simplifyAnimeDetails = MutableStateFlow(true)
     val simplifyAnimeDetails: StateFlow<Boolean> = _simplifyAnimeDetails.asStateFlow()
 
-    // Auto-skip settings
     private val _autoSkipOpening = MutableStateFlow(false)
     val autoSkipOpening: StateFlow<Boolean> = _autoSkipOpening.asStateFlow()
 
@@ -264,14 +239,12 @@ class MainViewModel : ViewModel() {
     private val _userAvatar = MutableStateFlow<String?>(null)
     val userAvatar: StateFlow<String?> = _userAvatar.asStateFlow()
 
-    // Loading states
     private val _isLoadingExplore = MutableStateFlow(false)
     val isLoadingExplore: StateFlow<Boolean> = _isLoadingExplore.asStateFlow()
 
     private val _isLoadingHome = MutableStateFlow(false)
     val isLoadingHome: StateFlow<Boolean> = _isLoadingHome.asStateFlow()
 
-    // Explore data
     private val _featuredAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val featuredAnime: StateFlow<List<ExploreAnime>> = _featuredAnime.asStateFlow()
 
@@ -284,7 +257,6 @@ class MainViewModel : ViewModel() {
     private val _topMovies = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val topMovies: StateFlow<List<ExploreAnime>> = _topMovies.asStateFlow()
 
-    // Genre recommendations
     private val _actionAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val actionAnime: StateFlow<List<ExploreAnime>> = _actionAnime.asStateFlow()
 
@@ -300,7 +272,6 @@ class MainViewModel : ViewModel() {
     private val _scifiAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val scifiAnime: StateFlow<List<ExploreAnime>> = _scifiAnime.asStateFlow()
 
-    // Anime lists
     private val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val currentlyWatching: StateFlow<List<AnimeMedia>> = _currentlyWatching.asStateFlow()
 
@@ -316,44 +287,45 @@ class MainViewModel : ViewModel() {
     private val _dropped = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val dropped: StateFlow<List<AnimeMedia>> = _dropped.asStateFlow()
 
-    // Airing schedule - organized by day of week (0 = Sunday, 6 = Saturday)
     private val _airingSchedule = MutableStateFlow<Map<Int, List<AiringScheduleAnime>>>(emptyMap())
     val airingSchedule: StateFlow<Map<Int, List<AiringScheduleAnime>>> = _airingSchedule.asStateFlow()
 
-    // Flat list of all airing anime sorted by time
     private val _airingAnimeList = MutableStateFlow<List<AiringScheduleAnime>>(emptyList())
     val airingAnimeList: StateFlow<List<AiringScheduleAnime>> = _airingAnimeList.asStateFlow()
 
     private val _isLoadingSchedule = MutableStateFlow(false)
     val isLoadingSchedule: StateFlow<Boolean> = _isLoadingSchedule.asStateFlow()
 
-    // Pre-fetched stream cache (in-memory)
     private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
 
-    // Pre-fetched episode info (servers list)
     private val _prefetchedEpisodeInfo = MutableStateFlow<Map<String, EpisodeStreams?>>(emptyMap())
     val prefetchedEpisodeInfo: StateFlow<Map<String, EpisodeStreams?>> = _prefetchedEpisodeInfo.asStateFlow()
 
-    // Detailed anime cache (with descriptions)
     private val _detailedAnimeCache = MutableStateFlow<Map<Int, DetailedAnimeData>>(emptyMap())
     val detailedAnimeCache: StateFlow<Map<Int, DetailedAnimeData>> = _detailedAnimeCache.asStateFlow()
 
+    private val _playbackPositions = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val playbackPositions: StateFlow<Map<String, Long>> = _playbackPositions.asStateFlow()
+
     private var context: Context? = null
     private lateinit var sharedPreferences: SharedPreferences
+
+    // TMDB season calculation cache
+    private val calculatedSeasons = ConcurrentHashMap<Int, Int>()
+    // NEW: Episode offset cache for Aniwatch-based calculation
+    private val episodeOffsetCache = ConcurrentHashMap<Int, Int>()
 
     fun init(context: Context, hasToken: Boolean) {
         this.context = context
         sharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        // If we know user has token from MainActivity's synchronous check, set it now
         if (hasToken) {
             val token = sharedPreferences.getString(TOKEN_KEY, null)
             _authToken.value = token
             Log.d(TAG, "Token loaded from SharedPreferences: ${token?.take(20)}...")
         }
 
-        // Load settings
         _isOled.value = sharedPreferences.getBoolean("oled_mode", false)
         _disableMaterialColors.value = sharedPreferences.getBoolean("disable_material_colors", false)
         _preferredCategory.value = sharedPreferences.getString("preferred_category", "sub") ?: "sub"
@@ -369,24 +341,16 @@ class MainViewModel : ViewModel() {
         _autoSkipEnding.value = sharedPreferences.getBoolean("auto_skip_ending", false)
         _autoPlayNextEpisode.value = sharedPreferences.getBoolean("auto_play_next_episode", false)
 
-        // Load local favorites
         loadLocalFavorites()
-
-        // Load persisted stream cache
         loadStreamCache()
-
-        // Load persisted airing schedule cache
         loadAiringScheduleCache()
+        loadPlaybackPositions()
 
-        // Note: Detailed anime cache is in-memory only (not persisted)
-
-        // Fetch data asynchronously with cache check
         viewModelScope.launch {
             if (hasToken) {
                 loadHomeDataWithCache()
             }
             loadExploreDataWithCache()
-            // Fetch airing schedule on startup
             fetchAiringSchedule()
         }
     }
@@ -401,7 +365,66 @@ class MainViewModel : ViewModel() {
         sharedPreferences.edit().putLong(cacheKey, System.currentTimeMillis()).apply()
     }
 
-    // Load persisted stream cache from SharedPreferences
+    private fun loadPlaybackPositions() {
+        try {
+            val cachedData = sharedPreferences.getString(CACHE_PLAYBACK_POSITIONS, null)
+            if (cachedData != null) {
+                val cacheData = json.decodeFromString<PlaybackPositionCache>(cachedData)
+                _playbackPositions.value = cacheData.positions
+                Log.d(TAG, "Loaded ${cacheData.positions.size} playback positions from cache")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load playback positions", e)
+        }
+    }
+
+    private fun savePlaybackPositions() {
+        try {
+            val cacheData = PlaybackPositionCache(_playbackPositions.value)
+            val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), cacheData)
+            sharedPreferences.edit()
+                .putString(CACHE_PLAYBACK_POSITIONS, jsonString)
+                .apply()
+            Log.d(TAG, "Saved ${_playbackPositions.value.size} playback positions to cache")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save playback positions", e)
+        }
+    }
+
+    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long) {
+        val key = "${animeId}_$episode"
+        val currentPositions = _playbackPositions.value.toMutableMap()
+        currentPositions[key] = position
+        _playbackPositions.value = currentPositions
+        savePlaybackPositions()
+        Log.d(TAG, "Saved playback position for anime $animeId ep $episode: ${position}ms")
+    }
+
+    fun getPlaybackPosition(animeId: Int, episode: Int): Long {
+        val key = "${animeId}_$episode"
+        val position = _playbackPositions.value[key] ?: 0L
+        Log.d(TAG, "Retrieved playback position for anime $animeId ep $episode: ${position}ms")
+        return position
+    }
+
+    fun clearPlaybackPosition(animeId: Int, episode: Int) {
+        val key = "${animeId}_$episode"
+        val currentPositions = _playbackPositions.value.toMutableMap()
+        currentPositions.remove(key)
+        _playbackPositions.value = currentPositions
+        savePlaybackPositions()
+        Log.d(TAG, "Cleared playback position for anime $animeId ep $episode")
+    }
+
+    fun clearAllPlaybackPositionsForAnime(animeId: Int) {
+        val currentPositions = _playbackPositions.value.toMutableMap()
+        val keysToRemove = currentPositions.keys.filter { it.startsWith("${animeId}_") }
+        keysToRemove.forEach { currentPositions.remove(it) }
+        _playbackPositions.value = currentPositions
+        savePlaybackPositions()
+        Log.d(TAG, "Cleared all playback positions for anime $animeId")
+    }
+
     private fun loadStreamCache() {
         try {
             val cachedData = sharedPreferences.getString(CACHE_STREAM_DATA, null)
@@ -409,7 +432,6 @@ class MainViewModel : ViewModel() {
                 val cacheData = json.decodeFromString<StreamCacheData>(cachedData)
                 val now = System.currentTimeMillis()
 
-                // Filter out expired entries (older than 7 days)
                 val validEntries = cacheData.entries.filter { (_, entry) ->
                     (now - entry.timestamp) < STREAM_CACHE_DURATION_MS
                 }
@@ -447,7 +469,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Load persisted airing schedule cache
     private fun loadAiringScheduleCache() {
         try {
             val cachedData = sharedPreferences.getString(CACHE_AIRING_DATA, null)
@@ -468,7 +489,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Save airing schedule to cache
     private fun saveAiringScheduleCache() {
         viewModelScope.launch {
             try {
@@ -488,7 +508,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Save stream cache to SharedPreferences
     private fun saveStreamCache() {
         viewModelScope.launch {
             try {
@@ -496,7 +515,6 @@ class MainViewModel : ViewModel() {
                 val entries = mutableMapOf<String, StreamCacheEntry>()
 
                 _prefetchedStreams.value.forEach { (key, stream) ->
-                    // Get episode info if available
                     val epInfo = _prefetchedEpisodeInfo.value[key]
 
                     entries[key] = StreamCacheEntry(
@@ -536,7 +554,6 @@ class MainViewModel : ViewModel() {
     }
 
     private suspend fun loadHomeDataWithCache() {
-        // Try to load from cache first
         val cachedHomeData = sharedPreferences.getString(CACHE_HOME_DATA, null)
 
         if (cachedHomeData != null && isCacheValid(CACHE_HOME_TIME)) {
@@ -552,7 +569,6 @@ class MainViewModel : ViewModel() {
                 _userName.value = cacheData.userName
                 _userAvatar.value = cacheData.userAvatar
 
-                // Refresh releasing anime progress in background
                 refreshReleasingAnimeProgress()
                 return
             } catch (e: Exception) {
@@ -560,14 +576,12 @@ class MainViewModel : ViewModel() {
             }
         }
 
-        // Cache expired or doesn't exist, fetch fresh data
         _isLoadingHome.value = true
         fetchUser()
         fetchLists()
         _isLoadingHome.value = false
     }
 
-    // Refresh progress for anime that are currently releasing
     private suspend fun refreshReleasingAnimeProgress() {
         val watching = _currentlyWatching.value.filter { it.status == "RELEASING" || it.latestEpisode != null }
         if (watching.isEmpty()) return
@@ -578,7 +592,6 @@ class MainViewModel : ViewModel() {
             try {
                 val detailed = fetchDetailedAnimeData(anime.id)
                 if (detailed != null && detailed.nextAiringEpisode != null) {
-                    // Update the anime with new episode info
                     val updatedAnime = anime.copy(
                         latestEpisode = detailed.nextAiringEpisode
                     )
@@ -595,7 +608,6 @@ class MainViewModel : ViewModel() {
     }
 
     private suspend fun loadExploreDataWithCache() {
-        // Try to load from cache first
         val cachedExploreData = sharedPreferences.getString(CACHE_EXPLORE_DATA, null)
 
         if (cachedExploreData != null && isCacheValid(CACHE_EXPLORE_TIME)) {
@@ -617,7 +629,6 @@ class MainViewModel : ViewModel() {
             }
         }
 
-        // Cache expired or doesn't exist, fetch fresh data
         fetchExploreData()
     }
 
@@ -770,7 +781,6 @@ class MainViewModel : ViewModel() {
             Log.d(TAG, "Parsed token: ${token?.take(20)}...")
 
             if (token != null) {
-                // Save to SharedPreferences for synchronous loading on next launch
                 sharedPreferences.edit().putString(TOKEN_KEY, token).apply()
                 _authToken.value = token
 
@@ -785,7 +795,6 @@ class MainViewModel : ViewModel() {
     }
 
     fun logout() {
-        // Clear from SharedPreferences
         sharedPreferences.edit()
             .remove(TOKEN_KEY)
             .remove(CACHE_HOME_DATA)
@@ -808,7 +817,6 @@ class MainViewModel : ViewModel() {
         _prefetchedStreams.value = emptyMap()
         _prefetchedEpisodeInfo.value = emptyMap()
 
-        // Clear in-memory caches
         graphqlCache.clear()
         pendingRequests.clear()
         _detailedAnimeCache.value = emptyMap()
@@ -817,13 +825,11 @@ class MainViewModel : ViewModel() {
     private suspend fun graphqlRequest(query: String, variables: Map<String, Any?>): String? = withContext(Dispatchers.IO) {
         val token = _authToken.value ?: return@withContext null
 
-        // STRATEGY 3: Check in-memory cache first
         val cacheKey = generateCacheKey(query, variables)
         getCachedGraphqlResponse(cacheKey)?.let {
             return@withContext it
         }
 
-        // STRATEGY 4: Throttle requests to avoid rate limiting
         throttleRequest()
 
         val url = URL("https://graphql.anilist.co")
@@ -833,7 +839,6 @@ class MainViewModel : ViewModel() {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer $token")
-            // STRATEGY 1: Add Client-ID header for rate limit tracking
             connection.setRequestProperty("X-Client-Id", getNextClientId())
             connection.doOutput = true
 
@@ -852,7 +857,6 @@ class MainViewModel : ViewModel() {
 
             if (connection.responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
-                // STRATEGY 3: Cache the response
                 cacheGraphqlResponse(cacheKey, response)
                 response
             } else {
@@ -918,6 +922,7 @@ class MainViewModel : ViewModel() {
                     .replace("\r", "\\r")
                     .replace("\t", "\\t")
 
+                // FIX: Added closing brace "}" at the end of the JSON string
                 val body = "{\"query\":\"$escapedQuery\",\"variables\":$variablesJson}"
 
                 connection.outputStream.use { it.write(body.toByteArray()) }
@@ -1076,7 +1081,6 @@ class MainViewModel : ViewModel() {
                 }
             """.trimIndent()
 
-            // Invalidate cache BEFORE the mutation
             invalidateUserCache()
 
             val response = graphqlRequest(query, mapOf("mediaId" to mediaId, "progress" to progress))
@@ -1104,7 +1108,6 @@ class MainViewModel : ViewModel() {
             val variables = mutableMapOf<String, Any?>("mediaId" to mediaId, "status" to status)
             if (progress != null) variables["progress"] = progress
 
-            // Invalidate cache BEFORE the mutation
             invalidateUserCache()
 
             val response = graphqlRequest(query, variables)
@@ -1125,16 +1128,12 @@ class MainViewModel : ViewModel() {
     // ============================================
     // STRATEGY 2: Batched Explore Data Fetch
     // ============================================
-    // Uses GraphQL aliases to fetch multiple data sets in a single request
-    // Reduces 9 API calls down to 1-2 calls
     fun fetchExploreData() {
         Log.d(TAG, "Fetching explore data with batched request...")
         viewModelScope.launch {
             _isLoadingExplore.value = true
 
             try {
-                // STRATEGY 2: Batch multiple queries using GraphQL aliases
-                // This combines 9 separate requests into 1-2 requests
                 val batchedQuery = """
                     query {
                         featured: Page(page: 1, perPage: 10) {
@@ -1290,37 +1289,23 @@ class MainViewModel : ViewModel() {
                     try {
                         val data = json.decodeFromString<BatchedExploreResponse>(response)
 
-                        // Parse featured
-                        _featuredAnime.value = data.data.featured.media.map { media ->
-                            mapExploreMedia(media)
-                        }
+                        _featuredAnime.value = data.data.featured.media.map { mapExploreMedia(it) }
+                        _seasonalAnime.value = data.data.seasonal.media.map { mapExploreMedia(it) }
 
-                        // Parse seasonal
-                        _seasonalAnime.value = data.data.seasonal.media.map { media ->
-                            mapExploreMedia(media)
-                        }
-
-                        // Parse top series
-                        val seriesList = data.data.topSeries.media.map { media ->
-                            mapExploreMedia(media)
-                        }
+                        val seriesList = data.data.topSeries.media.map { mapExploreMedia(it) }
                         _topSeries.value = if (seriesList.size > 10) {
                             seriesList.filter { (it.averageScore ?: 0) >= 70 }
                         } else {
                             seriesList
                         }
 
-                        // Parse top movies
-                        val moviesList = data.data.topMovies.media.map { media ->
-                            mapExploreMedia(media)
-                        }
+                        val moviesList = data.data.topMovies.media.map { mapExploreMedia(it) }
                         _topMovies.value = if (moviesList.size > 10) {
                             moviesList.filter { (it.averageScore ?: 0) >= 70 }
                         } else {
                             moviesList
                         }
 
-                        // Parse genre anime
                         _actionAnime.value = data.data.action.media.map { mapExploreMedia(it) }
                             .filter { (it.averageScore ?: 0) >= 60 }
                         _romanceAnime.value = data.data.romance.media.map { mapExploreMedia(it) }
@@ -1335,11 +1320,9 @@ class MainViewModel : ViewModel() {
                         Log.d(TAG, "Batched explore data loaded successfully - 9 queries in 1 request!")
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to parse batched explore response", e)
-                        // Fallback to individual requests
                         fetchExploreDataIndividually()
                     }
                 } else {
-                    // Fallback to individual requests
                     fetchExploreDataIndividually()
                 }
             } catch (e: Exception) {
@@ -1352,7 +1335,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Helper function to map ExploreMedia to ExploreAnime
     private fun mapExploreMedia(media: ExploreMedia): ExploreAnime {
         return ExploreAnime(
             id = media.id,
@@ -1368,7 +1350,6 @@ class MainViewModel : ViewModel() {
         )
     }
 
-    // Fallback: individual requests if batched fails
     private suspend fun fetchExploreDataIndividually() = coroutineScope {
         Log.d(TAG, "Falling back to individual explore requests")
 
@@ -1734,10 +1715,8 @@ class MainViewModel : ViewModel() {
                 _airingSchedule.value = scheduleByDay.toMap()
                 _airingAnimeList.value = airingList
 
-                // Save to persistent cache
                 saveAiringScheduleCache()
 
-                // Check if any airing anime triggered a new episode and refresh those
                 checkAndRefreshAiringAnime(airingList)
 
             } catch (e: Exception) {
@@ -1748,7 +1727,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Check if any airing anime should trigger a refresh of cached data
     private fun checkAndRefreshAiringAnime(airingList: List<AiringScheduleAnime>) {
         val currentTime = System.currentTimeMillis() / 1000
         val recentlyAired = airingList.filter {
@@ -1764,7 +1742,6 @@ class MainViewModel : ViewModel() {
     }
 
     fun refreshHome() {
-        // Invalidate both persistent and in-memory cache
         invalidateUserCache()
 
         viewModelScope.launch {
@@ -1779,12 +1756,10 @@ class MainViewModel : ViewModel() {
             .remove(CACHE_EXPLORE_TIME)
             .remove(CACHE_EXPLORE_DATA)
             .apply()
-        // Clear in-memory cache for explore data
         graphqlCache.keys.removeAll { it.contains("featured") || it.contains("seasonal") || it.contains("topSeries") || it.contains("topMovies") }
         fetchExploreData()
     }
 
-    // Search anime via AniList API - FIXED: nextAiringEpisode is now optional
     suspend fun searchAnime(query: String): List<ExploreAnime> {
         if (query.isBlank()) return emptyList()
 
@@ -1792,7 +1767,6 @@ class MainViewModel : ViewModel() {
 
         return withContext(Dispatchers.IO) {
             try {
-                // Include nextAiringEpisode in query (can be null)
                 val searchQuery = """
                     query (${'$'}search: String) {
                         Page(page: 1, perPage: 20) {
@@ -1938,15 +1912,45 @@ class MainViewModel : ViewModel() {
     }
 
     // Try all servers with fallback - returns result with fallback info
+    // ADDED: latestAiredEpisode check to prevent scraping unaired content
     suspend fun tryAllServersWithFallback(
         animeName: String,
         episodeNumber: Int,
-        animeId: Int
+        animeId: Int,
+        latestAiredEpisode: Int = Int.MAX_VALUE // Default to max if not provided
     ): StreamFetchResult = withContext(Dispatchers.IO) {
         val preferredCategory = _preferredCategory.value
         val key = "${animeId}_$episodeNumber"
 
-        // Check cache first - if cached, check if it matches preferred category
+        // CHECK: Prevent scraping if episode hasn't aired
+        // Log the values for debugging
+        Log.d(TAG, "tryAllServersWithFallback: animeName=$animeName, ep=$episodeNumber, animeId=$animeId, latestAired=$latestAiredEpisode")
+
+        // BLOCK if we know the aired limit and episode exceeds it
+        if (latestAiredEpisode > 0 && latestAiredEpisode < Int.MAX_VALUE && episodeNumber > latestAiredEpisode) {
+            Log.w(TAG, "BLOCKED: Episode $episodeNumber hasn't aired yet (latest: $latestAiredEpisode)")
+            return@withContext StreamFetchResult(
+                stream = null,
+                isFallback = false,
+                requestedCategory = preferredCategory,
+                actualCategory = preferredCategory
+            )
+        }
+
+        // SAFETY: If we have no episode info (latestAiredEpisode=0 or MAX_VALUE),
+        // block episodes > 24 to prevent fetching unreasonable episode numbers
+        // Most seasonal anime have <= 13-26 episodes
+        if ((latestAiredEpisode <= 0 || latestAiredEpisode == Int.MAX_VALUE) && episodeNumber > 24) {
+            Log.w(TAG, "BLOCKED: Episode $episodeNumber too high with no episode info (latest: $latestAiredEpisode)")
+            return@withContext StreamFetchResult(
+                stream = null,
+                isFallback = false,
+                requestedCategory = preferredCategory,
+                actualCategory = preferredCategory
+            )
+        }
+
+        // Check cache first
         _prefetchedStreams.value[key]?.let { cachedStream ->
             Log.d(TAG, "Using cached stream for $animeName ep $episodeNumber")
             val actualCategory = cachedStream?.category ?: preferredCategory
@@ -2045,15 +2049,16 @@ class MainViewModel : ViewModel() {
     suspend fun tryAllServersInCategory(
         animeName: String,
         episodeNumber: Int,
-        animeId: Int
+        animeId: Int,
+        latestAiredEpisode: Int = Int.MAX_VALUE
     ): AniwatchStreamResult? {
-        val result = tryAllServersWithFallback(animeName, episodeNumber, animeId)
+        val result = tryAllServersWithFallback(animeName, episodeNumber, animeId, latestAiredEpisode)
         return result.stream
     }
 
     // Get cached stream or fetch new one (with multi-server fallback)
-    suspend fun getStreamLinkWithCache(animeName: String, episodeNumber: Int, animeId: Int): AniwatchStreamResult? {
-        return tryAllServersInCategory(animeName, episodeNumber, animeId)
+    suspend fun getStreamLinkWithCache(animeName: String, episodeNumber: Int, animeId: Int, latestAiredEpisode: Int = Int.MAX_VALUE): AniwatchStreamResult? {
+        return tryAllServersInCategory(animeName, episodeNumber, animeId, latestAiredEpisode)
     }
 
     // Get stream for specific server
@@ -2082,12 +2087,35 @@ class MainViewModel : ViewModel() {
         val nextEp = anime.progress + 1
         val key = "${anime.id}_$nextEp"
 
+        // Don't prefetch if next episode hasn't aired or totalEpisodes is unknown
+        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+
+        // BLOCK if we know the limit and next episode exceeds it
+        if (latestAired > 0 && nextEp > latestAired) {
+            Log.d(TAG, "Skipping pre-fetch for ${anime.title} ep $nextEp (not aired yet, latest: $latestAired)")
+            return
+        }
+
+        // Don't prefetch if progress is unreasonably high compared to known total
+        if (anime.totalEpisodes > 0 && nextEp > anime.totalEpisodes) {
+            Log.d(TAG, "Skipping pre-fetch for ${anime.title} ep $nextEp (exceeds total: ${anime.totalEpisodes})")
+            return
+        }
+
+        // SAFETY: If we have no episode info (totalEpisodes=0, latestEpisode=null),
+        // only prefetch if next episode is reasonable (typically movies/specials have 1 episode)
+        // Don't prefetch episode 2+ if we have no episode info
+        if (latestAired <= 0 && nextEp > 1) {
+            Log.d(TAG, "Skipping pre-fetch for ${anime.title} ep $nextEp (unknown episode count, only ep 1 allowed)")
+            return
+        }
+
         if (_prefetchedStreams.value.containsKey(key)) return
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Pre-fetching stream for ${anime.title} ep $nextEp")
-                val result = tryAllServersWithFallback(anime.title, nextEp, anime.id)
+                val result = tryAllServersWithFallback(anime.title, nextEp, anime.id, latestAired)
                 if (result.stream != null) {
                     Log.d(TAG, "Pre-fetch complete for ${anime.title} ep $nextEp")
                 }
@@ -2098,28 +2126,60 @@ class MainViewModel : ViewModel() {
     }
 
     // Pre-fetch adjacent episodes (previous and next)
-    fun prefetchAdjacentEpisodes(animeName: String, currentEpisode: Int, animeId: Int) {
+    fun prefetchAdjacentEpisodes(animeName: String, currentEpisode: Int, animeId: Int, latestAiredEpisode: Int = Int.MAX_VALUE) {
         viewModelScope.launch(Dispatchers.IO) {
+            // SAFETY: Determine if we have valid episode info
+            val hasValidEpisodeInfo = latestAiredEpisode > 0 && latestAiredEpisode < Int.MAX_VALUE
+
             // Pre-fetch previous
             if (currentEpisode > 1) {
                 val prevKey = "${animeId}_${currentEpisode - 1}"
                 if (!_prefetchedStreams.value.containsKey(prevKey)) {
                     Log.d(TAG, "Pre-fetching previous episode: ${currentEpisode - 1}")
-                    tryAllServersInCategory(animeName, currentEpisode - 1, animeId)
+                    tryAllServersInCategory(animeName, currentEpisode - 1, animeId, latestAiredEpisode)
                 }
             }
 
-            // Pre-fetch next
-            val nextKey = "${animeId}_${currentEpisode + 1}"
-            if (!_prefetchedStreams.value.containsKey(nextKey)) {
-                Log.d(TAG, "Pre-fetching next episode: ${currentEpisode + 1}")
-                tryAllServersInCategory(animeName, currentEpisode + 1, animeId)
+            // Pre-fetch next - only if it has aired
+            val nextEp = currentEpisode + 1
+            val shouldPrefetchNext = when {
+                // We know the limit and next episode is within it
+                hasValidEpisodeInfo && nextEp <= latestAiredEpisode -> true
+                // No episode info, but next episode is reasonable (1-24 range)
+                !hasValidEpisodeInfo && nextEp <= 24 -> true
+                // Otherwise don't prefetch
+                else -> false
+            }
+
+            if (shouldPrefetchNext) {
+                val nextKey = "${animeId}_$nextEp"
+                if (!_prefetchedStreams.value.containsKey(nextKey)) {
+                    Log.d(TAG, "Pre-fetching next episode: $nextEp")
+                    tryAllServersInCategory(animeName, nextEp, animeId, latestAiredEpisode)
+                }
+            } else {
+                Log.d(TAG, "Skipping pre-fetch for ep $nextEp (not aired yet or no episode info, latest: $latestAiredEpisode)")
             }
         }
     }
 
     // Get episode info for server selection
-    suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int, animeId: Int): EpisodeStreams? {
+    // ADDED: latestAiredEpisode check to prevent fetching unaired episodes
+    suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int, animeId: Int, latestAiredEpisode: Int = Int.MAX_VALUE): EpisodeStreams? {
+        // Check if episode has aired (only if we have valid episode info)
+        val hasValidEpisodeInfo = latestAiredEpisode > 0 && latestAiredEpisode < Int.MAX_VALUE
+
+        if (hasValidEpisodeInfo && episodeNumber > latestAiredEpisode) {
+            Log.w(TAG, "Episode $episodeNumber hasn't aired yet (latest: $latestAiredEpisode), skipping fetch")
+            return null
+        }
+
+        // SAFETY: Block unreasonably high episode numbers when we have no episode info
+        if (!hasValidEpisodeInfo && episodeNumber > 24) {
+            Log.w(TAG, "Episode $episodeNumber too high with no episode info (latest: $latestAiredEpisode), skipping fetch")
+            return null
+        }
+
         val key = "${animeId}_$episodeNumber"
         _prefetchedEpisodeInfo.value[key]?.let { return it }
 
@@ -2165,19 +2225,16 @@ class MainViewModel : ViewModel() {
                 }
             """.trimIndent()
 
-            // Invalidate cache BEFORE the mutation to ensure fresh data after
             invalidateUserCache()
 
             val response = graphqlRequest(query, mapOf("id" to entryId))
             if (response != null) {
                 Log.d(TAG, "Remove from list SUCCESS")
-                // Optimistically remove from local state immediately
                 _currentlyWatching.value = _currentlyWatching.value.filter { it.id != mediaId }
                 _planningToWatch.value = _planningToWatch.value.filter { it.id != mediaId }
                 _completed.value = _completed.value.filter { it.id != mediaId }
                 _onHold.value = _onHold.value.filter { it.id != mediaId }
                 _dropped.value = _dropped.value.filter { it.id != mediaId }
-                // Then fetch fresh data from server
                 fetchLists()
             } else {
                 Log.e(TAG, "Remove from list FAILED")
@@ -2185,9 +2242,21 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // User favorites - LOCAL ONLY
-    private val _localFavorites = MutableStateFlow<Set<Int>>(emptySet())
-    val localFavorites: StateFlow<Set<Int>> = _localFavorites.asStateFlow()
+    // User favorites - LOCAL ONLY with stored anime data
+    @Serializable
+    data class StoredFavorite(
+        val id: Int,
+        val title: String,
+        val cover: String,
+        val banner: String? = null,
+        val year: Int? = null,
+        val averageScore: Int? = null
+    )
+
+    private val _localFavorites = MutableStateFlow<Map<Int, StoredFavorite>>(emptyMap())
+    val localFavorites: StateFlow<Map<Int, StoredFavorite>> = _localFavorites.asStateFlow()
+
+    val localFavoriteIds: Set<Int> get() = _localFavorites.value.keys
 
     private val _userFavorites = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val userFavorites: StateFlow<List<ExploreAnime>> = _userFavorites.asStateFlow()
@@ -2195,31 +2264,102 @@ class MainViewModel : ViewModel() {
     private val _isLoadingFavorites = MutableStateFlow(false)
     val isLoadingFavorites: StateFlow<Boolean> = _isLoadingFavorites.asStateFlow()
 
-    fun toggleLocalFavorite(mediaId: Int) {
-        val currentFavorites = _localFavorites.value.toMutableSet()
-        if (currentFavorites.contains(mediaId)) {
-            currentFavorites.remove(mediaId)
+    fun toggleLocalFavorite(mediaId: Int, title: String = "", cover: String = "", banner: String? = null, year: Int? = null, averageScore: Int? = null) {
+        val currentFavorites = _localFavorites.value.toMutableMap()
+        val existingFavorite = currentFavorites[mediaId]
+
+        if (existingFavorite != null) {
+            if (existingFavorite.title.isEmpty() && title.isNotEmpty()) {
+                currentFavorites[mediaId] = StoredFavorite(mediaId, title, cover, banner, year, averageScore)
+            } else {
+                currentFavorites.remove(mediaId)
+            }
         } else {
             if (currentFavorites.size >= 10) return
-            currentFavorites.add(mediaId)
+
+            if (title.isEmpty()) {
+                val allAnime = _currentlyWatching.value + _completed.value + _planningToWatch.value + _onHold.value + _dropped.value
+                val anime = allAnime.find { it.id == mediaId }
+                if (anime != null) {
+                    currentFavorites[mediaId] = StoredFavorite(mediaId, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
+                }
+            } else {
+                currentFavorites[mediaId] = StoredFavorite(mediaId, title, cover, banner, year, averageScore)
+            }
         }
         _localFavorites.value = currentFavorites
         saveLocalFavorites(currentFavorites)
     }
 
-    fun isLocalFavorite(mediaId: Int): Boolean = _localFavorites.value.contains(mediaId)
+    fun toggleLocalFavorite(anime: ExploreAnime) {
+        toggleLocalFavorite(
+            mediaId = anime.id,
+            title = anime.title,
+            cover = anime.cover,
+            banner = anime.banner,
+            year = anime.year,
+            averageScore = anime.averageScore
+        )
+    }
+
+    fun toggleLocalFavorite(anime: AnimeMedia) {
+        toggleLocalFavorite(
+            mediaId = anime.id,
+            title = anime.title,
+            cover = anime.cover,
+            banner = anime.banner,
+            year = anime.year,
+            averageScore = anime.averageScore
+        )
+    }
+
+    fun toggleLocalFavorite(anime: DetailedAnimeData) {
+        toggleLocalFavorite(
+            mediaId = anime.id,
+            title = anime.title,
+            cover = anime.cover,
+            banner = anime.banner,
+            year = anime.year,
+            averageScore = anime.averageScore
+        )
+    }
+
+    fun isLocalFavorite(mediaId: Int): Boolean = _localFavorites.value.containsKey(mediaId)
 
     fun canAddFavorite(): Boolean = _localFavorites.value.size < 10
 
-    private fun saveLocalFavorites(favorites: Set<Int>) {
+    private fun saveLocalFavorites(favorites: Map<Int, StoredFavorite>) {
+        val json = Json { ignoreUnknownKeys = true }
+        val favoritesJson = favorites.values.map { fav ->
+            json.encodeToString(serializer = StoredFavorite.serializer(), value = fav)
+        }.toSet()
         sharedPreferences.edit()
-            .putStringSet("local_favorites", favorites.map { it.toString() }.toSet())
+            .putStringSet("local_favorites_v2", favoritesJson)
             .apply()
     }
 
     private fun loadLocalFavorites() {
+        val json = Json { ignoreUnknownKeys = true }
+        val savedV2 = sharedPreferences.getStringSet("local_favorites_v2", null)
+        if (savedV2 != null) {
+            val favorites = mutableMapOf<Int, StoredFavorite>()
+            savedV2.forEach { favJson ->
+                try {
+                    val fav = json.decodeFromString(StoredFavorite.serializer(), favJson)
+                    favorites[fav.id] = fav
+                } catch (e: Exception) {
+                }
+            }
+            _localFavorites.value = favorites
+            return
+        }
+
         val saved = sharedPreferences.getStringSet("local_favorites", emptySet()) ?: emptySet()
-        _localFavorites.value = saved.mapNotNull { it.toIntOrNull() }.toSet()
+        val favorites = mutableMapOf<Int, StoredFavorite>()
+        saved.mapNotNull { it.toIntOrNull() }.forEach { id ->
+            favorites[id] = StoredFavorite(id, "", "")
+        }
+        _localFavorites.value = favorites
     }
 
     fun getLocalFavoriteCount(): Int = _localFavorites.value.size
@@ -2275,7 +2415,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // User activity history
     private val _userActivity = MutableStateFlow<List<UserActivity>>(emptyList())
     val userActivity: StateFlow<List<UserActivity>> = _userActivity.asStateFlow()
 
@@ -2406,13 +2545,370 @@ class MainViewModel : ViewModel() {
     fun loadAllCompletedAnime() {
         _completedSearchResults.value = _completed.value
     }
+
+    // ============================================================================
+    // TMDB API for episode details - IMPROVED WITH ANIWATCH EPISODE OFFSET
+    // ============================================================================
+    private val tmdbBearerToken = BuildConfig.TMDB_API_KEY
+
+    private fun extractSeasonInfo(title: String): Pair<String, Int> {
+        val lower = title.lowercase().trim()
+
+        // Specific Keyword Mappings for common anime
+        when {
+            lower.contains("culling game") -> return Pair("Jujutsu Kaisen", 3)
+            lower.contains("shibuya incident") -> return Pair("Jujutsu Kaisen", 2)
+            lower.contains("hidden inventory") -> return Pair("Jujutsu Kaisen", 2)
+            lower.contains("shimetsu kaiyuu") -> return Pair("Jujutsu Kaisen", 3)
+            lower.contains("the final season") && lower.contains("part 3") -> return Pair("Attack on Titan", 4)
+            lower.contains("the final season") && lower.contains("part 2") -> return Pair("Attack on Titan", 4)
+            lower.contains("the final season") -> return Pair("Attack on Titan", 4)
+            lower.contains("swordsmith village") -> return Pair("Demon Slayer: Kimetsu no Yaiba", 3)
+            lower.contains("entertainment district") -> return Pair("Demon Slayer: Kimetsu no Yaiba", 2)
+            lower.contains("mugen train") -> return Pair("Demon Slayer: Kimetsu no Yaiba", 2)
+            lower.contains("cour 2") -> return Pair("SPY×FAMILY", 2)
+        }
+
+        // Regex for Season/Part/Cour patterns
+        val patterns = listOf(
+            Regex("season\\s*(\\d+)", RegexOption.IGNORE_CASE),
+            Regex("(\\d+)(?:st|nd|rd|th)\\s*season", RegexOption.IGNORE_CASE),
+            Regex("part\\s*(\\d+)", RegexOption.IGNORE_CASE),
+            Regex("cour\\s*(\\d+)", RegexOption.IGNORE_CASE),
+            Regex("s(\\d+)(?:\\s|$|-)", RegexOption.IGNORE_CASE)
+        )
+
+        for (pattern in patterns) {
+            pattern.find(title)?.let { matchResult ->
+                val seasonNum = matchResult.groupValues[1].toIntOrNull() ?: 1
+                val matchStartIndex = matchResult.range.first
+                val cleanTitle = title.substring(0, matchStartIndex)
+                    .trim()
+                    .removeSuffix(":")
+                    .removeSuffix("-")
+                    .removeSuffix("(")
+                    .trim()
+                return Pair(cleanTitle.ifEmpty { title }, seasonNum)
+            }
+        }
+
+        // NEW: Fallback - extract base title by splitting on common delimiters
+        // This handles cases like "Jujutsu Kaisen: Shimetsu Kaiyuu - Zenpen"
+        // Split on ":", "-", or " - " and take the first part as base title
+        val delimiters = listOf(" - ", ": ", " -", ":")
+        for (delimiter in delimiters) {
+            if (title.contains(delimiter)) {
+                val baseTitle = title.substringBefore(delimiter).trim()
+                if (baseTitle.length >= 3) {
+                    Log.d(TAG, "Extracted base title '$baseTitle' from '$title' using delimiter '$delimiter'")
+                    return Pair(baseTitle, 1)
+                }
+            }
+        }
+
+        return Pair(title, 1)
+    }
+
+    // Episode offset calculation
+    // Returns the number of episodes that come BEFORE this anime in the franchise
+    private suspend fun calculateEpisodeOffset(animeId: Int, animeTitle: String): Int {
+        Log.d(TAG, "=== calculateEpisodeOffset for $animeTitle ===")
+
+        // Check cache first
+        episodeOffsetCache[animeId]?.let {
+            Log.d(TAG, "Using cached offset: $it")
+            return it
+        }
+
+        // Extract season info to determine if this is a sequel
+        val (baseTitle, detectedSeason) = extractSeasonInfo(animeTitle)
+
+        if (detectedSeason <= 1) {
+            Log.d(TAG, "Season 1 or standalone - no offset needed")
+            return 0
+        }
+
+        // KNOWN OFFSETS: Hardcoded offsets for popular anime franchises
+        // This is the most reliable method for sequels
+        val lower = animeTitle.lowercase()
+        val knownOffsets = when {
+            // Jujutsu Kaisen: S1 = 24 eps, S2 = 23 eps
+            lower.contains("jujutsu kaisen") && (lower.contains("shimetsu") || lower.contains("culling game")) -> 47
+            lower.contains("jujutsu kaisen") && (lower.contains("shibuya") || lower.contains("hidden inventory")) -> 24
+            lower.contains("jujutsu kaisen") && detectedSeason == 2 -> 24
+            lower.contains("jujutsu kaisen") && detectedSeason == 3 -> 47
+
+            // Attack on Titan: S1=25, S2=12, S3=22, S4P1=16, S4P2=12, S4P3=2
+            lower.contains("attack on titan") && lower.contains("final season") && lower.contains("part 3") -> 87
+            lower.contains("attack on titan") && lower.contains("final season") && lower.contains("part 2") -> 75
+            lower.contains("attack on titan") && lower.contains("final season") -> 59
+            lower.contains("attack on titan") && detectedSeason == 4 -> 59
+            lower.contains("attack on titan") && detectedSeason == 3 -> 37
+            lower.contains("attack on titan") && detectedSeason == 2 -> 25
+
+            // Demon Slayer: S1=26, Mugen=7 (movie/eps), Entertainment=11
+            lower.contains("demon slayer") && lower.contains("swordsmith") -> 44
+            lower.contains("demon slayer") && lower.contains("entertainment") -> 33
+            lower.contains("demon slayer") && lower.contains("mugen train") -> 26
+            lower.contains("demon slayer") && detectedSeason == 3 -> 44
+            lower.contains("demon slayer") && detectedSeason == 2 -> 26
+
+            // SPY×FAMILY: S1=25, S2=12
+            lower.contains("spy") && lower.contains("family") && detectedSeason == 2 -> 25
+
+            // My Hero Academia: S1=13, S2=25, S3=25, S4=25, S5=25, S6=25, S7=?
+            lower.contains("my hero academia") && detectedSeason == 2 -> 13
+            lower.contains("my hero academia") && detectedSeason == 3 -> 38
+            lower.contains("my hero academia") && detectedSeason == 4 -> 63
+            lower.contains("my hero academia") && detectedSeason == 5 -> 88
+            lower.contains("my hero academia") && detectedSeason == 6 -> 113
+            lower.contains("my hero academia") && detectedSeason == 7 -> 138
+
+            // One Punch Man: S1=12, S2=12
+            lower.contains("one punch") && detectedSeason == 2 -> 12
+
+            // Mob Psycho 100: S1=12, S2=13, S3=12
+            lower.contains("mob psycho") && detectedSeason == 2 -> 12
+            lower.contains("mob psycho") && detectedSeason == 3 -> 25
+
+            else -> null
+        }
+
+        if (knownOffsets != null) {
+            Log.d(TAG, "Using known offset for $animeTitle: $knownOffsets")
+            episodeOffsetCache[animeId] = knownOffsets
+            return knownOffsets
+        }
+
+        // ESTIMATE: Use typical season lengths based on detected season
+        // Most anime seasons are either 12-13 (1 cour) or 24-26 (2 cour)
+        // For estimation, assume 24 episodes per season (2 cour average)
+        val estimatedOffset = (detectedSeason - 1) * 24
+        Log.d(TAG, "Using estimated offset: $estimatedOffset (season $detectedSeason, 24 eps/season)")
+        episodeOffsetCache[animeId] = estimatedOffset
+        return estimatedOffset
+    }
+
+    // FIXED: TMDB scraper with proper fallback strategy
+    // 1. First try exact anime title on TMDB
+    // 2. If found with episodes, use it directly
+    // 3. If not found, calculate offset from prequels and search for base series name
+    // 4. Filter out unaired episodes based on latestAiredEpisode parameter
+    suspend fun fetchTmdbEpisodes(animeTitle: String, animeId: Int, animeYear: Int? = null, latestAiredEpisode: Int = Int.MAX_VALUE): List<TmdbEpisode> = withContext(Dispatchers.IO) {
+        // Local data class for TMDB results - defined FIRST before helper functions
+        data class TvResult(val id: Int, val name: String, val year: Int?)
+
+        try {
+            Log.d(TAG, "=== fetchTmdbEpisodes ===")
+            Log.d(TAG, "Anime: $animeTitle (ID: $animeId, Year: $animeYear)")
+
+            // Helper function to search TMDB
+            fun searchTmdb(query: String): List<TvResult> {
+                val searchUrl = "https://api.themoviedb.org/3/search/multi?query=${URLEncoder.encode(query, "UTF-8")}&include_adult=false&language=en-US&page=1"
+
+                val searchConnection = URL(searchUrl).openConnection() as HttpsURLConnection
+                searchConnection.requestMethod = "GET"
+                searchConnection.setRequestProperty("accept", "application/json")
+                searchConnection.setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+
+                if (searchConnection.responseCode != 200) {
+                    Log.e(TAG, "TMDB search failed: HTTP ${searchConnection.responseCode}")
+                    return emptyList()
+                }
+
+                val searchResponse = searchConnection.inputStream.bufferedReader().readText()
+                val searchJson = json.parseToJsonElement(searchResponse).jsonObject
+                val results = searchJson["results"]?.jsonArray ?: return emptyList()
+
+                return results.mapNotNull { result ->
+                    val resultObj = result.jsonObject
+                    if (resultObj["media_type"]?.jsonPrimitive?.content == "tv") {
+                        val id = resultObj["id"]?.jsonPrimitive?.int
+                        val name = resultObj["name"]?.jsonPrimitive?.content
+                        val dateStr = resultObj["first_air_date"]?.jsonPrimitive?.content
+                        val year = dateStr?.split("-")?.firstOrNull()?.toIntOrNull()
+                        if (id != null && name != null) TvResult(id, name, year) else null
+                    } else null
+                }
+            }
+
+            // Helper function to fetch TV show details (number of seasons)
+            fun fetchTvDetails(id: Int): Int {
+                val detailsUrl = "https://api.themoviedb.org/3/tv/$id"
+                val detailsConn = URL(detailsUrl).openConnection() as HttpsURLConnection
+                detailsConn.requestMethod = "GET"
+                detailsConn.setRequestProperty("accept", "application/json")
+                detailsConn.setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+
+                if (detailsConn.responseCode != 200) return 1
+
+                val detailsResp = detailsConn.inputStream.bufferedReader().readText()
+                val detailsJson = json.parseToJsonElement(detailsResp).jsonObject
+                return detailsJson["number_of_seasons"]?.jsonPrimitive?.int ?: 1
+            }
+
+            // Helper function to fetch a specific season
+            fun fetchSeason(id: Int, sNum: Int): List<TmdbEpisode>? {
+                val sUrl = "https://api.themoviedb.org/3/tv/$id/season/$sNum"
+                val sConn = URL(sUrl).openConnection() as HttpsURLConnection
+                sConn.requestMethod = "GET"
+                sConn.setRequestProperty("accept", "application/json")
+                sConn.setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+
+                if (sConn.responseCode != 200) return null
+
+                val sResp = sConn.inputStream.bufferedReader().readText()
+                val sJson = json.parseToJsonElement(sResp).jsonObject
+                val eps = sJson["episodes"]?.jsonArray ?: return emptyList()
+
+                return eps.map { ep ->
+                    val epObj = ep.jsonObject
+                    val stillPath = epObj["still_path"]?.jsonPrimitive?.contentOrNull
+                    TmdbEpisode(
+                        episode = epObj["episode_number"]?.jsonPrimitive?.int ?: 0,
+                        title = epObj["name"]?.jsonPrimitive?.content ?: "",
+                        description = epObj["overview"]?.jsonPrimitive?.content ?: "",
+                        image = if (stillPath != null) "https://image.tmdb.org/t/p/w500$stillPath" else null
+                    )
+                }.takeIf { it.isNotEmpty() }
+            }
+
+            // Helper to fetch ALL seasons with continuous episode numbering
+            fun fetchAllSeasons(id: Int): List<TmdbEpisode> {
+                val numSeasons = fetchTvDetails(id)
+                Log.d(TAG, "TV show has $numSeasons seasons")
+
+                val allEpisodes = mutableListOf<TmdbEpisode>()
+                var episodeCounter = 1
+
+                for (sNum in 1..numSeasons) {
+                    val seasonEps = fetchSeason(id, sNum) ?: continue
+                    // Renumber episodes continuously across seasons
+                    seasonEps.forEach { ep ->
+                        allEpisodes.add(ep.copy(episode = episodeCounter++))
+                    }
+                }
+
+                Log.d(TAG, "Fetched ${allEpisodes.size} total episodes from $numSeasons seasons")
+                return allEpisodes
+            }
+
+            // Helper to find best match from results
+            fun findBestMatch(results: List<TvResult>, query: String, year: Int?): TvResult? {
+                var bestMatch: TvResult? = null
+                var highestScore = -1
+                val normalizedQuery = query.lowercase().trim()
+
+                for (result in results) {
+                    var score = 0
+                    val normalizedName = result.name.lowercase().trim()
+
+                    if (normalizedName == normalizedQuery) score += 100
+                    else if (normalizedName.contains(normalizedQuery) || normalizedQuery.contains(normalizedName)) score += 10
+                    if (year != null && result.year == year) score += 50
+
+                    if (score > highestScore) {
+                        highestScore = score
+                        bestMatch = result
+                    }
+                }
+                return bestMatch ?: results.firstOrNull()
+            }
+
+            // STEP 1: Try exact anime title first
+            Log.d(TAG, "Step 1: Trying exact title: $animeTitle")
+            var tvResults = searchTmdb(animeTitle)
+            var bestMatch = findBestMatch(tvResults, animeTitle, animeYear)
+
+            if (bestMatch != null) {
+                Log.d(TAG, "Found match for exact title: ${bestMatch.name} (ID: ${bestMatch.id})")
+                val episodes = fetchSeason(bestMatch.id, 1)
+
+                if (episodes != null && episodes.isNotEmpty()) {
+                    // Filter out unaired episodes
+                    val filteredEpisodes = if (latestAiredEpisode < Int.MAX_VALUE) {
+                        episodes.filter { it.episode <= latestAiredEpisode }.also {
+                            if (it.size < episodes.size) {
+                                Log.d(TAG, "Filtered to ${it.size} aired episodes (was ${episodes.size}, latest: $latestAiredEpisode)")
+                            }
+                        }
+                    } else {
+                        episodes
+                    }
+                    Log.d(TAG, "Got ${filteredEpisodes.size} episodes directly from exact match")
+                    return@withContext filteredEpisodes
+                }
+            }
+
+            // STEP 2: Exact title didn't work - fallback to base series with offset
+            Log.d(TAG, "Step 2: Exact title not found, using offset calculation...")
+
+            // Extract base title for searching
+            val (baseTitle, detectedSeason) = extractSeasonInfo(animeTitle)
+            Log.d(TAG, "Extracted: baseTitle='$baseTitle', detectedSeason=$detectedSeason")
+
+            // Search for base series
+            tvResults = searchTmdb(baseTitle)
+            bestMatch = findBestMatch(tvResults, baseTitle, null)
+
+            if (bestMatch == null) {
+                Log.w(TAG, "No TV shows found in TMDB for base title: $baseTitle")
+                return@withContext emptyList()
+            }
+
+            val tvId = bestMatch.id
+            Log.d(TAG, "Selected base series: ${bestMatch.name} (ID: $tvId)")
+
+            // Fetch ALL seasons with continuous episode numbering
+            var episodes = fetchAllSeasons(tvId)
+
+            if (episodes.isEmpty()) {
+                Log.w(TAG, "No episodes found for $baseTitle")
+                return@withContext emptyList()
+            }
+
+            Log.d(TAG, "Fetched ${episodes.size} total episodes from TMDB with continuous numbering")
+
+            // Calculate episode offset for this sequel/season
+            val episodeOffset = calculateEpisodeOffset(animeId, animeTitle)
+            Log.d(TAG, "Episode offset: $episodeOffset")
+
+            // Apply episode offset logic:
+            // If offset is 47, TMDB episodes 48+ correspond to this anime's episodes 1, 2, 3...
+            if (episodeOffset > 0) {
+                val startEpisode = episodeOffset + 1
+                episodes = episodes
+                    .filter { it.episode >= startEpisode }
+                    .map { ep ->
+                        ep.copy(episode = ep.episode - episodeOffset)
+                    }
+                Log.d(TAG, "Mapped TMDB episodes $startEpisode+ to local episodes 1+ (offset: $episodeOffset, got ${episodes.size} episodes)")
+            }
+
+            // Filter out unaired episodes based on latestAiredEpisode
+            val filteredEpisodes = if (latestAiredEpisode < Int.MAX_VALUE) {
+                episodes.filter { it.episode <= latestAiredEpisode }.also {
+                    if (it.size < episodes.size) {
+                        Log.d(TAG, "Filtered to ${it.size} aired episodes (was ${episodes.size}, latest: $latestAiredEpisode)")
+                    }
+                }
+            } else {
+                episodes
+            }
+
+            Log.d(TAG, "Fetched ${filteredEpisodes.size} episodes from TMDB (season $detectedSeason, offset: $episodeOffset)")
+            filteredEpisodes
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching TMDB episodes for $animeTitle", e)
+            emptyList()
+        }
+    }
 }
 
-// Stream cache data classes
+// Data classes for cache and response models
 @Serializable
-data class StreamCacheData(
-    val entries: Map<String, StreamCacheEntry>
-)
+data class StreamCacheData(val entries: Map<String, StreamCacheEntry>)
 
 @Serializable
 data class StreamCacheEntry(
@@ -2440,19 +2936,14 @@ data class CachedEpisodeInfo(
 )
 
 @Serializable
-data class CachedServer(
-    val name: String,
-    val url: String
-)
+data class CachedServer(val name: String, val url: String)
 
-// Airing schedule cache data class
 @Serializable
 data class AiringCacheData(
     val scheduleByDay: Map<Int, List<AiringScheduleAnime>>,
     val airingAnimeList: List<AiringScheduleAnime>
 )
 
-// Cache data classes for serialization
 @Serializable
 data class ExploreCacheData(
     val featuredAnime: List<ExploreAnime>,
@@ -2478,7 +2969,13 @@ data class HomeCacheData(
     val userAvatar: String?
 )
 
-// Data classes
+data class TmdbEpisode(
+    val episode: Int,
+    val title: String,
+    val description: String,
+    val image: String?
+)
+
 @Serializable
 data class ExploreAnime(
     val id: Int,
@@ -2576,7 +3073,6 @@ data class ExploreData(val Page: ExplorePage)
 @Serializable
 data class ExplorePage(val media: List<ExploreMedia>)
 
-// FIX: nextAiringEpisode now has default null value
 @Serializable
 data class ExploreMedia(
     val id: Int,
@@ -2585,7 +3081,7 @@ data class ExploreMedia(
     val coverImage: MediaCoverImage?,
     val bannerImage: String?,
     val episodes: Int?,
-    val nextAiringEpisode: NextAiringEpisode? = null,  // FIX: Added default null
+    val nextAiringEpisode: NextAiringEpisode? = null,
     val status: String?,
     val averageScore: Int?,
     val genres: List<String>?,
@@ -2593,10 +3089,6 @@ data class ExploreMedia(
     val startDate: FuzzyDate? = null
 )
 
-// ============================================
-// STRATEGY 2: Batched Explore Response
-// ============================================
-// Response class for batched GraphQL queries with aliases
 @Serializable
 data class BatchedExploreResponse(val data: BatchedExploreData)
 
@@ -2639,7 +3131,6 @@ data class NextAiringEpisode(
     val timeUntilAiring: Long? = null
 )
 
-// Airing Schedule data classes
 @Serializable
 data class AiringScheduleAnime(
     val id: Int,
@@ -2687,7 +3178,6 @@ data class AiringScheduleMedia(
     val seasonYear: Int? = null
 )
 
-// User Activity data classes
 @Serializable
 data class UserActivity(
     val id: Int,
@@ -2703,7 +3193,6 @@ data class UserActivity(
     val year: Int? = null
 )
 
-// User Favorites data classes
 @Serializable
 data class UserFavoritesResponse(val data: UserFavoritesData)
 
@@ -2730,7 +3219,6 @@ data class UserFavoriteAnime(
     val seasonYear: Int? = null
 )
 
-// Simplified Activity Response
 @Serializable
 data class SimpleActivityResponse(val data: SimpleActivityData)
 
@@ -2759,7 +3247,6 @@ data class SimpleActivityTitle(
     val romaji: String?
 )
 
-// Detailed Anime data classes
 @Serializable
 data class DetailedAnimeResponse(val data: DetailedAnimeDataWrapper)
 

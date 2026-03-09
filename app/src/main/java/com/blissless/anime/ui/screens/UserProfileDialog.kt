@@ -21,8 +21,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -39,7 +41,10 @@ fun UserProfileDialog(
     viewModel: MainViewModel,
     isOled: Boolean,
     onDismiss: () -> Unit,
-    onShowAnimeDialog: (ExploreAnime) -> Unit
+    onShowAnimeDialog: (ExploreAnime) -> Unit,
+    planningToWatch: List<AnimeMedia> = emptyList(),
+    onHold: List<AnimeMedia> = emptyList(),
+    dropped: List<AnimeMedia> = emptyList()
 ) {
     val context = LocalContext.current
     val userName by viewModel.userName.collectAsState()
@@ -66,12 +71,6 @@ fun UserProfileDialog(
         if (avatarClickCount > 0 && userId != null) {
             viewModel.fetchUserActivity()
         }
-    }
-
-    // Get favorite anime from the lists
-    val favoriteAnime = remember(localFavorites, currentlyWatching, completed) {
-        val allAnime = currentlyWatching + completed
-        allAnime.filter { localFavorites.contains(it.id) }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -188,23 +187,15 @@ fun UserProfileDialog(
                     when (selectedTab) {
                         0 -> FavoritesTab(
                             viewModel = viewModel,
-                            favoriteAnime = favoriteAnime,
                             localFavorites = localFavorites,
                             isOled = isOled,
+                            currentlyWatching = currentlyWatching,
+                            completed = completed,
+                            planningToWatch = planningToWatch,
+                            onHold = onHold,
+                            dropped = dropped,
                             onAnimeClick = { anime ->
-                                // Convert to ExploreAnime and show dialog
-                                val exploreAnime = ExploreAnime(
-                                    id = anime.id,
-                                    title = anime.title,
-                                    cover = anime.cover,
-                                    banner = anime.banner,
-                                    episodes = anime.totalEpisodes,
-                                    latestEpisode = anime.latestEpisode,
-                                    averageScore = anime.averageScore,
-                                    genres = anime.genres,
-                                    year = anime.year
-                                )
-                                onShowAnimeDialog(exploreAnime)
+                                onShowAnimeDialog(anime)
                             }
                         )
                         1 -> HistoryTab(
@@ -226,24 +217,32 @@ fun UserProfileDialog(
 @Composable
 private fun FavoritesTab(
     viewModel: MainViewModel,
-    favoriteAnime: List<AnimeMedia>,
-    localFavorites: Set<Int>,
+    localFavorites: Map<Int, MainViewModel.StoredFavorite>,
     isOled: Boolean,
-    onAnimeClick: (AnimeMedia) -> Unit
+    currentlyWatching: List<AnimeMedia>,
+    completed: List<AnimeMedia>,
+    planningToWatch: List<AnimeMedia>,
+    onHold: List<AnimeMedia>,
+    dropped: List<AnimeMedia>,
+    onAnimeClick: (ExploreAnime) -> Unit
 ) {
     val context = LocalContext.current
     var showSearchDialog by remember { mutableStateOf(false) }
-    val currentlyWatching by viewModel.currentlyWatching.collectAsState()
-    val completed by viewModel.completed.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
 
-    val allAnime = remember(currentlyWatching, completed) {
-        currentlyWatching + completed
+    // ALL anime from user's lists (for looking up missing data and for search)
+    val allListAnime = remember(currentlyWatching, completed, planningToWatch, onHold, dropped) {
+        currentlyWatching + completed + planningToWatch + onHold + dropped
     }
 
-    val filteredAnime = remember(searchQuery, allAnime) {
-        if (searchQuery.isEmpty()) allAnime
-        else allAnime.filter { it.title.contains(searchQuery, ignoreCase = true) }
+    // Create a map for quick lookup
+    val animeMap = remember(allListAnime) {
+        allListAnime.associateBy { it.id }
+    }
+
+    val filteredListAnime = remember(searchQuery, allListAnime) {
+        if (searchQuery.isEmpty()) allListAnime
+        else allListAnime.filter { it.title.contains(searchQuery, ignoreCase = true) }
     }
 
     Column {
@@ -266,7 +265,7 @@ private fun FavoritesTab(
 
         Spacer(Modifier.height(8.dp))
 
-        if (favoriteAnime.isEmpty()) {
+        if (localFavorites.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
@@ -281,15 +280,37 @@ private fun FavoritesTab(
                 }
             }
         } else {
+            // Display favorites - use stored data or look up from lists
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(favoriteAnime) { anime ->
-                    FavoriteAnimeItem(
-                        anime = anime,
+                items(localFavorites.values.toList()) { fav ->
+                    // If stored data is incomplete, try to find it from user's lists
+                    val animeFromList = if (fav.title.isEmpty()) animeMap[fav.id] else null
+
+                    FavoriteItemWithFallback(
+                        favorite = fav,
+                        animeFromList = animeFromList,
                         isOled = isOled,
-                        isFavorite = true,
-                        onClick = { onAnimeClick(anime) },
+                        onClick = {
+                            // Use data from list if available, otherwise use stored data
+                            val exploreAnime = ExploreAnime(
+                                id = fav.id,
+                                title = when {
+                                    animeFromList != null -> animeFromList.title
+                                    fav.title.isNotEmpty() -> fav.title
+                                    else -> "Anime #${fav.id}"
+                                },
+                                cover = animeFromList?.cover ?: fav.cover,
+                                banner = animeFromList?.banner ?: fav.banner,
+                                episodes = animeFromList?.totalEpisodes ?: 0,
+                                latestEpisode = animeFromList?.latestEpisode,
+                                averageScore = animeFromList?.averageScore ?: fav.averageScore,
+                                genres = animeFromList?.genres ?: emptyList(),
+                                year = animeFromList?.year ?: fav.year
+                            )
+                            onAnimeClick(exploreAnime)
+                        },
                         onToggleFavorite = {
-                            viewModel.toggleLocalFavorite(anime.id)
+                            viewModel.toggleLocalFavorite(fav.id, fav.title, fav.cover, fav.banner, fav.year, fav.averageScore)
                             Toast.makeText(context, "Removed from favorites", Toast.LENGTH_SHORT).show()
                         }
                     )
@@ -298,7 +319,7 @@ private fun FavoritesTab(
         }
     }
 
-    // Search Dialog for adding favorites
+    // Search Dialog for adding favorites from user's lists
     if (showSearchDialog) {
         Dialog(onDismissRequest = { showSearchDialog = false }) {
             Card(
@@ -346,7 +367,7 @@ private fun FavoritesTab(
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        "${filteredAnime.size} anime in your list",
+                        "${filteredListAnime.size} anime in your list",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -354,18 +375,31 @@ private fun FavoritesTab(
                     Spacer(Modifier.height(8.dp))
 
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(filteredAnime) { anime ->
-                            val isFavorite = localFavorites.contains(anime.id)
+                        items(filteredListAnime) { anime ->
+                            val isFavorite = localFavorites.containsKey(anime.id)
                             FavoriteAnimeItem(
                                 anime = anime,
                                 isOled = isOled,
                                 isFavorite = isFavorite,
-                                onClick = { onAnimeClick(anime) },
+                                onClick = {
+                                    val exploreAnime = ExploreAnime(
+                                        id = anime.id,
+                                        title = anime.title,
+                                        cover = anime.cover,
+                                        banner = anime.banner,
+                                        episodes = anime.totalEpisodes,
+                                        latestEpisode = anime.latestEpisode,
+                                        averageScore = anime.averageScore,
+                                        genres = anime.genres,
+                                        year = anime.year
+                                    )
+                                    onAnimeClick(exploreAnime)
+                                },
                                 onToggleFavorite = {
                                     if (!isFavorite && localFavorites.size >= 10) {
                                         Toast.makeText(context, "Maximum 10 favorites! Remove one first.", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        viewModel.toggleLocalFavorite(anime.id)
+                                        viewModel.toggleLocalFavorite(anime)
                                         Toast.makeText(
                                             context,
                                             if (isFavorite) "Removed from favorites" else "Added to favorites",
@@ -377,6 +411,129 @@ private fun FavoritesTab(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoriteItemWithFallback(
+    favorite: MainViewModel.StoredFavorite,
+    animeFromList: AnimeMedia?,
+    isOled: Boolean,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit
+) {
+    // Use data from list if available, otherwise use stored data
+    val displayTitle = when {
+        animeFromList != null -> animeFromList.title
+        favorite.title.isNotEmpty() -> favorite.title
+        else -> "Anime #${favorite.id}"
+    }
+
+    val displayCover = when {
+        animeFromList != null -> animeFromList.cover
+        favorite.cover.isNotEmpty() -> favorite.cover
+        else -> null
+    }
+
+    val displayYear = animeFromList?.year ?: favorite.year
+    val displayScore = animeFromList?.averageScore ?: favorite.averageScore
+    val hasMissingData = displayTitle == "Anime #${favorite.id}" || displayCover.isNullOrEmpty()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Cover image with placeholder
+            Box(
+                modifier = Modifier
+                    .width(50.dp)
+                    .height(70.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (hasMissingData) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        else Color.Gray.copy(alpha = 0.3f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (displayCover != null && displayCover.isNotEmpty()) {
+                    AsyncImage(
+                        model = displayCover,
+                        contentDescription = displayTitle,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    // Placeholder icon when no cover
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            if (hasMissingData) Icons.Default.Refresh else Icons.Default.Image,
+                            contentDescription = null,
+                            tint = if (hasMissingData) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        if (hasMissingData) {
+                            Text(
+                                "Tap to\nrefresh",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center,
+                                fontSize = 8.sp
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    displayTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (hasMissingData) MaterialTheme.colorScheme.primary else Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (displayYear != null) {
+                    Text(
+                        "$displayYear",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                } else if (hasMissingData) {
+                    Text(
+                        "Data needs refresh",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                }
+                displayScore?.let { score ->
+                    Text(
+                        "★ ${score / 10.0}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFFFD700)
+                    )
+                }
+            }
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    Icons.Filled.Star,
+                    contentDescription = "Remove from favorites",
+                    tint = Color(0xFFFFD700),
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
     }
@@ -628,7 +785,7 @@ private fun RateTab(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Rate completed anime. Star = Favorite",
+            "Rate completed anime.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f)
         )
@@ -747,19 +904,19 @@ private fun RateTab(
                         RateAnimeItem(
                             anime = anime,
                             isOled = isOled,
-                            isFavorite = localFavorites.contains(anime.id),
+                            isFavorite = localFavorites.containsKey(anime.id),
                             onRateClick = {
                                 selectedAnime = anime
                                 selectedRating = 0
                             },
                             onFavoriteClick = {
-                                if (!localFavorites.contains(anime.id) && localFavorites.size >= 10) {
+                                if (!localFavorites.containsKey(anime.id) && localFavorites.size >= 10) {
                                     Toast.makeText(context, "Maximum 10 favorites! Remove one first.", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    viewModel.toggleLocalFavorite(anime.id)
+                                    viewModel.toggleLocalFavorite(anime)
                                     Toast.makeText(
                                         context,
-                                        if (localFavorites.contains(anime.id)) "Removed from favorites" else "Added to favorites",
+                                        if (localFavorites.containsKey(anime.id)) "Removed from favorites" else "Added to favorites",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }

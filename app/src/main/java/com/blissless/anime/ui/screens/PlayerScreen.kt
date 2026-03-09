@@ -10,7 +10,6 @@ import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
@@ -29,7 +28,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -53,13 +56,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.ui.text.font.FontWeight
 import java.util.Locale
+import android.util.Log
 import com.blissless.anime.api.EpisodeStreams
 import com.blissless.anime.api.AnimeSkipService
 import com.blissless.anime.api.EpisodeTimestamps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -72,6 +76,7 @@ fun PlayerScreen(
     animeName: String = "",
     animeId: Int = 0,
     malId: Int = 0,
+    animeYear: Int? = null, // Added parameter
     episodeLength: Int = 1440,
     isLoadingStream: Boolean = false,
     episodeInfo: EpisodeStreams? = null,
@@ -86,6 +91,9 @@ fun PlayerScreen(
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
+    // Playback position
+    savedPosition: Long = 0L,
+    onSavePosition: ((Long) -> Unit)? = null,
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
     onNextEpisode: (() -> Unit)? = null,
@@ -114,8 +122,14 @@ fun PlayerScreen(
     var sliderValue by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
+    // Skip indicator state
+    var showSkipIndicator by remember { mutableStateOf(false) }
+    var skipIndicatorText by remember { mutableStateOf("") }
+    var skipIsForward by remember { mutableStateOf(true) }
+
     // Timestamps for auto-skip - key on videoUrl to ensure reset when video changes
-    val animeSkipService = remember { AnimeSkipService() }
+    // UPDATED: Now using context for AnimeSkipService to enable fallback
+    val animeSkipService = remember { AnimeSkipService(context) }
 
     // All timestamp-related states keyed on videoUrl to ensure proper reset on episode change
     var episodeTimestamps by remember(videoUrl) { mutableStateOf<EpisodeTimestamps?>(null) }
@@ -126,11 +140,15 @@ fun PlayerScreen(
     var showSkipEndingButton by remember(videoUrl) { mutableStateOf(false) }
     var hasFetchedTimestamps by remember(videoUrl) { mutableStateOf(false) }
     var actualEpisodeLength by remember(videoUrl) { mutableStateOf<Int?>(null) }
+    var timestampSource by remember(videoUrl) { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
 
     // Show fallback toast once when stream starts with fallback
     var hasShownFallbackToast by remember(videoUrl) { mutableStateOf(false) }
+
+    // Track if we've restored the saved position
+    var hasRestoredPosition by remember(videoUrl) { mutableStateOf(false) }
 
     // Combined timestamps
     val effectiveTimestamps by remember(episodeTimestamps) {
@@ -148,9 +166,12 @@ fun PlayerScreen(
         }
     }
 
-    // Fullscreen & Orientation Logic
+    // Fullscreen & Orientation Logic + KEEP SCREEN ON
     LaunchedEffect(Unit) {
         activity?.window?.let { window ->
+            // Keep screen on while watching
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -167,7 +188,13 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            // Save position before exiting
+            onSavePosition?.invoke(currentPosition)
+
             activity?.window?.let { window ->
+                // Clear screen on flag when leaving player
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -217,6 +244,7 @@ fun PlayerScreen(
     LaunchedEffect(videoUrl) {
         hasError = false
         playbackError = null
+        hasRestoredPosition = false
 
         val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl)
@@ -240,6 +268,15 @@ fun PlayerScreen(
         sliderValue = 0f
     }
 
+    // Restore saved position once player is ready
+    LaunchedEffect(exoPlayer.playbackState, savedPosition, hasRestoredPosition) {
+        if (exoPlayer.playbackState == Player.STATE_READY && savedPosition > 0 && !hasRestoredPosition) {
+            exoPlayer.seekTo(savedPosition)
+            hasRestoredPosition = true
+            Log.d("PlayerScreen", "Restored position to $savedPosition ms")
+        }
+    }
+
     // Show fallback toast when stream starts
     LaunchedEffect(videoUrl, isFallbackStream) {
         if (isFallbackStream && !hasShownFallbackToast && videoUrl.isNotEmpty()) {
@@ -253,9 +290,20 @@ fun PlayerScreen(
         }
     }
 
-    fun seekBy(milliseconds: Long) {
+    fun seekBy(milliseconds: Long, isForward: Boolean) {
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
+
+        // Show skip indicator
+        val seconds = abs(milliseconds / 1000)
+        skipIndicatorText = if (milliseconds > 0) "+${seconds}s" else "-${seconds}s"
+        skipIsForward = isForward
+        showSkipIndicator = true
+
+        scope.launch {
+            delay(500)
+            showSkipIndicator = false
+        }
     }
 
     // Update progress and capture actual duration
@@ -280,40 +328,49 @@ fun PlayerScreen(
         }
     }
 
-    // Fetch timestamps ONLY after we have the actual video duration
-    LaunchedEffect(actualEpisodeLength, videoUrl, malId) {
+    // UPDATED: Fetch timestamps using fallback chain (cache -> AniSkip -> AnimeThemes)
+    // Pass the animeYear and animeId for better fallback support
+    LaunchedEffect(actualEpisodeLength, videoUrl, malId, animeYear, animeName) {
         val epLength = actualEpisodeLength
         if (epLength == null || hasFetchedTimestamps) {
             return@LaunchedEffect
         }
 
         isFetchingTimestamps = true
+        Log.d("PlayerScreen", "Fetching timestamps with fallback for: $animeName (MAL: $malId, Year: $animeYear)")
 
         withContext(Dispatchers.IO) {
             try {
-                var timestamps: EpisodeTimestamps? = null
-
-                // Try with MAL ID first
-                if (malId > 0) {
-                    timestamps = animeSkipService.getSkipTimestamps(
+                // Try with MAL ID first using full fallback chain
+                val timestamps = if (malId > 0) {
+                    animeSkipService.getSkipTimestampsWithFallback(
                         malId = malId,
                         episodeNumber = currentEpisode,
-                        episodeLength = epLength
+                        episodeLength = epLength,
+                        animeName = animeName,
+                        animeYear = animeYear,
+                        animeId = animeId
                     )
-                }
-
-                // Fallback: search by anime name
-                if (timestamps == null && animeName.isNotEmpty()) {
-                    timestamps = animeSkipService.getSkipTimestampsByName(
+                } else if (animeName.isNotEmpty()) {
+                    // Fallback: search by anime name + year
+                    animeSkipService.getSkipTimestampsByName(
                         animeName = animeName,
                         episodeNumber = currentEpisode,
-                        episodeLength = epLength
+                        episodeLength = epLength,
+                        year = animeYear
                     )
+                } else {
+                    null
                 }
 
-                episodeTimestamps = timestamps
+                if (timestamps != null) {
+                    episodeTimestamps = timestamps
+                    Log.d("PlayerScreen", "Got timestamps: OP=${timestamps.introStart}-${timestamps.introEnd}, ED=${timestamps.creditsStart}-${timestamps.creditsEnd}")
+                } else {
+                    Log.d("PlayerScreen", "No timestamps found from any source")
+                }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("PlayerScreen", "Error fetching timestamps", e)
             }
         }
 
@@ -334,6 +391,7 @@ fun PlayerScreen(
                 if (autoSkipOpening && !hasSkippedIntro) {
                     exoPlayer.seekTo(ts.introEnd * 1000)
                     hasSkippedIntro = true
+                    Log.d("PlayerScreen", "Auto-skipped intro to ${ts.introEnd}s")
                 }
                 showSkipOpeningButton = !autoSkipOpening
             } else {
@@ -349,6 +407,7 @@ fun PlayerScreen(
                 if (autoSkipEnding && !hasSkippedOutro) {
                     onNextEpisode.invoke()
                     hasSkippedOutro = true
+                    Log.d("PlayerScreen", "Auto-skipped to next episode")
                 }
                 showSkipEndingButton = !autoSkipEnding
             } else {
@@ -410,20 +469,35 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Touch areas
+        // Left edge area - consume touches to prevent toggling controls
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(0.3f)
+                .width(40.dp)
                 .align(Alignment.CenterStart)
-                .pointerInput(backwardSkipSeconds) {
+                .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { showControls = !showControls },
-                        onDoubleTap = { seekBy(-(backwardSkipSeconds * 1000L)) }
+                        onTap = { /* Consume tap, do nothing */ }
                     )
                 }
         )
 
+        // Left touch area for double-tap skip (not edge)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.3f)
+                .padding(start = 40.dp)
+                .align(Alignment.CenterStart)
+                .pointerInput(backwardSkipSeconds) {
+                    detectTapGestures(
+                        onTap = { showControls = !showControls },
+                        onDoubleTap = { seekBy(-(backwardSkipSeconds * 1000L), false) }
+                    )
+                }
+        )
+
+        // Center touch area
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -436,15 +510,30 @@ fun PlayerScreen(
                 }
         )
 
+        // Right touch area for double-tap skip (not edge)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(0.3f)
+                .padding(end = 40.dp)
                 .align(Alignment.CenterEnd)
                 .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { showControls = !showControls },
-                        onDoubleTap = { seekBy(forwardSkipSeconds * 1000L) }
+                        onDoubleTap = { seekBy(forwardSkipSeconds * 1000L, true) }
+                    )
+                }
+        )
+
+        // Right edge area - consume touches to prevent toggling controls
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(40.dp)
+                .align(Alignment.CenterEnd)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { /* Consume tap, do nothing */ }
                     )
                 }
         )
@@ -582,6 +671,7 @@ fun PlayerScreen(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
+                            // Show loading indicator when fetching timestamps
                             if (isFetchingTimestamps) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),
@@ -641,38 +731,114 @@ fun PlayerScreen(
                     }
                 }
 
-                // Center controls
-                Row(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Center controls with skip indicators (using Box for overlay)
+                Box(
+                    modifier = Modifier.align(Alignment.Center)
                 ) {
-                    IconButton(
-                        onClick = { onPreviousEpisode?.invoke() },
-                        modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream) 1f else 0.3f),
-                        enabled = onPreviousEpisode != null && !isLoadingStream
+                    // Main control buttons row
+                    Row(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalArrangement = Arrangement.spacedBy(32.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                        // Previous Episode Button
+                        IconButton(
+                            onClick = { onPreviousEpisode?.invoke() },
+                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream) 1f else 0.3f),
+                            enabled = onPreviousEpisode != null && !isLoadingStream
+                        ) {
+                            Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
+
+                        // Play/Pause Button
+                        IconButton(
+                            onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
+                            modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(42.dp)
+                            )
+                        }
+
+                        // Next Episode Button
+                        IconButton(
+                            onClick = { onNextEpisode?.invoke() },
+                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream) 1f else 0.3f),
+                            enabled = onNextEpisode != null && !isLoadingStream
+                        ) {
+                            Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
                     }
 
-                    IconButton(
-                        onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
-                        modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    // Backward skip indicator (overlayed to the left)
+                    AnimatedVisibility(
+                        visible = showSkipIndicator && !skipIsForward,
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                        modifier = Modifier.align(Alignment.CenterStart).offset(x = (-120).dp)
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(42.dp)
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FastRewind,
+                                    contentDescription = "Rewind",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = skipIndicatorText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
 
-                    IconButton(
-                        onClick = { onNextEpisode?.invoke() },
-                        modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream) 1f else 0.3f),
-                        enabled = onNextEpisode != null && !isLoadingStream
+                    // Forward skip indicator (overlayed to the right)
+                    AnimatedVisibility(
+                        visible = showSkipIndicator && skipIsForward,
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                        modifier = Modifier.align(Alignment.CenterEnd).offset(x = 120.dp)
                     ) {
-                        Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FastForward,
+                                    contentDescription = "Forward",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = skipIndicatorText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 

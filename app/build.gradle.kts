@@ -29,10 +29,13 @@ android {
 
         val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
+        val anilistApiKey2 = localProperties.getProperty("CLIENT_ID_ANILIST2")
+        val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
 
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
         buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey\"")
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     }
 
     // 1. ADD THIS: Configure your signing keys here

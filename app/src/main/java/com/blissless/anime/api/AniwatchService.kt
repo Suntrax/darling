@@ -32,6 +32,13 @@ data class EpisodeStreams(
     val episodeId: String
 )
 
+// Result for anime search with episode count
+data class AniwatchAnimeInfo(
+    val id: String,
+    val name: String,
+    val totalEpisodes: Int
+)
+
 object AniwatchService {
     private const val TAG = "AniwatchService"
     private const val API_BASE = BuildConfig.API_BASE_URL
@@ -55,6 +62,69 @@ object AniwatchService {
             }
         }
         return null
+    }
+
+    // NEW: Search for anime and return info with episode count
+    suspend fun searchAnimeInfo(animeName: String): AniwatchAnimeInfo? = withContext(Dispatchers.IO) {
+        retry {
+            val encodedName = URLEncoder.encode(animeName, "UTF-8")
+            val searchUrl = "$API_BASE/search?q=$encodedName"
+            Log.d(TAG, "Searching for anime info: $searchUrl")
+
+            val searchRequest = Request.Builder()
+                .url(searchUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+            val searchResponse = client.newCall(searchRequest).execute()
+
+            if (!searchResponse.isSuccessful) {
+                Log.e(TAG, "Search failed: ${searchResponse.code}")
+                return@retry null
+            }
+
+            val searchData = JSONObject(searchResponse.body.string())
+
+            if (searchData.getInt("status") != 200) return@retry null
+            val animes = searchData.getJSONObject("data").getJSONArray("animes")
+            if (animes.length() == 0) return@retry null
+
+            // Find best match
+            var bestMatch: JSONObject? = null
+            for (i in 0 until animes.length()) {
+                val anime = animes.getJSONObject(i)
+                val name = anime.getString("name")
+                if (name.equals(animeName, ignoreCase = true)) {
+                    bestMatch = anime
+                    break
+                }
+            }
+            if (bestMatch == null) {
+                bestMatch = animes.getJSONObject(0)
+            }
+
+            val animeId = bestMatch.getString("id")
+            val name = bestMatch.getString("name")
+
+            // Get episode count
+            val epUrl = "$API_BASE/anime/$animeId/episodes"
+            Log.d(TAG, "Fetching episode count: $epUrl")
+
+            val epRequest = Request.Builder()
+                .url(epUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+            val epResponse = client.newCall(epRequest).execute()
+
+            var totalEpisodes = 0
+            if (epResponse.isSuccessful) {
+                val epData = JSONObject(epResponse.body.string())
+                val episodes = epData.getJSONObject("data").getJSONArray("episodes")
+                totalEpisodes = episodes.length()
+            }
+
+            Log.d(TAG, "Found anime: $name with $totalEpisodes episodes")
+            AniwatchAnimeInfo(id = animeId, name = name, totalEpisodes = totalEpisodes)
+        }
     }
 
     // Get anime ID and episode ID for pre-fetching
@@ -321,7 +391,7 @@ object AniwatchService {
             Log.d(TAG, "Found ${serversArray.length()} $category servers")
 
             // Find the server or use first available
-            var targetServerName: String = ""
+            var targetServerName = ""
 
             if (serverName != null) {
                 for (i in 0 until serversArray.length()) {
