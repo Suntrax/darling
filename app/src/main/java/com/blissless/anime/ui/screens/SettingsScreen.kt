@@ -10,7 +10,6 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,16 +39,20 @@ fun SettingsScreen(
     disableMaterialColors: Boolean = false,
     preferredCategory: String = "sub",
     simplifyEpisodeMenu: Boolean = true,
-    simplifyAnimeDetails: Boolean = true
+    simplifyAnimeDetails: Boolean = true,
+    enableThumbnailPreview: Boolean = false
 ) {
     val scrollState = rememberScrollState()
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
 
-    // Collect the new settings from ViewModel
+    // Collect the settings from ViewModel
     val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
     val simplifyAnimeDetailsState by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
+
+    // Track thumbnail preview state for showing info dialog
+    var showThumbnailInfoDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -179,6 +182,12 @@ fun SettingsScreen(
                     isOled = isOled
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            HorizontalDivider(
+                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
         }
 
         // Player Settings Section
@@ -242,7 +251,7 @@ fun SettingsScreen(
 
             SettingsToggle(
                 title = "Auto Skip Opening",
-                description = "Automatically skip anime openings",
+                description = "Automatically skip anime openings when detected",
                 checked = autoSkipOpening,
                 onCheckedChange = { viewModel.setAutoSkipOpening(it) },
                 isOled = isOled
@@ -252,7 +261,7 @@ fun SettingsScreen(
 
             SettingsToggle(
                 title = "Auto Skip Ending",
-                description = "Automatically skip anime endings",
+                description = "Automatically skip to next episode during credits",
                 checked = autoSkipEnding,
                 onCheckedChange = { viewModel.setAutoSkipEnding(it) },
                 isOled = isOled
@@ -325,6 +334,47 @@ fun SettingsScreen(
                 }
             }
         }
+
+        // Thumbnail Preview Info Dialog
+        if (showThumbnailInfoDialog) {
+            AlertDialog(
+                onDismissRequest = { showThumbnailInfoDialog = false },
+                title = { Text("Seekbar Thumbnail Preview") },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            "This feature shows a preview of the video frame when you drag the seekbar, " +
+                                    "similar to YouTube's scrubbing preview."
+                        )
+                        Text(
+                            "How it works:",
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text("• Frames are preloaded in the background while you watch")
+                        Text("• Frames are cached for quick access during scrubbing")
+                        Text("• Works best with stable internet connections")
+                        Text(
+                            "Note:",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFA500)
+                        )
+                        Text(
+                            "This feature may use additional data and battery as it needs to " +
+                                    "extract video frames. If you experience performance issues, " +
+                                    "consider disabling this feature.",
+                            color = Color(0xFFFFA500)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showThumbnailInfoDialog = false }) {
+                        Text("Got it")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -382,7 +432,8 @@ private fun SettingsToggle(
     description: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    isOled: Boolean
+    isOled: Boolean,
+    trailingIcon: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -402,6 +453,11 @@ private fun SettingsToggle(
                 color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        if (trailingIcon != null) {
+            trailingIcon()
+        }
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange

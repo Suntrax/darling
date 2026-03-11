@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.components
 
 import androidx.compose.ui.graphics.Color
 

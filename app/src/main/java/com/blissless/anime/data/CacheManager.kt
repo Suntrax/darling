@@ -1,0 +1,270 @@
+package com.blissless.anime.data
+
+import android.content.SharedPreferences
+import android.util.Log
+import com.blissless.anime.api.AniwatchStreamResult
+import com.blissless.anime.api.EpisodeStreams
+import com.blissless.anime.api.ServerInfo
+import com.blissless.anime.data.models.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
+import androidx.core.content.edit
+
+/**
+ * Manages persistent caching operations for the app.
+ * In-memory GraphQL caching is now handled by GraphQLClient for better deduplication.
+ */
+class CacheManager(private val sharedPreferences: SharedPreferences) {
+
+    companion object {
+        private const val TAG = "CacheManager"
+
+        // Cache durations
+        private const val CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L      // 7 days
+        private const val AIRING_CACHE_DURATION_MS = 1 * 60 * 60 * 1000L  // 1 hour
+        private const val STREAM_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
+
+        // Cache keys
+        private const val CACHE_EXPLORE_TIME = "cache_explore_time"
+        private const val CACHE_HOME_TIME = "cache_home_time"
+        private const val CACHE_EXPLORE_DATA = "cache_explore_data"
+        private const val CACHE_HOME_DATA = "cache_home_data"
+        private const val CACHE_STREAM_DATA = "cache_stream_data"
+        private const val CACHE_AIRING_TIME = "cache_airing_time"
+        private const val CACHE_AIRING_DATA = "cache_airing_data"
+        private const val CACHE_PLAYBACK_POSITIONS = "cache_playback_positions"
+    }
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+    }
+
+    // State flows for UI
+    private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
+    val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
+
+    private val _prefetchedEpisodeInfo = MutableStateFlow<Map<String, EpisodeStreams?>>(emptyMap())
+    val prefetchedEpisodeInfo: StateFlow<Map<String, EpisodeStreams?>> = _prefetchedEpisodeInfo.asStateFlow()
+
+    private val _detailedAnimeCache = MutableStateFlow<Map<Int, DetailedAnimeData>>(emptyMap())
+    val detailedAnimeCache: StateFlow<Map<Int, DetailedAnimeData>> = _detailedAnimeCache.asStateFlow()
+
+    private val _playbackPositions = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val playbackPositions: StateFlow<Map<String, Long>> = _playbackPositions.asStateFlow()
+
+    fun invalidateUserCache() {
+        Log.d(TAG, "Invalidating persistent user cache")
+        sharedPreferences.edit {
+            remove(CACHE_HOME_DATA)
+                .remove(CACHE_HOME_TIME)
+        }
+    }
+
+    // ============================================
+    // Persistence Cache (SharedPreferences)
+    // ============================================
+
+    private fun isCacheValid(cacheKey: String, customDuration: Long = CACHE_DURATION_MS): Boolean {
+        val cacheTime = sharedPreferences.getLong(cacheKey, 0)
+        val now = System.currentTimeMillis()
+        return (now - cacheTime) < customDuration
+    }
+
+    private fun setCacheTime(cacheKey: String) {
+        sharedPreferences.edit { putLong(cacheKey, System.currentTimeMillis()) }
+    }
+
+    fun saveHomeDataToCache(data: HomeCacheData) {
+        try {
+            val jsonString = json.encodeToString(HomeCacheData.serializer(), data)
+            sharedPreferences.edit { putString(CACHE_HOME_DATA, jsonString) }
+            setCacheTime(CACHE_HOME_TIME)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save home data", e)
+        }
+    }
+
+    fun loadHomeDataFromCache(): HomeCacheData? {
+        val cachedData = sharedPreferences.getString(CACHE_HOME_DATA, null)
+        if (cachedData != null && isCacheValid(CACHE_HOME_TIME)) {
+            return try {
+                json.decodeFromString<HomeCacheData>(cachedData)
+            } catch (e: Exception) { null }
+        }
+        return null
+    }
+
+    fun saveExploreDataToCache(data: ExploreCacheData) {
+        try {
+            val jsonString = json.encodeToString(ExploreCacheData.serializer(), data)
+            sharedPreferences.edit { putString(CACHE_EXPLORE_DATA, jsonString) }
+            setCacheTime(CACHE_EXPLORE_TIME)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save explore data", e)
+        }
+    }
+
+    fun loadExploreDataFromCache(): ExploreCacheData? {
+        val cachedData = sharedPreferences.getString(CACHE_EXPLORE_DATA, null)
+        if (cachedData != null && isCacheValid(CACHE_EXPLORE_TIME)) {
+            return try {
+                json.decodeFromString<ExploreCacheData>(cachedData)
+            } catch (e: Exception) { null }
+        }
+        return null
+    }
+
+    fun saveAiringScheduleCache(scheduleByDay: Map<Int, List<AiringScheduleAnime>>, airingAnimeList: List<AiringScheduleAnime>) {
+        try {
+            val cacheData = AiringCacheData(scheduleByDay, airingAnimeList)
+            val jsonString = json.encodeToString(AiringCacheData.serializer(), cacheData)
+            sharedPreferences.edit { putString(CACHE_AIRING_DATA, jsonString) }
+            setCacheTime(CACHE_AIRING_TIME)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save airing schedule", e)
+        }
+    }
+
+    fun loadAiringScheduleCache(): AiringCacheData? {
+        val cachedData = sharedPreferences.getString(CACHE_AIRING_DATA, null)
+        if (cachedData != null && isCacheValid(CACHE_AIRING_TIME, AIRING_CACHE_DURATION_MS)) {
+            return try {
+                json.decodeFromString<AiringCacheData>(cachedData)
+            } catch (e: Exception) { null }
+        }
+        return null
+    }
+
+    // ============================================
+    // Stream & Playback Cache
+    // ============================================
+
+    fun loadStreamCache() {
+        try {
+            val cachedData = sharedPreferences.getString(CACHE_STREAM_DATA, null) ?: return
+            val cacheData = json.decodeFromString<StreamCacheData>(cachedData)
+            val now = System.currentTimeMillis()
+
+            val streamMap = mutableMapOf<String, AniwatchStreamResult?>()
+            val episodeMap = mutableMapOf<String, EpisodeStreams?>()
+
+            cacheData.entries.filter { (now - it.value.timestamp) < STREAM_CACHE_DURATION_MS }
+                .forEach { (key, entry) ->
+                    streamMap[key] = entry.stream?.let {
+                        AniwatchStreamResult(it.url, it.isDirectStream, it.headers, it.subtitleUrl, it.serverName, it.category)
+                    }
+                    entry.episodeInfo?.let { ep ->
+                        episodeMap[key] = EpisodeStreams(
+                            ep.subServers.map { ServerInfo(it.name, it.url) },
+                            ep.dubServers.map { ServerInfo(it.name, it.url) },
+                            ep.animeId, ep.episodeId
+                        )
+                    }
+                }
+
+            _prefetchedStreams.value = streamMap
+            _prefetchedEpisodeInfo.value = episodeMap
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load stream cache", e)
+        }
+    }
+
+    fun saveStreamCache() {
+        try {
+            val now = System.currentTimeMillis()
+            val entries = _prefetchedStreams.value.mapValues { (key, stream) ->
+                val ep = _prefetchedEpisodeInfo.value[key]
+                StreamCacheEntry(
+                    stream = stream?.let { CachedStream(it.url, it.isDirectStream, it.headers, it.subtitleUrl, it.serverName, it.category) },
+                    episodeInfo = ep?.let { info ->
+                        CachedEpisodeInfo(
+                            info.subServers.map { CachedServer(it.name, it.url) },
+                            info.dubServers.map { CachedServer(it.name, it.url) },
+                            info.animeId, info.episodeId
+                        )
+                    },
+                    timestamp = now
+                )
+            }
+
+            val jsonString = json.encodeToString(StreamCacheData.serializer(), StreamCacheData(entries))
+            sharedPreferences.edit { putString(CACHE_STREAM_DATA, jsonString) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save stream cache", e)
+        }
+    }
+
+    fun loadPlaybackPositions() {
+        try {
+            val cachedData = sharedPreferences.getString(CACHE_PLAYBACK_POSITIONS, null) ?: return
+            val cacheData = json.decodeFromString<PlaybackPositionCache>(cachedData)
+            _playbackPositions.value = cacheData.positions
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load playback positions", e)
+        }
+    }
+
+    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long) {
+        val key = "${animeId}_$episode"
+        _playbackPositions.value = _playbackPositions.value + (key to position)
+        try {
+            val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
+            sharedPreferences.edit { putString(CACHE_PLAYBACK_POSITIONS, jsonString) }
+        } catch (e: Exception) { }
+    }
+
+    fun getPlaybackPosition(animeId: Int, episode: Int): Long = _playbackPositions.value["${animeId}_$episode"] ?: 0L
+
+    fun clearPlaybackPosition(animeId: Int, episode: Int) {
+        val key = "${animeId}_$episode"
+        if (_playbackPositions.value.containsKey(key)) {
+            _playbackPositions.value = _playbackPositions.value - key
+            sharedPreferences.edit { 
+                val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
+                putString(CACHE_PLAYBACK_POSITIONS, jsonString)
+            }
+        }
+    }
+
+    fun clearAllPlaybackPositionsForAnime(animeId: Int) {
+        val prefix = "${animeId}_"
+        val newMap = _playbackPositions.value.filterKeys { !it.startsWith(prefix) }
+        _playbackPositions.value = newMap
+        sharedPreferences.edit { 
+            val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
+            putString(CACHE_PLAYBACK_POSITIONS, jsonString)
+        }
+    }
+
+    // ============================================
+    // In-Memory Helpers
+    // ============================================
+
+    fun getCachedStream(key: String): AniwatchStreamResult? = _prefetchedStreams.value[key]
+    fun cacheStream(key: String, stream: AniwatchStreamResult?) {
+        _prefetchedStreams.value = _prefetchedStreams.value + (key to stream)
+        saveStreamCache()
+    }
+
+    fun getCachedEpisodeInfo(key: String): EpisodeStreams? = _prefetchedEpisodeInfo.value[key]
+    fun cacheEpisodeInfo(key: String, info: EpisodeStreams) {
+        _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
+    }
+
+    fun hasStream(key: String): Boolean = _prefetchedStreams.value.containsKey(key)
+    fun getCachedDetailedAnime(animeId: Int): DetailedAnimeData? = _detailedAnimeCache.value[animeId]
+    fun cacheDetailedAnime(animeId: Int, data: DetailedAnimeData) {
+        _detailedAnimeCache.value = _detailedAnimeCache.value + (animeId to data)
+    }
+
+    fun clearAllCaches() {
+        _prefetchedStreams.value = emptyMap()
+        _prefetchedEpisodeInfo.value = emptyMap()
+        _detailedAnimeCache.value = emptyMap()
+        sharedPreferences.edit { clear() }
+    }
+}

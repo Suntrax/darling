@@ -1,18 +1,17 @@
 package com.blissless.anime.ui.screens
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -29,10 +28,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.blissless.anime.AiringScheduleAnime
+import com.blissless.anime.data.models.AiringScheduleAnime
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.AnimeMedia
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.ExploreAnime
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -58,6 +57,7 @@ private sealed class TimelineItem {
     data class DayHeader(val dayIndex: Int, val dayName: String) : TimelineItem()
 }
 
+@SuppressLint("FrequentlyChangingValue")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
@@ -89,8 +89,9 @@ fun ScheduleScreen(
     var viewMode by remember { mutableIntStateOf(0) } // 0 = All Upcoming, 1 = By Day
     var isRefreshing by remember { mutableStateOf(false) }
 
-    // LazyListState for scrolling
-    val listState = rememberLazyListState()
+    // LazyListState for scrolling - use separate states for each mode
+    val listStateAllUpcoming = rememberLazyListState()
+    val listStateByDay = rememberLazyListState()
 
     // Track the day the user is currently viewing (based on scroll position)
     var visibleDayByScroll by remember { mutableIntStateOf(currentDayOfWeek) }
@@ -295,17 +296,16 @@ fun ScheduleScreen(
     }
 
     // Track visible day based on scroll position (only for All Upcoming mode)
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, viewMode) {
+    LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, listStateAllUpcoming.firstVisibleItemScrollOffset, viewMode) {
         if (viewMode == 0 && !isProgrammaticScroll) {
-            val timelineItems = allUpcomingTimelineItems
-            val firstVisibleIndex = listState.firstVisibleItemIndex
+            val firstVisibleIndex = listStateAllUpcoming.firstVisibleItemIndex
 
-            if (firstVisibleIndex < timelineItems.size) {
+            if (firstVisibleIndex < allUpcomingTimelineItems.size) {
                 // Find the day header for the first visible item
                 var currentDay = currentDayOfWeek
                 for (i in 0..firstVisibleIndex) {
-                    if (timelineItems.getOrNull(i) is TimelineItem.DayHeader) {
-                        currentDay = (timelineItems[i] as TimelineItem.DayHeader).dayIndex
+                    if (allUpcomingTimelineItems.getOrNull(i) is TimelineItem.DayHeader) {
+                        currentDay = (allUpcomingTimelineItems[i] as TimelineItem.DayHeader).dayIndex
                     }
                 }
                 if (visibleDayByScroll != currentDay) {
@@ -327,6 +327,7 @@ fun ScheduleScreen(
     LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay) {
         if (isVisible) {
             val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
+            val listState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
             if (targetIndex >= 0) {
                 isProgrammaticScroll = true
                 listState.animateScrollToItem(targetIndex, scrollOffset = -100)
@@ -440,7 +441,7 @@ fun ScheduleScreen(
                     if (nowIndicatorIndexAll >= 0) {
                         isProgrammaticScroll = true
                         scope.launch {
-                            listState.animateScrollToItem(nowIndicatorIndexAll, scrollOffset = -100)
+                            listStateAllUpcoming.animateScrollToItem(nowIndicatorIndexAll, scrollOffset = -100)
                         }
                     }
                 },
@@ -460,7 +461,7 @@ fun ScheduleScreen(
                     if (nowIndicatorIndexByDay >= 0) {
                         isProgrammaticScroll = true
                         scope.launch {
-                            listState.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
+                            listStateByDay.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
                         }
                     }
                 },
@@ -501,7 +502,7 @@ fun ScheduleScreen(
                             }
 
                             scope.launch {
-                                listState.animateScrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0)
+                                listStateAllUpcoming.animateScrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0)
                             }
                         },
                         label = {
@@ -556,7 +557,21 @@ fun ScheduleScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = {
+                            val wasDifferentDay = selectedDay != dayIndex
                             selectedDay = dayIndex
+                            // Scroll to top for other days, NOW indicator for today
+                            if (isToday && nowIndicatorIndexByDay >= 0) {
+                                isProgrammaticScroll = true
+                                scope.launch {
+                                    listStateByDay.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
+                                }
+                            } else if (wasDifferentDay) {
+                                // Scroll to top of list for other days when changing day
+                                isProgrammaticScroll = true
+                                scope.launch {
+                                    listStateByDay.animateScrollToItem(0)
+                                }
+                            }
                         },
                         label = {
                             Column(
@@ -613,6 +628,7 @@ fun ScheduleScreen(
                 }
             } else {
                 val timelineItems = if (viewMode == 0) allUpcomingTimelineItems else byDayTimelineItems
+                val currentListState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
 
                 if (timelineItems.isEmpty()) {
                     Box(
@@ -638,7 +654,7 @@ fun ScheduleScreen(
                         currentDayOfWeek = currentDayOfWeek,
                         currentTime = currentTime,
                         isOled = isOled,
-                        listState = listState,
+                        listState = currentListState,
                         onAnimeClick = { anime ->
                             val exploreAnime = ExploreAnime(
                                 id = anime.id,
@@ -932,7 +948,7 @@ private fun TimelineAnimeItem(
                 }
 
                 Icon(
-                    imageVector = Icons.Default.KeyboardArrowRight,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "View details",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)

@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import androidx.core.content.edit
 
 /**
  * Local cache for storing computed OP/ED timestamps.
@@ -164,7 +164,7 @@ class TimestampCache(private val context: Context) {
      * Clear all cached timestamps
      */
     fun clearCache() {
-        prefs.edit().clear().apply()
+        prefs.edit { clear() }
         Log.d(TAG, "Cleared timestamp cache")
     }
 
@@ -233,7 +233,7 @@ class TimestampCache(private val context: Context) {
             val version = prefs.getInt(KEY_CACHE_VERSION, 0)
             if (version != CURRENT_VERSION) {
                 // Version mismatch, clear cache
-                prefs.edit().clear().putInt(KEY_CACHE_VERSION, CURRENT_VERSION).apply()
+                prefs.edit { clear().putInt(KEY_CACHE_VERSION, CURRENT_VERSION) }
                 return CacheData()
             }
 
@@ -251,9 +251,9 @@ class TimestampCache(private val context: Context) {
 
     private fun saveCacheData(data: CacheData) {
         val jsonString = json.encodeToString(data)
-        prefs.edit()
-            .putString(KEY_CACHE_DATA, jsonString)
-            .putInt(KEY_CACHE_VERSION, CURRENT_VERSION)
-            .apply()
+        prefs.edit {
+            putString(KEY_CACHE_DATA, jsonString)
+                .putInt(KEY_CACHE_VERSION, CURRENT_VERSION)
+        }
     }
 }

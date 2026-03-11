@@ -1,8 +1,6 @@
 package com.blissless.anime.ui.screens
 
 import android.widget.Toast
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -25,9 +23,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.AnimeMedia
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.ui.components.EpisodeSelectionDialog
+import com.blissless.anime.ui.components.HomeAnimeHorizontalList
+import com.blissless.anime.dialogs.HomeAnimeInfoDialog
+import com.blissless.anime.dialogs.HomeAnimeStatusDialog
+import com.blissless.anime.dialogs.UserProfileDialog
+import com.blissless.anime.ui.components.HomeStatusColors
+import com.blissless.anime.ui.components.LoadingSkeleton
+import com.blissless.anime.ui.components.RichEpisodeScreen
+import com.blissless.anime.ui.components.SearchOverlay
+import com.blissless.anime.ui.components.SectionHeader
+import com.blissless.anime.data.models.toDetailedAnimeData
+import com.blissless.anime.data.models.StoredFavorite
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +48,7 @@ fun HomeScreen(
     showStatusColors: Boolean = true,
     simplifyEpisodeMenu: Boolean = true,
     simplifyAnimeDetails: Boolean = true,
-    localFavorites: Map<Int, MainViewModel.StoredFavorite> = emptyMap(),
+    localFavorites: Map<Int, StoredFavorite> = emptyMap(),
     canAddFavorite: Boolean = true,
     onToggleFavorite: (AnimeMedia) -> Unit = {},
     onPlayerStateChange: (Boolean) -> Unit = {},
@@ -69,7 +79,7 @@ fun HomeScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     val canAddFavoriteLocal = remember(localFavorites) { localFavorites.size < 10 }
 
-    var previousScreenIndex by remember { mutableStateOf(currentScreenIndex) }
+    var previousScreenIndex by remember { mutableIntStateOf(currentScreenIndex) }
 
     LaunchedEffect(currentScreenIndex) {
         if (currentScreenIndex != previousScreenIndex) {
@@ -119,40 +129,175 @@ fun HomeScreen(
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                         // Anime Lists - Passing isLoggedIn
-                        if (currentlyWatching.isNotEmpty()) { item(key = "header_current") { SectionHeader(title = "Currently Watching", icon = Icons.Default.PlayArrow, count = currentlyWatching.size, isOled = isOled, iconTint = HomeStatusColors.getColor("CURRENT")) } }
-                        if (currentlyWatching.isNotEmpty()) { item(key = "list_current") { HomeAnimeHorizontalList(animeList = currentlyWatching, listType = "CURRENT", isOled = isOled, showStatusColors = showStatusColors, isLoggedIn = isLoggedIn, onAnimeClick = { anime -> selectedAnime = anime; showEpisodeSheet = true }, onPlayClick = { anime ->
-                            // Logic to check if episode has aired
-                            val nextEp = anime.progress + 1
-                            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
-                            if (anime.latestEpisode != null && nextEp > released) {
-                                Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
-                            } else {
-                                onPlayEpisode(anime, nextEp)
-                            }
-                        }, onStatusClick = { anime -> selectedAnime = anime; showStatusDialog = true }, onInfoClick = { anime -> selectedAnime = anime; showAnimeInfoDialog = true }) } }
+                        if (currentlyWatching.isNotEmpty()) { item(key = "header_current") {
+                            SectionHeader(
+                                title = "Currently Watching",
+                                icon = Icons.Default.PlayArrow,
+                                count = currentlyWatching.size,
+                                isOled = isOled,
+                                iconTint = HomeStatusColors.getColor("CURRENT")
+                            )
+                        } }
+                        if (currentlyWatching.isNotEmpty()) { item(key = "list_current") {
+                            HomeAnimeHorizontalList(
+                                animeList = currentlyWatching,
+                                listType = "CURRENT",
+                                isOled = isOled,
+                                showStatusColors = showStatusColors,
+                                isLoggedIn = isLoggedIn,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime; showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    // Logic to check if episode has aired
+                                    val nextEp = anime.progress + 1
+                                    val released =
+                                        anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                                    if (anime.latestEpisode != null && nextEp > released) {
+                                        Toast.makeText(
+                                            context,
+                                            "Episode not aired yet",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        onPlayEpisode(anime, nextEp)
+                                    }
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime; showStatusDialog = true
+                                },
+                                onInfoClick = { anime ->
+                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                })
+                        } }
 
-                        if (planningToWatch.isNotEmpty()) { item(key = "header_planning") { SectionHeader(title = "Planning to Watch", icon = Icons.Default.Bookmark, count = planningToWatch.size, isOled = isOled, iconTint = HomeStatusColors.getColor("PLANNING")) } }
-                        if (planningToWatch.isNotEmpty()) { item(key = "list_planning") { HomeAnimeHorizontalList(animeList = planningToWatch, listType = "PLANNING", isOled = isOled, showStatusColors = showStatusColors, isLoggedIn = isLoggedIn, onAnimeClick = { anime -> selectedAnime = anime; showEpisodeSheet = true }, onPlayClick = { anime -> onPlayEpisode(anime, 1) }, onStatusClick = { anime -> selectedAnime = anime; showStatusDialog = true }, onInfoClick = { anime -> selectedAnime = anime; showAnimeInfoDialog = true }) } }
+                        if (planningToWatch.isNotEmpty()) { item(key = "header_planning") {
+                            SectionHeader(
+                                title = "Planning to Watch",
+                                icon = Icons.Default.Bookmark,
+                                count = planningToWatch.size,
+                                isOled = isOled,
+                                iconTint = HomeStatusColors.getColor("PLANNING")
+                            )
+                        } }
+                        if (planningToWatch.isNotEmpty()) { item(key = "list_planning") {
+                            HomeAnimeHorizontalList(
+                                animeList = planningToWatch,
+                                listType = "PLANNING",
+                                isOled = isOled,
+                                showStatusColors = showStatusColors,
+                                isLoggedIn = isLoggedIn,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime; showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime -> onPlayEpisode(anime, 1) },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime; showStatusDialog = true
+                                },
+                                onInfoClick = { anime ->
+                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                })
+                        } }
 
-                        if (completed.isNotEmpty()) { item(key = "header_completed") { SectionHeader(title = "Completed", icon = Icons.Default.Check, count = completed.size, isOled = isOled, iconTint = HomeStatusColors.getColor("COMPLETED")) } }
-                        if (completed.isNotEmpty()) { item(key = "list_completed") { HomeAnimeHorizontalList(animeList = completed, listType = "COMPLETED", isOled = isOled, showStatusColors = showStatusColors, isLoggedIn = isLoggedIn, onAnimeClick = { anime -> selectedAnime = anime; showEpisodeSheet = true }, onPlayClick = { anime -> onPlayEpisode(anime, 1) }, onStatusClick = { anime -> selectedAnime = anime; showStatusDialog = true }, onInfoClick = { anime -> selectedAnime = anime; showAnimeInfoDialog = true }) } }
+                        if (completed.isNotEmpty()) { item(key = "header_completed") {
+                            SectionHeader(
+                                title = "Completed",
+                                icon = Icons.Default.Check,
+                                count = completed.size,
+                                isOled = isOled,
+                                iconTint = HomeStatusColors.getColor("COMPLETED")
+                            )
+                        } }
+                        if (completed.isNotEmpty()) { item(key = "list_completed") {
+                            HomeAnimeHorizontalList(
+                                animeList = completed,
+                                listType = "COMPLETED",
+                                isOled = isOled,
+                                showStatusColors = showStatusColors,
+                                isLoggedIn = isLoggedIn,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime; showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime -> onPlayEpisode(anime, 1) },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime; showStatusDialog = true
+                                },
+                                onInfoClick = { anime ->
+                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                })
+                        } }
 
-                        if (onHold.isNotEmpty()) { item(key = "header_onhold") { SectionHeader(title = "On Hold", icon = Icons.Default.Pause, count = onHold.size, isOled = isOled, iconTint = HomeStatusColors.getColor("PAUSED")) } }
-                        if (onHold.isNotEmpty()) { item(key = "list_onhold") { HomeAnimeHorizontalList(animeList = onHold, listType = "PAUSED", isOled = isOled, showStatusColors = showStatusColors, isLoggedIn = isLoggedIn, onAnimeClick = { anime -> selectedAnime = anime; showEpisodeSheet = true }, onPlayClick = { anime ->
-                            // Logic to check if episode has aired
-                            val nextEp = anime.progress + 1
-                            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
-                            if (anime.latestEpisode != null && nextEp > released) {
-                                Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
-                            } else {
-                                onPlayEpisode(anime, nextEp)
-                            }
-                        }, onStatusClick = { anime -> selectedAnime = anime; showStatusDialog = true }, onInfoClick = { anime -> selectedAnime = anime; showAnimeInfoDialog = true }) } }
+                        if (onHold.isNotEmpty()) { item(key = "header_onhold") {
+                            SectionHeader(
+                                title = "On Hold",
+                                icon = Icons.Default.Pause,
+                                count = onHold.size,
+                                isOled = isOled,
+                                iconTint = HomeStatusColors.getColor("PAUSED")
+                            )
+                        } }
+                        if (onHold.isNotEmpty()) { item(key = "list_onhold") {
+                            HomeAnimeHorizontalList(
+                                animeList = onHold,
+                                listType = "PAUSED",
+                                isOled = isOled,
+                                showStatusColors = showStatusColors,
+                                isLoggedIn = isLoggedIn,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime; showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime ->
+                                    // Logic to check if episode has aired
+                                    val nextEp = anime.progress + 1
+                                    val released =
+                                        anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                                    if (anime.latestEpisode != null && nextEp > released) {
+                                        Toast.makeText(
+                                            context,
+                                            "Episode not aired yet",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        onPlayEpisode(anime, nextEp)
+                                    }
+                                },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime; showStatusDialog = true
+                                },
+                                onInfoClick = { anime ->
+                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                })
+                        } }
 
-                        if (dropped.isNotEmpty()) { item(key = "header_dropped") { SectionHeader(title = "Dropped", icon = Icons.Default.Delete, count = dropped.size, isOled = isOled, iconTint = HomeStatusColors.getColor("DROPPED")) } }
-                        if (dropped.isNotEmpty()) { item(key = "list_dropped") { HomeAnimeHorizontalList(animeList = dropped, listType = "DROPPED", isOled = isOled, showStatusColors = showStatusColors, isLoggedIn = isLoggedIn, onAnimeClick = { anime -> selectedAnime = anime; showEpisodeSheet = true }, onPlayClick = { anime -> onPlayEpisode(anime, 1) }, onStatusClick = { anime -> selectedAnime = anime; showStatusDialog = true }, onInfoClick = { anime -> selectedAnime = anime; showAnimeInfoDialog = true }) } }
+                        if (dropped.isNotEmpty()) { item(key = "header_dropped") {
+                            SectionHeader(
+                                title = "Dropped",
+                                icon = Icons.Default.Delete,
+                                count = dropped.size,
+                                isOled = isOled,
+                                iconTint = HomeStatusColors.getColor("DROPPED")
+                            )
+                        } }
+                        if (dropped.isNotEmpty()) { item(key = "list_dropped") {
+                            HomeAnimeHorizontalList(
+                                animeList = dropped,
+                                listType = "DROPPED",
+                                isOled = isOled,
+                                showStatusColors = showStatusColors,
+                                isLoggedIn = isLoggedIn,
+                                onAnimeClick = { anime ->
+                                    selectedAnime = anime; showEpisodeSheet = true
+                                },
+                                onPlayClick = { anime -> onPlayEpisode(anime, 1) },
+                                onStatusClick = { anime ->
+                                    selectedAnime = anime; showStatusDialog = true
+                                },
+                                onInfoClick = { anime ->
+                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                })
+                        } }
 
-                        if (allListsEmpty && !isLoading) {
+                        if (allListsEmpty) {
                             item(key = "empty_state") {
                                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                                     Card(colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
@@ -171,34 +316,118 @@ fun HomeScreen(
         }
 
         if (showSearchOverlay) {
-            SearchOverlay(viewModel = viewModel, isOled = isOled, simplifyAnimeDetails = simplifyAnimeDetails, currentlyWatching = currentlyWatching, planningToWatch = planningToWatch, completed = completed, onHold = onHold, dropped = dropped, localFavorites = localFavorites, onToggleFavorite = onToggleFavorite, onClose = { showSearchOverlay = false }, onPlayEpisode = onPlayEpisode)
+            SearchOverlay(
+                viewModel = viewModel,
+                isOled = isOled,
+                simplifyAnimeDetails = simplifyAnimeDetails,
+                currentlyWatching = currentlyWatching,
+                planningToWatch = planningToWatch,
+                completed = completed,
+                onHold = onHold,
+                dropped = dropped,
+                localFavorites = localFavorites,
+                onToggleFavorite = onToggleFavorite,
+                onClose = { showSearchOverlay = false },
+                onPlayEpisode = onPlayEpisode
+            )
         }
     }
 
     // Dialogs
     if (showEpisodeSheet && selectedAnime != null) {
         val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
-        if (simplifyEpisodeMenu) { EpisodeSelectionDialog(anime = selectedAnime!!, isOled = isOled, onDismiss = { showEpisodeSheet = false }, onEpisodeSelect = { episode -> onPlayEpisode(selectedAnime!!, episode); showEpisodeSheet = false }) }
-        else { RichEpisodeScreen(anime = selectedAnime!!, viewModel = viewModel, isOled = isOled, onDismiss = { showEpisodeSheet = false }, onEpisodeSelect = { episode -> onPlayEpisode(selectedAnime!!, episode); showEpisodeSheet = false }) }
+        if (simplifyEpisodeMenu) {
+            EpisodeSelectionDialog(
+                anime = selectedAnime!!,
+                isOled = isOled,
+                onDismiss = { showEpisodeSheet = false },
+                onEpisodeSelect = { episode ->
+                    onPlayEpisode(
+                        selectedAnime!!,
+                        episode
+                    ); showEpisodeSheet = false
+                })
+        }
+        else {
+            RichEpisodeScreen(
+                anime = selectedAnime!!,
+                viewModel = viewModel,
+                isOled = isOled,
+                onDismiss = { showEpisodeSheet = false },
+                onEpisodeSelect = { episode ->
+                    onPlayEpisode(
+                        selectedAnime!!,
+                        episode
+                    ); showEpisodeSheet = false
+                })
+        }
     }
 
     if (showStatusDialog && selectedAnime != null) {
         val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
-        HomeAnimeStatusDialog(anime = selectedAnime!!, isOled = isOled, showStatusColors = showStatusColors, isFavorite = isAnimeFavorite, canAddFavorite = canAddFavoriteLocal || isAnimeFavorite, onToggleFavorite = { onToggleFavorite(selectedAnime!!) }, onDismiss = { showStatusDialog = false }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showStatusDialog = false; viewModel.refreshHome() }, onUpdate = { status, progress -> if (progress != null) viewModel.updateAnimeStatus(selectedAnime!!.id, status, progress) else viewModel.updateAnimeStatus(selectedAnime!!.id, status); showStatusDialog = false; viewModel.refreshHome() })
+        HomeAnimeStatusDialog(
+            anime = selectedAnime!!,
+            isOled = isOled,
+            showStatusColors = showStatusColors,
+            isFavorite = isAnimeFavorite,
+            canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
+            onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
+            onDismiss = { showStatusDialog = false },
+            onRemove = {
+                viewModel.removeAnimeFromList(selectedAnime!!.id); showStatusDialog =
+                false; viewModel.refreshHome()
+            },
+            onUpdate = { status, progress ->
+                if (progress != null) viewModel.updateAnimeStatus(
+                    selectedAnime!!.id,
+                    status,
+                    progress
+                ) else viewModel.updateAnimeStatus(selectedAnime!!.id, status); showStatusDialog =
+                false; viewModel.refreshHome()
+            })
     }
 
     if (showAnimeInfoDialog && selectedAnime != null) {
         val exploreAnime = ExploreAnime(id = selectedAnime!!.id, title = selectedAnime!!.title, cover = selectedAnime!!.cover, banner = selectedAnime!!.banner, episodes = selectedAnime!!.totalEpisodes, latestEpisode = selectedAnime!!.latestEpisode, averageScore = selectedAnime!!.averageScore, genres = selectedAnime!!.genres, year = selectedAnime!!.year)
         val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
         if (simplifyAnimeDetails) {
-            HomeAnimeInfoDialog(anime = selectedAnime!!, isOled = isOled, isFavorite = isAnimeFavorite, canAddFavorite = canAddFavoriteLocal || isAnimeFavorite, onToggleFavorite = { onToggleFavorite(selectedAnime!!) }, onDismiss = { showAnimeInfoDialog = false }, onPlayEpisode = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false }, onUpdateStatus = { status -> viewModel.updateAnimeStatus(selectedAnime!!.id, status); selectedAnime = selectedAnime!!.copy(listStatus = status) }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false })
+            HomeAnimeInfoDialog(
+                anime = selectedAnime!!,
+                isOled = isOled,
+                isFavorite = isAnimeFavorite,
+                canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
+                onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
+                onDismiss = { showAnimeInfoDialog = false },
+                onPlayEpisode = { episode ->
+                    onPlayEpisode(
+                        selectedAnime!!,
+                        episode
+                    ); showAnimeInfoDialog = false
+                },
+                onUpdateStatus = { status ->
+                    viewModel.updateAnimeStatus(
+                        selectedAnime!!.id,
+                        status
+                    ); selectedAnime = selectedAnime!!.copy(listStatus = status)
+                },
+                onRemove = {
+                    viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false
+                })
         } else {
             DetailedAnimeScreen(anime = exploreAnime.toDetailedAnimeData(), viewModel = viewModel, isOled = isOled, currentStatus = selectedAnime!!.listStatus, isFavorite = isAnimeFavorite, onToggleFavorite = { _ -> onToggleFavorite(selectedAnime!!) }, onDismiss = { showAnimeInfoDialog = false }, onPlayEpisode = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false }, onUpdateStatus = { status -> if (status != null) viewModel.updateAnimeStatus(selectedAnime!!.id, status) }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false }, isLoggedIn = true)
         }
     }
 
     if (showUserProfileDialog) {
-        UserProfileDialog(viewModel = viewModel, isOled = isOled, onDismiss = { showUserProfileDialog = false }, onShowAnimeDialog = onShowAnimeDialog, planningToWatch = planningToWatch, onHold = onHold, dropped = dropped)
+        UserProfileDialog(
+            viewModel = viewModel,
+            isOled = isOled,
+            onDismiss = { showUserProfileDialog = false },
+            onShowAnimeDialog = onShowAnimeDialog,
+            planningToWatch = planningToWatch,
+            onHold = onHold,
+            dropped = dropped
+        )
     }
 
     LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }

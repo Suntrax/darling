@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -23,7 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.AnimeMedia
+import com.blissless.anime.data.models.AnimeMedia
 
 @Composable
 fun LoadingSkeleton(isOled: Boolean) {

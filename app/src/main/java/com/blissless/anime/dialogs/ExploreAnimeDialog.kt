@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.dialogs
 
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -23,8 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.ui.components.StatusColors
+import com.blissless.anime.ui.components.StatusLabels
 import java.util.Locale
 
 @Composable
@@ -375,26 +378,23 @@ fun ExploreAnimeDialog(
                 } else {
                     Spacer(modifier = Modifier.height(20.dp))
 
+                    // Disabled button when not logged in
                     Button(
-                        onClick = { onStartWatching(1) },
+                        onClick = { },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
                         shape = RoundedCornerShape(14.dp),
+                        enabled = false,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
+                            disabledContainerColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
+                            disabledContentColor = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
                     ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Start Watching",
+                            "Log in to AniList first",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
@@ -449,7 +449,7 @@ private fun StatusBadge(currentStatus: String) {
 @Composable
 private fun RowScope.StatusButton(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     isActive: Boolean,
     activeColor: Color,
     showAnimation: Boolean,

@@ -3,6 +3,7 @@ package com.blissless.anime.ui.screens
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.os.Build
+import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -11,7 +12,6 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,10 +28,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -49,21 +48,22 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.core.net.toUri
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import java.util.Locale
-import android.util.Log
 import com.blissless.anime.api.EpisodeStreams
 import com.blissless.anime.api.AnimeSkipService
 import com.blissless.anime.api.EpisodeTimestamps
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.abs
+
+private const val PLAYER_TAG = "PlayerScreen"
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -76,13 +76,12 @@ fun PlayerScreen(
     animeName: String = "",
     animeId: Int = 0,
     malId: Int = 0,
-    animeYear: Int? = null, // Added parameter
+    animeYear: Int? = null,
     episodeLength: Int = 1440,
     isLoadingStream: Boolean = false,
     episodeInfo: EpisodeStreams? = null,
     currentServerName: String = "",
     currentCategory: String = "sub",
-    // Fallback info
     isFallbackStream: Boolean = false,
     requestedCategory: String = "sub",
     actualCategory: String = "sub",
@@ -91,7 +90,6 @@ fun PlayerScreen(
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
-    // Playback position
     savedPosition: Long = 0L,
     onSavePosition: ((Long) -> Unit)? = null,
     onProgressUpdate: (percentage: Int) -> Unit = {},
@@ -122,16 +120,12 @@ fun PlayerScreen(
     var sliderValue by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
-    // Skip indicator state
     var showSkipIndicator by remember { mutableStateOf(false) }
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
 
-    // Timestamps for auto-skip - key on videoUrl to ensure reset when video changes
-    // UPDATED: Now using context for AnimeSkipService to enable fallback
     val animeSkipService = remember { AnimeSkipService(context) }
 
-    // All timestamp-related states keyed on videoUrl to ensure proper reset on episode change
     var episodeTimestamps by remember(videoUrl) { mutableStateOf<EpisodeTimestamps?>(null) }
     var isFetchingTimestamps by remember(videoUrl) { mutableStateOf(false) }
     var hasSkippedIntro by remember(videoUrl) { mutableStateOf(false) }
@@ -140,17 +134,12 @@ fun PlayerScreen(
     var showSkipEndingButton by remember(videoUrl) { mutableStateOf(false) }
     var hasFetchedTimestamps by remember(videoUrl) { mutableStateOf(false) }
     var actualEpisodeLength by remember(videoUrl) { mutableStateOf<Int?>(null) }
-    var timestampSource by remember(videoUrl) { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
 
-    // Show fallback toast once when stream starts with fallback
     var hasShownFallbackToast by remember(videoUrl) { mutableStateOf(false) }
-
-    // Track if we've restored the saved position
     var hasRestoredPosition by remember(videoUrl) { mutableStateOf(false) }
 
-    // Combined timestamps
     val effectiveTimestamps by remember(episodeTimestamps) {
         derivedStateOf {
             episodeTimestamps ?: EpisodeTimestamps(
@@ -166,21 +155,16 @@ fun PlayerScreen(
         }
     }
 
-    // Fullscreen & Orientation Logic + KEEP SCREEN ON
     LaunchedEffect(Unit) {
         activity?.window?.let { window ->
-            // Keep screen on while watching
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
-
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 window.attributes.layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
-
             WindowCompat.setDecorFitsSystemWindows(window, false)
         }
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -188,13 +172,9 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            // Save position before exiting
             onSavePosition?.invoke(currentPosition)
-
             activity?.window?.let { window ->
-                // Clear screen on flag when leaving player
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -229,7 +209,6 @@ fun PlayerScreen(
                             hasError = false
                             playbackError = null
                         }
-
                         if (playbackState == Player.STATE_ENDED) {
                             if (autoPlayNextEpisode && onNextEpisode != null) {
                                 onNextEpisode.invoke()
@@ -240,7 +219,6 @@ fun PlayerScreen(
             }
     }
 
-    // Update player when URL changes
     LaunchedEffect(videoUrl) {
         hasError = false
         playbackError = null
@@ -268,24 +246,17 @@ fun PlayerScreen(
         sliderValue = 0f
     }
 
-    // Restore saved position once player is ready
     LaunchedEffect(exoPlayer.playbackState, savedPosition, hasRestoredPosition) {
         if (exoPlayer.playbackState == Player.STATE_READY && savedPosition > 0 && !hasRestoredPosition) {
             exoPlayer.seekTo(savedPosition)
             hasRestoredPosition = true
-            Log.d("PlayerScreen", "Restored position to $savedPosition ms")
         }
     }
 
-    // Show fallback toast when stream starts
     LaunchedEffect(videoUrl, isFallbackStream) {
         if (isFallbackStream && !hasShownFallbackToast && videoUrl.isNotEmpty()) {
             hasShownFallbackToast = true
-            val message = if (requestedCategory == "dub") {
-                "Dub not available, playing sub"
-            } else {
-                "Sub not available, playing dub"
-            }
+            val message = if (requestedCategory == "dub") "Dub not available, playing sub" else "Sub not available, playing dub"
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
@@ -293,20 +264,16 @@ fun PlayerScreen(
     fun seekBy(milliseconds: Long, isForward: Boolean) {
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
-
-        // Show skip indicator
         val seconds = abs(milliseconds / 1000)
         skipIndicatorText = if (milliseconds > 0) "+${seconds}s" else "-${seconds}s"
         skipIsForward = isForward
         showSkipIndicator = true
-
         scope.launch {
             delay(500)
             showSkipIndicator = false
         }
     }
 
-    // Update progress and capture actual duration
     LaunchedEffect(exoPlayer, videoUrl) {
         while (true) {
             delay(500)
@@ -315,12 +282,7 @@ fun PlayerScreen(
                 duration = exoPlayer.duration
                 if (duration > 0) {
                     sliderValue = currentPosition.toFloat()
-
-                    // Capture actual episode length once video is fully loaded
-                    // Check STATE_READY to ensure we're capturing the correct video's duration
-                    if (actualEpisodeLength == null &&
-                        duration > 60000 &&
-                        exoPlayer.playbackState == Player.STATE_READY) {
+                    if (actualEpisodeLength == null && duration > 60000 && exoPlayer.playbackState == Player.STATE_READY) {
                         actualEpisodeLength = (duration / 1000).toInt()
                     }
                 }
@@ -328,20 +290,15 @@ fun PlayerScreen(
         }
     }
 
-    // UPDATED: Fetch timestamps using fallback chain (cache -> AniSkip -> AnimeThemes)
-    // Pass the animeYear and animeId for better fallback support
     LaunchedEffect(actualEpisodeLength, videoUrl, malId, animeYear, animeName) {
         val epLength = actualEpisodeLength
-        if (epLength == null || hasFetchedTimestamps) {
-            return@LaunchedEffect
-        }
+        if (epLength == null || hasFetchedTimestamps) return@LaunchedEffect
 
         isFetchingTimestamps = true
-        Log.d("PlayerScreen", "Fetching timestamps with fallback for: $animeName (MAL: $malId, Year: $animeYear)")
+        Log.d(PLAYER_TAG, "Fetching timestamps for: $animeName")
 
         withContext(Dispatchers.IO) {
             try {
-                // Try with MAL ID first using full fallback chain
                 val timestamps = if (malId > 0) {
                     animeSkipService.getSkipTimestampsWithFallback(
                         malId = malId,
@@ -352,25 +309,20 @@ fun PlayerScreen(
                         animeId = animeId
                     )
                 } else if (animeName.isNotEmpty()) {
-                    // Fallback: search by anime name + year
                     animeSkipService.getSkipTimestampsByName(
                         animeName = animeName,
                         episodeNumber = currentEpisode,
                         episodeLength = epLength,
                         year = animeYear
                     )
-                } else {
-                    null
-                }
+                } else null
 
                 if (timestamps != null) {
                     episodeTimestamps = timestamps
-                    Log.d("PlayerScreen", "Got timestamps: OP=${timestamps.introStart}-${timestamps.introEnd}, ED=${timestamps.creditsStart}-${timestamps.creditsEnd}")
-                } else {
-                    Log.d("PlayerScreen", "No timestamps found from any source")
+                    Log.d(PLAYER_TAG, "Got timestamps: OP=${timestamps.introStart}-${timestamps.introEnd}")
                 }
             } catch (e: Exception) {
-                Log.e("PlayerScreen", "Error fetching timestamps", e)
+                Log.e(PLAYER_TAG, "Error fetching timestamps", e)
             }
         }
 
@@ -378,20 +330,16 @@ fun PlayerScreen(
         hasFetchedTimestamps = true
     }
 
-    // Auto-skip and skip button logic
     LaunchedEffect(currentPosition, effectiveTimestamps) {
         val ts = effectiveTimestamps
         val posSeconds = currentPosition / 1000
 
-        // Check intro section - show button based on position only
         if (ts.introStart != null && ts.introEnd != null) {
             val isInIntro = posSeconds >= ts.introStart && posSeconds < ts.introEnd
-
             if (isInIntro) {
                 if (autoSkipOpening && !hasSkippedIntro) {
                     exoPlayer.seekTo(ts.introEnd * 1000)
                     hasSkippedIntro = true
-                    Log.d("PlayerScreen", "Auto-skipped intro to ${ts.introEnd}s")
                 }
                 showSkipOpeningButton = !autoSkipOpening
             } else {
@@ -399,15 +347,12 @@ fun PlayerScreen(
             }
         }
 
-        // Check credits section - show button based on position only
         if (ts.creditsStart != null && onNextEpisode != null) {
             val isInCredits = posSeconds >= ts.creditsStart
-
             if (isInCredits) {
                 if (autoSkipEnding && !hasSkippedOutro) {
                     onNextEpisode.invoke()
                     hasSkippedOutro = true
-                    Log.d("PlayerScreen", "Auto-skipped to next episode")
                 }
                 showSkipEndingButton = !autoSkipEnding
             } else {
@@ -416,7 +361,6 @@ fun PlayerScreen(
         }
     }
 
-    // Progress monitoring
     LaunchedEffect(exoPlayer, hasTriggeredProgressUpdate) {
         while (!hasTriggeredProgressUpdate) {
             delay(1000)
@@ -427,11 +371,12 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-hide controls
-    LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying) {
+    LaunchedEffect(showControls, isPlaying, isDragging) {
+        if (showControls && isPlaying && !isDragging) {
             delay(3000)
-            showControls = false
+            if (!isDragging) {
+                showControls = false
+            }
         }
     }
 
@@ -453,7 +398,6 @@ fun PlayerScreen(
     val subServers = episodeInfo?.subServers ?: emptyList()
     val dubServers = episodeInfo?.dubServers ?: emptyList()
 
-    // Progress bar marker positions
     val introStartRatio = if (duration > 0 && effectiveTimestamps.introStart != null) {
         (effectiveTimestamps.introStart!! * 1000).toFloat() / duration.toFloat()
     } else null
@@ -469,20 +413,14 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Left edge area - consume touches to prevent toggling controls
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(40.dp)
                 .align(Alignment.CenterStart)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { /* Consume tap, do nothing */ }
-                    )
-                }
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
         )
 
-        // Left touch area for double-tap skip (not edge)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -497,20 +435,14 @@ fun PlayerScreen(
                 }
         )
 
-        // Center touch area
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(0.4f)
                 .align(Alignment.Center)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { showControls = !showControls }
-                    )
-                }
+                .pointerInput(Unit) { detectTapGestures(onTap = { showControls = !showControls }) }
         )
 
-        // Right touch area for double-tap skip (not edge)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -525,20 +457,14 @@ fun PlayerScreen(
                 }
         )
 
-        // Right edge area - consume touches to prevent toggling controls
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(40.dp)
                 .align(Alignment.CenterEnd)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { /* Consume tap, do nothing */ }
-                    )
-                }
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
         )
 
-        // PlayerView
         AndroidView(
             factory = {
                 PlayerView(context).apply {
@@ -568,14 +494,11 @@ fun PlayerScreen(
             update = { view -> view.resizeMode = resizeModes[resizeModeIndex].first }
         )
 
-        // Skip Opening Button - always show when in intro section
         AnimatedVisibility(
             visible = showSkipOpeningButton,
             enter = fadeIn() + scaleIn(initialScale = 0.8f),
             exit = fadeOut() + scaleOut(targetScale = 0.8f),
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 16.dp)
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
         ) {
             SkipIconButton(
                 icon = Icons.Default.FastForward,
@@ -591,27 +514,21 @@ fun PlayerScreen(
             )
         }
 
-        // Skip Ending Button - always show when in credits section
         AnimatedVisibility(
             visible = showSkipEndingButton,
             enter = fadeIn() + scaleIn(initialScale = 0.8f),
             exit = fadeOut() + scaleOut(targetScale = 0.8f),
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 16.dp)
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
         ) {
             SkipIconButton(
                 icon = Icons.Default.SkipNext,
                 label = "Next\nEpisode",
                 backgroundColor = Color.Black.copy(alpha = 0.6f),
                 iconTint = Color.White,
-                onClick = {
-                    onNextEpisode?.invoke()
-                }
+                onClick = { onNextEpisode?.invoke() }
             )
         }
 
-        // Controls overlay
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(),
@@ -619,16 +536,11 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Top bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)
-                            )
-                        )
+                        .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -652,7 +564,6 @@ fun PlayerScreen(
                                 color = Color.White.copy(alpha = 0.8f),
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            // Show category badge - use theme colors for fallback
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = if (isFallbackStream)
@@ -671,7 +582,6 @@ fun PlayerScreen(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
-                            // Show loading indicator when fetching timestamps
                             if (isFetchingTimestamps) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),
@@ -731,17 +641,12 @@ fun PlayerScreen(
                     }
                 }
 
-                // Center controls with skip indicators (using Box for overlay)
-                Box(
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    // Main control buttons row
+                Box(modifier = Modifier.align(Alignment.Center)) {
                     Row(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalArrangement = Arrangement.spacedBy(32.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Previous Episode Button
                         IconButton(
                             onClick = { onPreviousEpisode?.invoke() },
                             modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream) 1f else 0.3f),
@@ -750,7 +655,6 @@ fun PlayerScreen(
                             Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                         }
 
-                        // Play/Pause Button
                         IconButton(
                             onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
                             modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
@@ -763,7 +667,6 @@ fun PlayerScreen(
                             )
                         }
 
-                        // Next Episode Button
                         IconButton(
                             onClick = { onNextEpisode?.invoke() },
                             modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream) 1f else 0.3f),
@@ -773,71 +676,39 @@ fun PlayerScreen(
                         }
                     }
 
-                    // Backward skip indicator (overlayed to the left)
                     AnimatedVisibility(
                         visible = showSkipIndicator && !skipIsForward,
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
                         exit = fadeOut() + scaleOut(targetScale = 0.8f),
                         modifier = Modifier.align(Alignment.CenterStart).offset(x = (-120).dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FastRewind,
-                                    contentDescription = "Rewind",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
-                                )
+                                Icon(Icons.Default.FastRewind, "Rewind", tint = Color.White, modifier = Modifier.size(32.dp))
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = skipIndicatorText,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(skipIndicatorText, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    // Forward skip indicator (overlayed to the right)
                     AnimatedVisibility(
                         visible = showSkipIndicator && skipIsForward,
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
                         exit = fadeOut() + scaleOut(targetScale = 0.8f),
                         modifier = Modifier.align(Alignment.CenterEnd).offset(x = 120.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FastForward,
-                                    contentDescription = "Forward",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
-                                )
+                                Icon(Icons.Default.FastForward, "Forward", tint = Color.White, modifier = Modifier.size(32.dp))
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = skipIndicatorText,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(skipIndicatorText, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -846,7 +717,6 @@ fun PlayerScreen(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp), color = Color.White)
                 }
 
-                // Error indicator
                 if (hasError && playbackError != null) {
                     Card(
                         modifier = Modifier.align(Alignment.Center).padding(16.dp),
@@ -873,7 +743,6 @@ fun PlayerScreen(
                     }
                 }
 
-                // Bottom controls
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -881,57 +750,58 @@ fun PlayerScreen(
                         .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
-                        Slider(
-                            value = sliderValue,
-                            valueRange = 0f..(if (duration > 0) duration.toFloat() else 1000f),
-                            onValueChange = { newValue ->
-                                isDragging = true
-                                sliderValue = newValue
-                                currentPosition = newValue.toLong()
-                            },
-                            onValueChangeFinished = {
-                                isDragging = false
-                                exoPlayer.seekTo(sliderValue.toLong())
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .drawBehind {
-                                    val sliderWidth = size.width
-                                    val trackHeight = 12.dp.toPx()
-                                    val trackTop = (size.height - trackHeight) / 2f
-                                    val cornerRadius = 6.dp.toPx()
+                    Slider(
+                        value = sliderValue,
+                        valueRange = 0f..(if (duration > 0) duration.toFloat() else 1000f),
+                        onValueChange = { newValue ->
+                            isDragging = true
+                            sliderValue = newValue
+                            currentPosition = newValue.toLong()
+                        },
+                        onValueChangeFinished = {
+                            isDragging = false
+                            exoPlayer.seekTo(sliderValue.toLong())
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawBehind {
+                                val sliderWidth = size.width
+                                val trackHeight = 12.dp.toPx()
+                                val trackTop = (size.height - trackHeight) / 2f
+                                val cornerRadius = 6.dp.toPx()
 
-                                    if (introStartRatio != null && introEndRatio != null) {
-                                        val startX = introStartRatio * sliderWidth
-                                        val endX = introEndRatio * sliderWidth
-                                        drawRoundRect(
-                                            color = Color(0xFF505050),
-                                            topLeft = Offset(startX, trackTop),
-                                            size = Size(endX - startX, trackHeight),
-                                            cornerRadius = CornerRadius(if (introStartRatio < 0.05f) cornerRadius else 2.dp.toPx())
-                                        )
-                                    }
+                                if (introStartRatio != null && introEndRatio != null) {
+                                    val startX = introStartRatio * sliderWidth
+                                    val endX = introEndRatio * sliderWidth
+                                    drawRoundRect(
+                                        color = Color(0xFF505050),
+                                        topLeft = Offset(startX, trackTop),
+                                        size = Size(endX - startX, trackHeight),
+                                        cornerRadius = CornerRadius(if (introStartRatio < 0.05f) cornerRadius else 2.dp.toPx())
+                                    )
+                                }
 
-                                    if (creditsStartRatio != null) {
-                                        val startX = creditsStartRatio * sliderWidth
-                                        drawRoundRect(
-                                            color = Color(0xFF505050),
-                                            topLeft = Offset(startX, trackTop),
-                                            size = Size(sliderWidth - startX, trackHeight),
-                                            cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius)
-                                        )
-                                    }
-                                },
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color.White,
-                                activeTrackColor = Color.White,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                            )
+                                if (creditsStartRatio != null) {
+                                    val startX = creditsStartRatio * sliderWidth
+                                    drawRoundRect(
+                                        color = Color(0xFF505050),
+                                        topLeft = Offset(startX, trackTop),
+                                        size = Size(sliderWidth - startX, trackHeight),
+                                        cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius)
+                                    )
+                                }
+                            },
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.White,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
                         )
-                    }
+                    )
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(formatTime(currentPosition), color = Color.White, style = MaterialTheme.typography.labelMedium)
                         Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
                     }

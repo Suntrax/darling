@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import androidx.core.content.edit
 
 /**
  * Stores user-marked intro/outro timestamps for anime
@@ -54,9 +55,13 @@ class TimestampManager(context: Context) {
             timestamp = System.currentTimeMillis()
         )
 
-        prefs.edit().putString(KEY_TIMESTAMPS, json.encodeToString(
-            SerializableMap(timestamps)
-        )).apply()
+        prefs.edit {
+            putString(
+                KEY_TIMESTAMPS, json.encodeToString(
+                    SerializableMap(timestamps)
+                )
+            )
+        }
 
         Log.d(TAG, "Saved timestamps for $animeName ep $episodeNumber: intro=$introStart-$introEnd, credits=$creditsStart")
     }
@@ -102,9 +107,13 @@ class TimestampManager(context: Context) {
         val key = "${animeId}_$episodeNumber"
         timestamps.remove(key)
 
-        prefs.edit().putString(KEY_TIMESTAMPS, json.encodeToString(
-            SerializableMap(timestamps)
-        )).apply()
+        prefs.edit {
+            putString(
+                KEY_TIMESTAMPS, json.encodeToString(
+                    SerializableMap(timestamps)
+                )
+            )
+        }
     }
 
     /**
@@ -115,16 +124,20 @@ class TimestampManager(context: Context) {
         val key = "${animeName}_$episodeNumber"
         timestamps.remove(key)
 
-        prefs.edit().putString(KEY_TIMESTAMPS, json.encodeToString(
-            SerializableMap(timestamps)
-        )).apply()
+        prefs.edit {
+            putString(
+                KEY_TIMESTAMPS, json.encodeToString(
+                    SerializableMap(timestamps)
+                )
+            )
+        }
     }
 
     /**
      * Clear all saved timestamps
      */
     fun clearAll() {
-        prefs.edit().remove(KEY_TIMESTAMPS).apply()
+        prefs.edit { remove(KEY_TIMESTAMPS) }
     }
 }
 

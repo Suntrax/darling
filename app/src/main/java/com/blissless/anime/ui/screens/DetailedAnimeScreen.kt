@@ -3,12 +3,6 @@ package com.blissless.anime.ui.screens
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -30,7 +24,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -42,59 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
-
-data class DetailedAnimeData(
-    val id: Int,
-    val title: String,
-    val titleRomaji: String? = null,
-    val titleEnglish: String? = null,
-    val titleNative: String? = null,
-    val cover: String,
-    val banner: String? = null,
-    val description: String? = null,
-    val episodes: Int = 0,
-    val duration: Int? = null,
-    val status: String? = null,
-    val averageScore: Int? = null,
-    val meanScore: Int? = null,
-    val popularity: Int? = null,
-    val favourites: Int? = null,
-    val genres: List<String> = emptyList(),
-    val tags: List<TagData> = emptyList(),
-    val season: String? = null,
-    val year: Int? = null,
-    val format: String? = null,
-    val source: String? = null,
-    val studios: List<StudioData> = emptyList(),
-    val startDate: String? = null,
-    val endDate: String? = null,
-    val nextAiringEpisode: Int? = null,
-    val nextAiringTime: Long? = null,
-    val isAdult: Boolean = false,
-    val countryOfOrigin: String? = null,
-    val trailerUrl: String? = null,
-    val recommendations: List<ExploreAnime> = emptyList(),
-    val latestEpisode: Int? = null,
-    val malId: Int? = null,
-)
-
-data class TagData(val name: String, val rank: Int? = null, val isMediaSpoiler: Boolean = false)
-data class StudioData(val id: Int, val name: String, val isAnimationStudio: Boolean = true)
-
-
-fun ExploreAnime.toDetailedAnimeData(): DetailedAnimeData = DetailedAnimeData(
-    id = this.id, title = this.title, cover = this.cover, banner = this.banner,
-    description = null, episodes = this.episodes, status = null, averageScore = this.averageScore,
-    genres = this.genres, year = this.year, latestEpisode = this.latestEpisode, malId = this.malId
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -540,15 +487,11 @@ fun DetailedAnimeScreen(
                     }
                 }
 
-
-
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
     }
 }
-
-
 
 @Composable
 private fun StatusChip(label: String, icon: ImageVector, color: Color, selected: Boolean, onClick: () -> Unit) {

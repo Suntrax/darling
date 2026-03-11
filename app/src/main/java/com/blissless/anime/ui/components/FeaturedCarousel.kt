@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -30,9 +30,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.ExploreAnime
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
@@ -44,17 +45,19 @@ fun FeaturedCarousel(
 ) {
     val pagerState = rememberPagerState(pageCount = { animeList.size })
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Track animation direction - FIXED: properly sync with swipe
+    // Track animation direction
     var lastPage by remember { mutableIntStateOf(0) }
-    var isAutoScrolling by remember { mutableStateOf(false) }
+
+    // Track current auto-scroll job so we can cancel it
+    var autoScrollJob by remember { mutableStateOf<Job?>(null) }
 
     // Determine animation direction based on page change
     val swipeDirection = remember { derivedStateOf {
         val current = pagerState.currentPage
         val diff = current - lastPage
         when {
-            isAutoScrolling -> 1 // Auto-scroll always goes forward
             diff > 0 || (lastPage == animeList.size - 1 && current == 0) -> 1 // Forward
             diff < 0 || (lastPage == 0 && current == animeList.size - 1) -> -1 // Backward
             else -> 1
@@ -66,30 +69,57 @@ fun FeaturedCarousel(
         lastPage = pagerState.settledPage
     }
 
-    // Auto-scroll with looping - FIXED: loops back to first from last
+    // Cancel animation and snap to current page when visibility changes
+    LaunchedEffect(isVisible) {
+        if (!isVisible) {
+            // Cancel any ongoing auto-scroll job
+            autoScrollJob?.cancel()
+            autoScrollJob = null
+
+            // Snap to current settled page to cancel any in-progress animation
+            // Use scrollToPage (instant) instead of animateScrollToPage
+            try {
+                pagerState.scrollToPage(pagerState.settledPage)
+            } catch (_: Exception) {
+                // Ignore cancellation
+            }
+        }
+    }
+
+    // Start/restart auto-scroll when becoming visible
     LaunchedEffect(autoScrollEnabled, isVisible) {
         if (autoScrollEnabled && isVisible) {
-            while (isActive) {
-                delay(4000) // FIXED: Reduced from 5000ms to 4000ms for faster transitions
-                if (!isActive) break
+            while (true) {
+                delay(4000) // Wait 4 seconds
 
-                if (!pagerState.isScrollInProgress && isActive) {
-                    isAutoScrolling = true
-                    // FIXED: Loop back to 0 when reaching end
-                    val nextPage = if (pagerState.currentPage >= animeList.size - 1) 0
-                    else pagerState.currentPage + 1
+                // Check if still visible before scrolling
+
+                // Calculate next page (loop back to 0 at end)
+                val nextPage = if (pagerState.currentPage >= animeList.size - 1) 0
+                else pagerState.currentPage + 1
+
+                // Launch animation as a job so we can cancel it
+                autoScrollJob = scope.launch {
                     try {
                         pagerState.animateScrollToPage(
                             nextPage,
-                            animationSpec = tween(400, easing = FastOutSlowInEasing) // FIXED: Faster animation
+                            animationSpec = tween(500, easing = FastOutSlowInEasing)
                         )
-                        delay(200)
                     } catch (_: Exception) {
-                        // Animation cancelled
+                        // Animation cancelled - this is expected when visibility changes
                     }
-                    isAutoScrolling = false
                 }
+
+                // Wait for animation to complete
+                autoScrollJob?.join()
             }
+        }
+    }
+
+    // Cleanup job on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            autoScrollJob?.cancel()
         }
     }
 
@@ -98,16 +128,14 @@ fun FeaturedCarousel(
             .fillMaxWidth()
             .height(280.dp)
     ) {
-        // Animated banner background
         val currentAnime = animeList.getOrElse(pagerState.currentPage) { animeList.first() }
 
-        // AnimatedContent with FIXED direction sync
+        // AnimatedContent for banner with direction sync
         AnimatedContent(
             targetState = currentAnime,
             transitionSpec = {
-                // FIXED: Animation direction matches swipe direction
                 if (swipeDirection.value >= 0) {
-                    // Going forward (or looping): new from right, old to left
+                    // Going forward: new from right, old to left
                     (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(300)) { it/2 })
                         .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(300)) { -it/2 })
                         .using(SizeTransform(clip = false))

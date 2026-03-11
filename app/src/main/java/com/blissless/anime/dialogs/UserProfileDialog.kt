@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.dialogs
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -28,10 +28,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.AnimeMedia
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.data.models.StoredFavorite
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.UserActivity
+import com.blissless.anime.data.models.UserActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -217,7 +218,7 @@ fun UserProfileDialog(
 @Composable
 private fun FavoritesTab(
     viewModel: MainViewModel,
-    localFavorites: Map<Int, MainViewModel.StoredFavorite>,
+    localFavorites: Map<Int, StoredFavorite>,
     isOled: Boolean,
     currentlyWatching: List<AnimeMedia>,
     completed: List<AnimeMedia>,
@@ -418,7 +419,7 @@ private fun FavoritesTab(
 
 @Composable
 private fun FavoriteItemWithFallback(
-    favorite: MainViewModel.StoredFavorite,
+    favorite: StoredFavorite,
     animeFromList: AnimeMedia?,
     isOled: Boolean,
     onClick: () -> Unit,
@@ -466,7 +467,7 @@ private fun FavoriteItemWithFallback(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                if (displayCover != null && displayCover.isNotEmpty()) {
+                if (!displayCover.isNullOrEmpty()) {
                     AsyncImage(
                         model = displayCover,
                         contentDescription = displayTitle,
@@ -666,7 +667,7 @@ private fun ActivityItem(
         "plans to watch" -> "Plans to watch"
         "dropped" -> "Dropped"
         "paused watching" -> "Paused"
-        else -> activity.status ?: "Updated"
+        else -> activity.status
     }
 
     val statusIcon = when (activity.status) {

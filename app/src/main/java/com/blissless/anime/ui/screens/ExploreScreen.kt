@@ -10,9 +10,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.blissless.anime.AnimeMedia
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.dialogs.ExploreAnimeDialog
+import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
+import com.blissless.anime.ui.components.FeaturedCarousel
+import com.blissless.anime.ui.components.LoadingPlaceholder
+import com.blissless.anime.ui.components.SectionTitle
+import com.blissless.anime.data.models.toDetailedAnimeData
+import com.blissless.anime.data.models.StoredFavorite
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,7 +29,7 @@ fun ExploreScreen(
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
     simplifyAnimeDetails: Boolean = true,
-    localFavorites: Map<Int, MainViewModel.StoredFavorite> = emptyMap(),
+    localFavorites: Map<Int, StoredFavorite> = emptyMap(),
     onToggleFavorite: (ExploreAnime) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     currentlyWatching: List<AnimeMedia> = emptyList(),

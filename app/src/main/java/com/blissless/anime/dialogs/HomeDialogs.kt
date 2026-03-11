@@ -1,12 +1,10 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.dialogs
 
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Star
@@ -17,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -26,7 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.AnimeMedia
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.ui.components.HomeStatusColors
+import com.blissless.anime.ui.components.StatusButton
 import java.util.Locale
 
 @Composable
@@ -300,17 +299,57 @@ private fun StatusButtonsGrid(
     onRemoveToggled: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusButton(Icons.Default.PlayArrow, "Watching", selectedStatus == "CURRENT" && !markedForRemoval, { onStatusSelected("CURRENT") }, Modifier.weight(1f).scale(if (selectedStatus == "CURRENT" && showAnimation && !markedForRemoval) scale else 1f), HomeStatusColors.getColor("CURRENT"))
-        StatusButton(Icons.Default.Bookmark, "Planning", selectedStatus == "PLANNING" && !markedForRemoval, { onStatusSelected("PLANNING") }, Modifier.weight(1f).scale(if (selectedStatus == "PLANNING" && showAnimation && !markedForRemoval) scale else 1f), HomeStatusColors.getColor("PLANNING"))
+        StatusButton(
+            Icons.Default.PlayArrow,
+            "Watching",
+            selectedStatus == "CURRENT" && !markedForRemoval,
+            { onStatusSelected("CURRENT") },
+            Modifier.weight(1f)
+                .scale(if (selectedStatus == "CURRENT" && showAnimation && !markedForRemoval) scale else 1f),
+            HomeStatusColors.getColor("CURRENT")
+        )
+        StatusButton(
+            Icons.Default.Bookmark,
+            "Planning",
+            selectedStatus == "PLANNING" && !markedForRemoval,
+            { onStatusSelected("PLANNING") },
+            Modifier.weight(1f)
+                .scale(if (selectedStatus == "PLANNING" && showAnimation && !markedForRemoval) scale else 1f),
+            HomeStatusColors.getColor("PLANNING")
+        )
     }
     Spacer(modifier = Modifier.height(6.dp))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusButton(Icons.Default.Check, "Completed", selectedStatus == "COMPLETED" && !markedForRemoval, { onStatusSelected("COMPLETED") }, Modifier.weight(1f).scale(if (selectedStatus == "COMPLETED" && showAnimation && !markedForRemoval) scale else 1f), HomeStatusColors.getColor("COMPLETED"))
-        StatusButton(Icons.Default.Pause, "On Hold", selectedStatus == "PAUSED" && !markedForRemoval, { onStatusSelected("PAUSED") }, Modifier.weight(1f).scale(if (selectedStatus == "PAUSED" && showAnimation && !markedForRemoval) scale else 1f), HomeStatusColors.getColor("PAUSED"))
+        StatusButton(
+            Icons.Default.Check,
+            "Completed",
+            selectedStatus == "COMPLETED" && !markedForRemoval,
+            { onStatusSelected("COMPLETED") },
+            Modifier.weight(1f)
+                .scale(if (selectedStatus == "COMPLETED" && showAnimation && !markedForRemoval) scale else 1f),
+            HomeStatusColors.getColor("COMPLETED")
+        )
+        StatusButton(
+            Icons.Default.Pause,
+            "On Hold",
+            selectedStatus == "PAUSED" && !markedForRemoval,
+            { onStatusSelected("PAUSED") },
+            Modifier.weight(1f)
+                .scale(if (selectedStatus == "PAUSED" && showAnimation && !markedForRemoval) scale else 1f),
+            HomeStatusColors.getColor("PAUSED")
+        )
     }
     Spacer(modifier = Modifier.height(6.dp))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusButton(Icons.Default.Delete, "Dropped", selectedStatus == "DROPPED" && !markedForRemoval, { onStatusSelected("DROPPED") }, Modifier.weight(1f).scale(if (selectedStatus == "DROPPED" && showAnimation && !markedForRemoval) scale else 1f), HomeStatusColors.getColor("DROPPED"))
+        StatusButton(
+            Icons.Default.Delete,
+            "Dropped",
+            selectedStatus == "DROPPED" && !markedForRemoval,
+            { onStatusSelected("DROPPED") },
+            Modifier.weight(1f)
+                .scale(if (selectedStatus == "DROPPED" && showAnimation && !markedForRemoval) scale else 1f),
+            HomeStatusColors.getColor("DROPPED")
+        )
         Button(onClick = onRemoveToggled, modifier = Modifier.weight(1f).height(44.dp).scale(if (markedForRemoval && showAnimation) scale else 1f), shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(containerColor = if (markedForRemoval) Color.Red.copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.15f), contentColor = if (markedForRemoval) Color.Red else Color.White),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)

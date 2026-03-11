@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -42,15 +41,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.AnimeMedia
+import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.TmdbEpisode
+import com.blissless.anime.data.models.TmdbEpisode
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -127,7 +126,6 @@ private fun EpisodeButton(episodeNumber: Int, isWatched: Boolean, hasAired: Bool
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boolean, onDismiss: () -> Unit, onEpisodeSelect: (Int) -> Unit) {
-    val context = LocalContext.current
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
@@ -138,6 +136,11 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
     var selectedEpisode by remember { mutableStateOf<Int?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    // Filter episodes to match the AniList progress count
+    val displayEpisodes = remember(tmdbEpisodes, episodeCount) {
+        tmdbEpisodes.filter { it.episode <= episodeCount }
+    }
 
     val windowInfo = LocalWindowInfo.current
     val screenHeightPx = windowInfo.containerSize.height.toFloat()
@@ -216,16 +219,15 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
         }
     }
 
-    // Updated to use relations-based season detection inside ViewModel
     LaunchedEffect(anime.id) {
         isLoadingEpisodes = true
-        // Pass anime.year for TMDB matching
         val result = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year)
         if (result.isNotEmpty()) tmdbEpisodes = result
         isLoadingEpisodes = false
     }
 
-    LaunchedEffect(Unit) { if (currentProgress > 0 && currentProgress < episodeCount) { kotlinx.coroutines.delay(100); listState.animateScrollToItem(currentProgress) } }
+    LaunchedEffect(Unit) { if (currentProgress in 1..<episodeCount) {
+        delay(100); listState.animateScrollToItem(currentProgress) } }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = false)) {
         Box(
@@ -311,9 +313,9 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
                     }
                 }
                 LazyColumn(modifier = Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)) {
-                    if (tmdbEpisodes.isNotEmpty()) {
-                        items(tmdbEpisodes.size) { index ->
-                            val ep = tmdbEpisodes[index]
+                    if (displayEpisodes.isNotEmpty()) {
+                        items(displayEpisodes.size) { index ->
+                            val ep = displayEpisodes[index]
                             val episodeNum = ep.episode
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
@@ -326,7 +328,7 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
                             val hasAired = episodeNum <= released
-                            SimpleRichEpisodeCard(episodeNumber = episodeNum, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, animeCover = anime.cover, isSelected = selectedEpisode == episodeNum, onSelect = { selectedEpisode = episodeNum }, onPlay = { if (hasAired) onEpisodeSelect(episodeNum) })
+                            SimpleRichEpisodeCard(episodeNumber = episodeNum, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, onSelect = { selectedEpisode = episodeNum }, onPlay = { if (hasAired) onEpisodeSelect(episodeNum) })
                         }
                     }
                     item { Spacer(modifier = Modifier.height(80.dp)) }
@@ -366,7 +368,6 @@ private fun RichTmdbEpisodeCard(
 
     val contentAlpha = if (hasAired) 1f else 0.4f
 
-    // Pre-calculate colors to avoid complex inline when logic
     val surfaceColor = when {
         isWatched -> MaterialTheme.colorScheme.primary
         isCurrent -> MaterialTheme.colorScheme.secondary
@@ -384,11 +385,9 @@ private fun RichTmdbEpisodeCard(
                 if (!image.isNullOrEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().height(180.dp)) {
                         AsyncImage(model = image, contentDescription = "Episode $episodeNumber", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                        // FIX: Added {} to Box to ensure valid syntax
                         Box(
                             modifier = Modifier.fillMaxWidth().height(60.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                         )
-                        // Fixed Surface call with separated logic
                         Surface(
                             modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
                             shape = RoundedCornerShape(6.dp),
@@ -525,7 +524,6 @@ private fun SimpleRichEpisodeCard(
     isCurrent: Boolean,
     hasAired: Boolean,
     isOled: Boolean,
-    animeCover: String,
     isSelected: Boolean,
     onSelect: () -> Unit,
     onPlay: () -> Unit

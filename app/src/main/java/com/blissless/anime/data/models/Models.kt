@@ -1,0 +1,649 @@
+package com.blissless.anime.data.models
+
+import kotlinx.serialization.Serializable
+
+// ============================================
+// CORE ANIME MODELS
+// ============================================
+
+@Serializable
+data class ExploreAnime(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val banner: String?,
+    val episodes: Int,
+    val latestEpisode: Int?,
+    val averageScore: Int?,
+    val genres: List<String>,
+    val year: Int? = null,
+    val malId: Int? = null
+)
+
+@Serializable
+data class AnimeMedia(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val banner: String? = null,
+    val progress: Int = 0,
+    val totalEpisodes: Int = 0,
+    val latestEpisode: Int? = null,
+    val status: String = "",
+    val averageScore: Int? = null,
+    val genres: List<String> = emptyList(),
+    val listStatus: String = "",
+    val listEntryId: Int? = null,
+    val year: Int? = null,
+    val malId: Int? = null
+)
+
+@Serializable
+data class AiringScheduleAnime(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val episodes: Int = 0,
+    val airingEpisode: Int = 0,
+    val airingAt: Long = 0,
+    val timeUntilAiring: Long? = null,
+    val averageScore: Int? = null,
+    val genres: List<String> = emptyList(),
+    val year: Int? = null,
+    val malId: Int? = null
+)
+
+@Serializable
+data class UserActivity(
+    val id: Int,
+    val type: String,
+    val status: String,
+    val progress: String?,
+    val createdAt: Long,
+    val mediaId: Int,
+    val mediaTitle: String,
+    val mediaCover: String,
+    val episodes: Int?,
+    val averageScore: Int?,
+    val year: Int? = null
+)
+
+@Serializable
+data class TmdbEpisode(
+    val episode: Int,
+    val title: String,
+    val description: String,
+    val image: String?
+)
+
+// ============================================
+// DETAILED ANIME DATA
+// ============================================
+
+@Serializable
+data class DetailedAnimeData(
+    val id: Int,
+    val title: String,
+    val titleRomaji: String? = null,
+    val titleEnglish: String? = null,
+    val titleNative: String? = null,
+    val cover: String,
+    val banner: String? = null,
+    val description: String? = null,
+    val episodes: Int = 0,
+    val duration: Int? = null,
+    val status: String? = null,
+    val averageScore: Int? = null,
+    val meanScore: Int? = null,
+    val popularity: Int? = null,
+    val favourites: Int? = null,
+    val genres: List<String> = emptyList(),
+    val tags: List<TagData> = emptyList(),
+    val season: String? = null,
+    val year: Int? = null,
+    val format: String? = null,
+    val source: String? = null,
+    val studios: List<StudioData> = emptyList(),
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val nextAiringEpisode: Int? = null,
+    val nextAiringTime: Long? = null,
+    val isAdult: Boolean = false,
+    val countryOfOrigin: String? = null,
+    val trailerUrl: String? = null,
+    val recommendations: List<ExploreAnime> = emptyList(),
+    val latestEpisode: Int? = null,
+    val malId: Int? = null
+)
+
+@Serializable
+data class TagData(
+    val name: String,
+    val rank: Int? = null,
+    val isMediaSpoiler: Boolean = false
+)
+
+@Serializable
+data class StudioData(
+    val id: Int,
+    val name: String,
+    val isAnimationStudio: Boolean = true
+)
+
+// ============================================
+// CACHE MODELS
+// ============================================
+
+@Serializable
+data class StreamCacheData(val entries: Map<String, StreamCacheEntry>)
+
+@Serializable
+data class StreamCacheEntry(
+    val stream: CachedStream?,
+    val episodeInfo: CachedEpisodeInfo?,
+    val timestamp: Long
+)
+
+@Serializable
+data class CachedStream(
+    val url: String,
+    val isDirectStream: Boolean,
+    val headers: Map<String, String>?,
+    val subtitleUrl: String?,
+    val serverName: String,
+    val category: String
+)
+
+@Serializable
+data class CachedEpisodeInfo(
+    val subServers: List<CachedServer>,
+    val dubServers: List<CachedServer>,
+    val animeId: String,
+    val episodeId: String
+)
+
+@Serializable
+data class CachedServer(val name: String, val url: String)
+
+@Serializable
+data class AiringCacheData(
+    val scheduleByDay: Map<Int, List<AiringScheduleAnime>>,
+    val airingAnimeList: List<AiringScheduleAnime>
+)
+
+@Serializable
+data class ExploreCacheData(
+    val featuredAnime: List<ExploreAnime>,
+    val seasonalAnime: List<ExploreAnime>,
+    val topSeries: List<ExploreAnime>,
+    val topMovies: List<ExploreAnime>,
+    val actionAnime: List<ExploreAnime>,
+    val romanceAnime: List<ExploreAnime>,
+    val comedyAnime: List<ExploreAnime>,
+    val fantasyAnime: List<ExploreAnime>,
+    val scifiAnime: List<ExploreAnime>
+)
+
+@Serializable
+data class HomeCacheData(
+    val currentlyWatching: List<AnimeMedia>,
+    val planningToWatch: List<AnimeMedia>,
+    val completed: List<AnimeMedia>,
+    val onHold: List<AnimeMedia>,
+    val dropped: List<AnimeMedia>,
+    val userId: Int?,
+    val userName: String?,
+    val userAvatar: String?
+)
+
+@Serializable
+data class PlaybackPositionCache(
+    val positions: Map<String, Long>
+)
+
+// ============================================
+// STREAM MODELS
+// ============================================
+
+data class StreamFetchResult(
+    val stream: com.blissless.anime.api.AniwatchStreamResult?,
+    val isFallback: Boolean,
+    val requestedCategory: String,
+    val actualCategory: String
+)
+
+data class GraphQLCacheEntry(
+    val response: String,
+    val timestamp: Long
+)
+
+// ============================================
+// API RESPONSE MODELS
+// ============================================
+
+@Serializable
+data class ViewerResponse(val data: ViewerData)
+
+@Serializable
+data class ViewerData(val Viewer: Viewer)
+
+@Serializable
+data class Viewer(
+    val id: Int,
+    val name: String,
+    val avatar: Avatar?
+)
+
+@Serializable
+data class Avatar(val medium: String)
+
+@Serializable
+data class MediaListResponse(val data: MediaListData)
+
+@Serializable
+data class MediaListData(val MediaListCollection: MediaListCollection)
+
+@Serializable
+data class MediaListCollection(val lists: List<MediaList>)
+
+@Serializable
+data class MediaList(
+    val name: String,
+    val status: String?,
+    val entries: List<MediaListEntry>
+)
+
+@Serializable
+data class MediaListEntry(
+    val id: Int,
+    val mediaId: Int,
+    val progress: Int?,
+    val status: String?,
+    val media: MediaEntryMedia
+)
+
+@Serializable
+data class MediaEntryMedia(
+    val id: Int,
+    val idMal: Int? = null,
+    val title: MediaTitle,
+    val coverImage: MediaCoverImage?,
+    val bannerImage: String?,
+    val episodes: Int?,
+    val nextAiringEpisode: NextAiringEpisode?,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?,
+    val seasonYear: Int? = null
+)
+
+@Serializable
+data class ExploreResponse(val data: ExploreData)
+
+@Serializable
+data class ExploreData(val Page: ExplorePage)
+
+@Serializable
+data class ExplorePage(val media: List<ExploreMedia>)
+
+@Serializable
+data class ExploreMedia(
+    val id: Int,
+    val idMal: Int? = null,
+    val title: MediaTitle,
+    val coverImage: MediaCoverImage?,
+    val bannerImage: String?,
+    val episodes: Int?,
+    val nextAiringEpisode: NextAiringEpisode? = null,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?,
+    val seasonYear: Int? = null,
+    val startDate: FuzzyDate? = null
+)
+
+@Serializable
+data class BatchedExploreResponse(val data: BatchedExploreData)
+
+@Serializable
+data class BatchedExploreData(
+    val featured: ExplorePage,
+    val seasonal: ExplorePage,
+    val topSeries: ExplorePage,
+    val topMovies: ExplorePage,
+    val action: ExplorePage,
+    val romance: ExplorePage,
+    val comedy: ExplorePage,
+    val fantasy: ExplorePage,
+    val scifi: ExplorePage
+)
+
+@Serializable
+data class FuzzyDate(
+    val year: Int? = null,
+    val month: Int? = null,
+    val day: Int? = null
+)
+
+@Serializable
+data class MediaTitle(
+    val romaji: String?,
+    val english: String?
+)
+
+@Serializable
+data class MediaCoverImage(
+    val large: String? = null,
+    val medium: String? = null
+)
+
+@Serializable
+data class NextAiringEpisode(
+    val episode: Int? = null,
+    val airingAt: Long? = null,
+    val timeUntilAiring: Long? = null
+)
+
+@Serializable
+data class AiringScheduleResponse(val data: AiringScheduleData)
+
+@Serializable
+data class AiringScheduleData(val Page: AiringSchedulePage)
+
+@Serializable
+data class AiringSchedulePage(val airingSchedules: List<AiringScheduleEntry>)
+
+@Serializable
+data class AiringScheduleEntry(
+    val id: Int,
+    val airingAt: Long,
+    val episode: Int,
+    val timeUntilAiring: Long? = null,
+    val mediaId: Int,
+    val media: AiringScheduleMedia?
+)
+
+@Serializable
+data class AiringScheduleMedia(
+    val id: Int,
+    val idMal: Int? = null,
+    val title: MediaTitle,
+    val coverImage: MediaCoverImage?,
+    val episodes: Int?,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?,
+    val seasonYear: Int? = null
+)
+
+@Serializable
+data class UserFavoritesResponse(val data: UserFavoritesData)
+
+@Serializable
+data class UserFavoritesData(val User: UserFavoritesUser)
+
+@Serializable
+data class UserFavoritesUser(val favourites: UserFavorites)
+
+@Serializable
+data class UserFavorites(val anime: UserFavoritesAnime)
+
+@Serializable
+data class UserFavoritesAnime(val nodes: List<UserFavoriteAnime>)
+
+@Serializable
+data class UserFavoriteAnime(
+    val id: Int,
+    val title: MediaTitle,
+    val coverImage: MediaCoverImage?,
+    val episodes: Int?,
+    val averageScore: Int?,
+    val genres: List<String>?,
+    val seasonYear: Int? = null
+)
+
+@Serializable
+data class SimpleActivityResponse(val data: SimpleActivityData)
+
+@Serializable
+data class SimpleActivityData(val Page: SimpleActivityPage)
+
+@Serializable
+data class SimpleActivityPage(val activities: List<SimpleActivityEntry>)
+
+@Serializable
+data class SimpleActivityEntry(
+    val createdAt: Long,
+    val status: String?,
+    val progress: String?,
+    val media: SimpleActivityMedia?
+)
+
+@Serializable
+data class SimpleActivityMedia(
+    val title: SimpleActivityTitle,
+    val coverImage: MediaCoverImage?
+)
+
+@Serializable
+data class SimpleActivityTitle(
+    val romaji: String?
+)
+
+@Serializable
+data class DetailedAnimeResponse(val data: DetailedAnimeDataWrapper)
+
+@Serializable
+data class DetailedAnimeDataWrapper(val Media: DetailedAnimeMedia)
+
+@Serializable
+data class DetailedAnimeMedia(
+    val id: Int,
+    val title: DetailedAnimeTitle? = null,
+    val coverImage: MediaCoverImage? = null,
+    val bannerImage: String? = null,
+    val description: String? = null,
+    val episodes: Int? = null,
+    val duration: Int? = null,
+    val status: String? = null,
+    val averageScore: Int? = null,
+    val popularity: Int? = null,
+    val favourites: Int? = null,
+    val genres: List<String>? = null,
+    val season: String? = null,
+    val seasonYear: Int? = null,
+    val format: String? = null,
+    val source: String? = null,
+    val studios: DetailedAnimeStudios? = null,
+    val startDate: FuzzyDate? = null,
+    val endDate: FuzzyDate? = null,
+    val nextAiringEpisode: NextAiringEpisode? = null
+)
+
+@Serializable
+data class DetailedAnimeTitle(
+    val romaji: String? = null,
+    val english: String? = null,
+    val native: String? = null
+)
+
+@Serializable
+data class DetailedAnimeStudios(
+    val nodes: List<DetailedAnimeStudioNode>
+)
+
+@Serializable
+data class DetailedAnimeStudioNode(
+    val id: Int? = null,
+    val name: String? = null
+)
+
+// ============================================
+// ANIME RELATIONS (for episode offset calculation)
+// ============================================
+
+@Serializable
+data class AnimeRelationsResponse(val data: AnimeRelationsData)
+
+@Serializable
+data class AnimeRelationsData(val Media: AnimeRelationsMedia)
+
+@Serializable
+data class AnimeRelationsMedia(
+    val id: Int,
+    val title: MediaTitle? = null,
+    val episodes: Int? = null,
+    val relations: AnimeRelations? = null
+)
+
+@Serializable
+data class AnimeRelations(
+    val edges: List<AnimeRelationEdge>
+)
+
+@Serializable
+data class AnimeRelationEdge(
+    val relationType: String? = null,
+    val node: AnimeRelationNode
+)
+
+@Serializable
+data class AnimeRelationNode(
+    val id: Int,
+    val title: MediaTitle? = null,
+    val episodes: Int? = null,
+    val type: String? = null
+)
+
+// ============================================
+// TMDB API RESPONSE MODELS
+// ============================================
+
+@Serializable
+data class TmdbSearchResponse(
+    val page: Int = 0,
+    val results: List<TmdbSearchResult> = emptyList(),
+    val total_pages: Int = 0,
+    val total_results: Int = 0
+)
+
+@Serializable
+data class TmdbSearchResult(
+    val id: Int = 0,
+    val name: String? = null,
+    val title: String? = null,
+    val original_name: String? = null,
+    val original_title: String? = null,
+    val overview: String? = null,
+    val poster_path: String? = null,
+    val backdrop_path: String? = null,
+    val first_air_date: String? = null,
+    val release_date: String? = null,
+    val vote_average: Double? = null,
+    val popularity: Double? = null,
+    val original_language: String? = null,
+    val origin_country: List<String>? = null
+)
+
+@Serializable
+data class TmdbTvDetails(
+    val id: Int = 0,
+    val name: String? = null,
+    val original_name: String? = null,
+    val overview: String? = null,
+    val poster_path: String? = null,
+    val backdrop_path: String? = null,
+    val first_air_date: String? = null,
+    val last_air_date: String? = null,
+    val number_of_seasons: Int = 0,
+    val number_of_episodes: Int = 0,
+    val vote_average: Double? = null,
+    val popularity: Double? = null,
+    val status: String? = null,
+    val original_language: String? = null,
+    val origin_country: List<String>? = null,
+    val seasons: List<TmdbSeason> = emptyList()
+)
+
+@Serializable
+data class TmdbSeason(
+    val id: Int = 0,
+    val season_number: Int = 0,
+    val name: String? = null,
+    val overview: String? = null,
+    val poster_path: String? = null,
+    val air_date: String? = null,
+    val episode_count: Int = 0
+)
+
+@Serializable
+data class TmdbSeasonDetails(
+    val id: Int = 0,
+    val season_number: Int = 0,
+    val name: String? = null,
+    val overview: String? = null,
+    val poster_path: String? = null,
+    val air_date: String? = null,
+    val episodes: List<TmdbEpisodeDetails> = emptyList()
+)
+
+@Serializable
+data class TmdbEpisodeDetails(
+    val id: Int = 0,
+    val episode_number: Int = 0,
+    val season_number: Int = 0,
+    val name: String? = null,
+    val overview: String? = null,
+    val still_path: String? = null,
+    val air_date: String? = null,
+    val runtime: Int? = null,
+    val vote_average: Double? = null
+)
+
+// ============================================
+// EXTENSION FUNCTIONS
+// ============================================
+
+fun ExploreAnime.toDetailedAnimeData(): DetailedAnimeData {
+    return DetailedAnimeData(
+        id = id,
+        title = title,
+        cover = cover,
+        banner = banner,
+        episodes = episodes,
+        averageScore = averageScore,
+        genres = genres,
+        year = year,
+        latestEpisode = latestEpisode,
+        malId = malId
+    )
+}
+
+fun AnimeMedia.toDetailedAnimeData(): DetailedAnimeData {
+    return DetailedAnimeData(
+        id = id,
+        title = title,
+        cover = cover,
+        banner = banner,
+        episodes = totalEpisodes,
+        averageScore = averageScore,
+        genres = genres,
+        year = year,
+        latestEpisode = latestEpisode,
+        malId = malId
+    )
+}
+
+// ============================================
+// LOCAL FAVORITES
+// ============================================
+
+@Serializable
+data class StoredFavorite(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val banner: String? = null,
+    val year: Int? = null,
+    val averageScore: Int? = null
+)

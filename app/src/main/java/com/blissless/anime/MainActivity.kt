@@ -23,31 +23,32 @@ import androidx.core.view.WindowCompat
 import android.util.Log
 import com.blissless.anime.api.EpisodeStreams
 import com.blissless.anime.ui.screens.DetailedAnimeScreen
-import com.blissless.anime.ui.screens.ExploreAnimeDialog
+import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.screens.ExploreScreen
 import com.blissless.anime.ui.screens.HomeScreen
 import com.blissless.anime.ui.screens.PlayerScreen
 import com.blissless.anime.ui.screens.ScheduleScreen
 import com.blissless.anime.ui.screens.SettingsScreen
-import com.blissless.anime.ui.screens.toDetailedAnimeData
+import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import android.widget.Toast
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.ExploreAnime
 
 class MainActivity : ComponentActivity() {
 
     private val mainViewModel: MainViewModel by viewModels()
-
     companion object {
         const val PREFS_NAME = "anilist_prefs"
         const val TOKEN_KEY = "auth_token"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splashScreen = installSplashScreen()
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -157,7 +158,6 @@ fun MainScreen(
     val simplifyAnimeDetails by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
 
     val localFavorites by viewModel.localFavorites.collectAsState()
-    val localFavoriteIds = localFavorites.keys
     val canAddFavorite = remember(localFavorites) { viewModel.canAddFavorite() }
 
     val autoSkipOpening by viewModel.autoSkipOpening.collectAsState(initial = false)
@@ -345,6 +345,7 @@ fun MainScreen(
 
                     val result = viewModel.tryAllServersWithFallback(anime.title, prevEp, anime.id, latestAired)
                     if (result.stream != null) {
+                        savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
                         currentVideoUrl = result.stream.url
                         currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
                         currentSubtitleUrl = result.stream.subtitleUrl
@@ -388,6 +389,7 @@ fun MainScreen(
 
                     val result = viewModel.tryAllServersWithFallback(anime.title, nextEp, anime.id, latestAired)
                     if (result.stream != null) {
+                        savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
                         currentVideoUrl = result.stream.url
                         currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
                         currentSubtitleUrl = result.stream.subtitleUrl

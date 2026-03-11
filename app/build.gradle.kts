@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "2.1"
+        versionCode = 12
+        versionName = "2.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -34,7 +34,7 @@ android {
 
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
-        buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey\"")
+        buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey2\"")
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     }
 

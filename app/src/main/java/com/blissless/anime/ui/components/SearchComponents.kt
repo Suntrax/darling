@@ -1,6 +1,7 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.components
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -23,16 +24,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.AnimeMedia
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.ui.screens.DetailedAnimeScreen
+import com.blissless.anime.data.models.toDetailedAnimeData
+import kotlinx.coroutines.delay
 import java.util.Locale
+import com.blissless.anime.data.models.StoredFavorite
 
 @Composable
 fun SearchOverlay(
@@ -44,7 +50,7 @@ fun SearchOverlay(
     completed: List<AnimeMedia>,
     onHold: List<AnimeMedia>,
     dropped: List<AnimeMedia>,
-    localFavorites: Map<Int, MainViewModel.StoredFavorite>,
+    localFavorites: Map<Int, StoredFavorite>,
     onToggleFavorite: (AnimeMedia) -> Unit,
     onClose: () -> Unit,
     onPlayEpisode: (AnimeMedia, Int) -> Unit
@@ -73,7 +79,7 @@ fun SearchOverlay(
     }
 
     // Back handler for search overlay - close search on back press
-    androidx.activity.compose.BackHandler(enabled = true) {
+    BackHandler(enabled = true) {
         onClose()
     }
 
@@ -84,7 +90,7 @@ fun SearchOverlay(
             isSearching = false
         } else {
             isSearching = true
-            kotlinx.coroutines.delay(500) // Debounce delay
+            delay(500) // Debounce delay
             val results = viewModel.searchAnime(searchQuery)
             searchResults = results
             isSearching = false
@@ -135,7 +141,7 @@ fun SearchOverlay(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(
+                        textStyle = TextStyle(
                             color = Color.White,
                             fontSize = MaterialTheme.typography.bodyLarge.fontSize
                         ),
@@ -678,7 +684,8 @@ fun SearchAnimeDetailDialog(
                         onClick = {
                             selectedStatus = "COMPLETED"
                             showAnimation = true
-                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT)
+                                .show()
                             onUpdateStatus("COMPLETED")
                         },
                         modifier = Modifier

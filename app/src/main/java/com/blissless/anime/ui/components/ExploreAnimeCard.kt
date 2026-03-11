@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.components
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
@@ -31,7 +31,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.ExploreAnime
+import com.blissless.anime.data.models.ExploreAnime
+import java.util.Locale
 
 @Composable
 fun ExploreAnimeHorizontalList(
@@ -174,7 +175,7 @@ fun ExploreAnimeCard(
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
-                            "★ ${String.format(java.util.Locale.US, "%.1f", score)}",
+                            "★ ${String.format(Locale.US, "%.1f", score)}",
                             color = Color(0xFFFFD700),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
