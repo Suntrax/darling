@@ -6,6 +6,8 @@ import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import androidx.core.content.edit
+import com.blissless.anime.data.models.EpisodeTimestamps
+import com.blissless.anime.data.models.Timestamp
 
 /**
  * Local cache for storing computed OP/ED timestamps.
@@ -47,10 +49,12 @@ class TimestampCache(private val context: Context) {
         val introEnd: Float? = null,
         val creditsStart: Float? = null,
         val creditsEnd: Float? = null,
-        val source: String,              // "aniskip", "animethemes", "fingerprint"
+        val source: String,              // "aniskip", "animethemes", "fingerprint", "animekai"
         val confidence: Float = 1.0f,    // 0.0 to 1.0
         val timestamp: Long = System.currentTimeMillis()
-    )
+    ) {
+        fun hasTimestamps(): Boolean = introStart != null || creditsStart != null
+    }
 
     /**
      * Cache data structure
@@ -115,7 +119,14 @@ class TimestampCache(private val context: Context) {
     }
 
     /**
-     * Save OP/ED timestamps from EpisodeTimestamps format
+     * Save OP/ED timestamps from EpisodeTimestamps format.
+     * This is the unified method for saving timestamps from any source.
+     *
+     * @param animeId The anime ID (can be MAL ID or AniList ID)
+     * @param animeName The anime name for fallback lookups
+     * @param episodeNumber The episode number
+     * @param timestamps The timestamps to save
+     * @param source The source identifier ("aniskip", "animethemes", "fingerprint", "animekai")
      */
     fun saveFromEpisodeTimestamps(
         animeId: Int,
@@ -138,7 +149,7 @@ class TimestampCache(private val context: Context) {
     }
 
     /**
-     * Convert CachedTimestamp to EpisodeTimestamps format
+     * Convert CachedTimestamp to EpisodeTimestamps format.
      */
     fun toEpisodeTimestamps(cached: CachedTimestamp): EpisodeTimestamps {
         return EpisodeTimestamps(
@@ -203,6 +214,7 @@ class TimestampCache(private val context: Context) {
             aniskipCount = entries.count { it.source == "aniskip" },
             animethemesCount = entries.count { it.source == "animethemes" },
             fingerprintCount = entries.count { it.source == "fingerprint" },
+            animekaiCount = entries.count { it.source == "animekai" },
             oldestEntry = entries.minByOrNull { it.timestamp }?.timestamp,
             newestEntry = entries.maxByOrNull { it.timestamp }?.timestamp
         )
@@ -213,6 +225,7 @@ class TimestampCache(private val context: Context) {
         val aniskipCount: Int,
         val animethemesCount: Int,
         val fingerprintCount: Int,
+        val animekaiCount: Int,
         val oldestEntry: Long?,
         val newestEntry: Long?
     )

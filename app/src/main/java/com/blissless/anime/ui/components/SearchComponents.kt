@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,12 +22,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -62,6 +69,16 @@ fun SearchOverlay(
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDetailDialog by remember { mutableStateOf(false) }
 
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Auto-focus and open keyboard when search is opened
+    LaunchedEffect(Unit) {
+        delay(100) // Much shorter delay for faster opening
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
     // Get saved anime IDs and their statuses from all lists
     val savedAnimeMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
@@ -73,13 +90,9 @@ fun SearchOverlay(
         map
     }
 
-    // Calculate canAddFavorite locally based on max 10 favorites limit
-    val canAddFavoriteLocal = remember(localFavorites) {
-        localFavorites.size < 10
-    }
-
     // Back handler for search overlay - close search on back press
     BackHandler(enabled = true) {
+        keyboardController?.hide() // Hide keyboard immediately
         onClose()
     }
 
@@ -139,13 +152,24 @@ fun SearchOverlay(
                     BasicTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester),
                         singleLine = true,
                         textStyle = TextStyle(
                             color = Color.White,
                             fontSize = MaterialTheme.typography.bodyLarge.fontSize
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Search,
+                            capitalization = KeyboardCapitalization.Sentences
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                keyboardController?.hide()
+                            }
+                        ),
                         decorationBox = { innerTextField ->
                             Box(
                                 modifier = Modifier.fillMaxWidth(),
@@ -164,7 +188,10 @@ fun SearchOverlay(
 
                     // Only show close button
                     IconButton(
-                        onClick = onClose,
+                        onClick = {
+                            keyboardController?.hide() // Hide keyboard immediately
+                            onClose()
+                        },
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
@@ -202,6 +229,7 @@ fun SearchOverlay(
                             isOled = isOled,
                             currentStatus = savedAnimeMap[anime.id],
                             onClick = {
+                                keyboardController?.hide() // Hide keyboard on selection
                                 selectedAnime = anime
                                 showDetailDialog = true
                             }

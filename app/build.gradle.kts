@@ -27,12 +27,16 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
+        val aniwatchApiBaseUrl = localProperties.getProperty("ANIWATCH_API_BASE_URL")
+        val zenimeApiBaseUrl = localProperties.getProperty("ZENIME_API_BASE_URL")
+        val animekaiApiBaseUrl = localProperties.getProperty("ANIMEKAI_API_BASE_URL")
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
         val anilistApiKey2 = localProperties.getProperty("CLIENT_ID_ANILIST2")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
 
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "ANIWATCH_API_BASE_URL", "\"$aniwatchApiBaseUrl\"")
+        buildConfigField("String", "ZENIME_API_BASE_URL", "\"$zenimeApiBaseUrl\"")
+        buildConfigField("String", "ANIMEKAI_API_BASE_URL", "\"$animekaiApiBaseUrl\"")
         buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
         buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey2\"")
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")

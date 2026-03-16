@@ -1,5 +1,10 @@
 package com.blissless.anime.api
+
 import com.blissless.anime.BuildConfig
+import com.blissless.anime.data.models.AniwatchStreamResult
+import com.blissless.anime.data.models.ServerInfo
+import com.blissless.anime.data.models.EpisodeStreams
+import com.blissless.anime.data.models.QualityOption
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -11,30 +16,9 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-data class AniwatchStreamResult(
-    val url: String,
-    val isDirectStream: Boolean,
-    val headers: Map<String, String>?,
-    val subtitleUrl: String?,
-    val serverName: String = "",
-    val category: String = "sub"
-)
-
-data class ServerInfo(
-    val name: String,
-    val url: String
-)
-
-data class EpisodeStreams(
-    val subServers: List<ServerInfo>,
-    val dubServers: List<ServerInfo>,
-    val animeId: String,
-    val episodeId: String
-)
-
 object AniwatchService {
     private const val TAG = "AniwatchService"
-    private const val API_BASE = BuildConfig.API_BASE_URL
+    private const val API_BASE = BuildConfig.ANIWATCH_API_BASE_URL
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -55,6 +39,69 @@ object AniwatchService {
             }
         }
         return null
+    }
+
+    /**
+     * Parse M3U8 master playlist to extract all quality options.
+     */
+    private fun parseM3U8Qualities(masterUrl: String, masterContent: String): List<QualityOption> {
+        val baseUrl = masterUrl.substringBeforeLast("/") + "/"
+        val lines = masterContent.split("\n")
+        val qualities = mutableListOf<QualityOption>()
+
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (line.contains("RESOLUTION=")) {
+                val resolutionMatch = Regex("""RESOLUTION=(\d+)x(\d+)""").find(line)
+                if (resolutionMatch != null && i + 1 < lines.size) {
+                    val width = resolutionMatch.groupValues[1].toIntOrNull() ?: 0
+                    val height = resolutionMatch.groupValues[2].toIntOrNull() ?: 0
+                    val qualityName = "${height}p"
+                    val streamUrl = if (lines[i + 1].trim().startsWith("http")) {
+                        lines[i + 1].trim()
+                    } else {
+                        baseUrl + lines[i + 1].trim()
+                    }
+
+                    qualities.add(QualityOption(
+                        quality = qualityName,
+                        url = streamUrl,
+                        width = width
+                    ))
+                    Log.d(TAG, "Found quality: $qualityName ($width x $height)")
+                }
+            }
+        }
+
+        // Sort by quality (highest first)
+        qualities.sortByDescending { it.width }
+
+        Log.d(TAG, "Parsed ${qualities.size} quality options")
+        return qualities
+    }
+
+    /**
+     * Fetch master playlist and extract all qualities.
+     */
+    private suspend fun fetchAllQualities(masterUrl: String): List<QualityOption> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url(masterUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+            val response = client.newCall(request).execute()
+
+            if (!response.isSuccessful) {
+                Log.e(TAG, "Failed to fetch master playlist: ${response.code}")
+                return@withContext emptyList()
+            }
+
+            val content = response.body.string()
+            parseM3U8Qualities(masterUrl, content)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching qualities", e)
+            emptyList()
+        }
     }
 
     // Get anime ID and episode ID for pre-fetching
@@ -382,6 +429,15 @@ object AniwatchService {
             val streamUrl = sources.getJSONObject(0).getString("url")
             Log.d(TAG, "Stream URL: ${streamUrl.take(80)}...")
 
+            // Fetch all quality options from master playlist
+            val qualities = if (streamUrl.contains(".m3u8")) {
+                fetchAllQualities(streamUrl)
+            } else {
+                emptyList()
+            }
+
+            Log.d(TAG, "Found ${qualities.size} quality options")
+
             // Subtitles - find English track
             var englishSub: String? = null
             val tracks = data.optJSONArray("tracks")
@@ -420,7 +476,8 @@ object AniwatchService {
                 headers = headers,
                 subtitleUrl = englishSub,
                 serverName = targetServerName,
-                category = category
+                category = category,
+                qualities = qualities
             )
         }
     }

@@ -1,17 +1,13 @@
 package com.blissless.anime.ui.components
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -43,242 +39,134 @@ fun FeaturedCarousel(
     autoScrollEnabled: Boolean = true,
     isVisible: Boolean = true
 ) {
-    val pagerState = rememberPagerState(pageCount = { animeList.size })
+    if (animeList.isEmpty()) return
+
+    val actualCount = animeList.size
+    // Use a key to re-initialize when the list size changes (e.g. from 0 to N)
+    val pagerState = rememberPagerState(
+        initialPage = actualCount * 100,
+        pageCount = { actualCount * 200 }
+    )
+    
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // Track animation direction
-    var lastPage by remember { mutableIntStateOf(0) }
-
-    // Track current auto-scroll job so we can cancel it
+    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
     var autoScrollJob by remember { mutableStateOf<Job?>(null) }
 
-    // Determine animation direction based on page change
-    val swipeDirection = remember { derivedStateOf {
-        val current = pagerState.currentPage
-        val diff = current - lastPage
-        when {
-            diff > 0 || (lastPage == animeList.size - 1 && current == 0) -> 1 // Forward
-            diff < 0 || (lastPage == 0 && current == animeList.size - 1) -> -1 // Backward
-            else -> 1
-        }
-    }}
-
-    // Update last page after animation settles
-    LaunchedEffect(pagerState.settledPage) {
-        lastPage = pagerState.settledPage
-    }
-
-    // Cancel animation and snap to current page when visibility changes
-    LaunchedEffect(isVisible) {
-        if (!isVisible) {
-            // Cancel any ongoing auto-scroll job
-            autoScrollJob?.cancel()
-            autoScrollJob = null
-
-            // Snap to current settled page to cancel any in-progress animation
-            // Use scrollToPage (instant) instead of animateScrollToPage
-            try {
-                pagerState.scrollToPage(pagerState.settledPage)
-            } catch (_: Exception) {
-                // Ignore cancellation
-            }
-        }
-    }
-
-    // Start/restart auto-scroll when becoming visible
-    LaunchedEffect(autoScrollEnabled, isVisible) {
-        if (autoScrollEnabled && isVisible) {
+    LaunchedEffect(autoScrollEnabled, isVisible, isDragged) {
+        if (autoScrollEnabled && isVisible && !isDragged) {
             while (true) {
-                delay(4000) // Wait 4 seconds
+                delay(4000)
+                if (isDragged) break
 
-                // Check if still visible before scrolling
-
-                // Calculate next page (loop back to 0 at end)
-                val nextPage = if (pagerState.currentPage >= animeList.size - 1) 0
-                else pagerState.currentPage + 1
-
-                // Launch animation as a job so we can cancel it
                 autoScrollJob = scope.launch {
                     try {
                         pagerState.animateScrollToPage(
-                            nextPage,
-                            animationSpec = tween(500, easing = FastOutSlowInEasing)
+                            pagerState.currentPage + 1,
+                            animationSpec = tween(800, easing = FastOutSlowInEasing)
                         )
-                    } catch (_: Exception) {
-                        // Animation cancelled - this is expected when visibility changes
-                    }
+                    } catch (_: Exception) {}
                 }
-
-                // Wait for animation to complete
                 autoScrollJob?.join()
             }
         }
     }
 
-    // Cleanup job on dispose
     DisposableEffect(Unit) {
-        onDispose {
-            autoScrollJob?.cancel()
-        }
+        onDispose { autoScrollJob?.cancel() }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp)
-    ) {
-        val currentAnime = animeList.getOrElse(pagerState.currentPage) { animeList.first() }
-
-        // AnimatedContent for banner with direction sync
-        AnimatedContent(
-            targetState = currentAnime,
-            transitionSpec = {
-                if (swipeDirection.value >= 0) {
-                    // Going forward: new from right, old to left
-                    (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(300)) { it/2 })
-                        .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(300)) { -it/2 })
-                        .using(SizeTransform(clip = false))
-                } else {
-                    // Going backward: new from left, old to right
-                    (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(300)) { -it/2 })
-                        .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(300)) { it/2 })
-                        .using(SizeTransform(clip = false))
-                }
-            },
-            label = "BannerTransition"
-        ) { anime ->
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(anime.banner ?: anime.cover)
-                    .memoryCacheKey(anime.banner ?: anime.cover)
-                    .diskCacheKey(anime.banner ?: anime.cover)
-                    .crossfade(false)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        // Gradient overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.3f),
-                            Color.Black.copy(alpha = 0.5f),
-                            Color.Black.copy(alpha = 0.9f)
-                        )
-                    )
-                )
-        )
-
-        // Swipeable pager for info cards
+    Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             pageSpacing = 0.dp,
             userScrollEnabled = true
         ) { page ->
-            val anime = animeList[page]
+            val anime = animeList[page % actualCount]
+            
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Banner background
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(anime.banner ?: anime.cover)
+                        .memoryCacheKey(anime.banner ?: anime.cover)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
 
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomStart
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { onAnimeClick(anime) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.Black.copy(alpha = 0.7f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(anime.cover)
-                                .memoryCacheKey(anime.cover)
-                                .diskCacheKey(anime.cover)
-                                .crossfade(false)
-                                .build(),
-                            contentDescription = anime.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .width(50.dp)
-                                .height(70.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                        )
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                anime.title,
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                // Dark gradient overlay
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.5f),
+                                Color.Black.copy(alpha = 0.9f)
                             )
+                        )
+                    )
+                )
 
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                anime.year?.let { year ->
-                                    Text(
-                                        "$year",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        " • ",
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
+                // Info Card overlay
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomStart) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp).clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onAnimeClick(anime) }
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.7f))
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(
+                                model = anime.cover,
+                                contentDescription = anime.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.width(50.dp).height(70.dp).clip(RoundedCornerShape(6.dp))
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    anime.genres.take(3).joinToString(" - "),
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
+                                    text = anime.title,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                anime.averageScore?.let { score ->
-                                    val displayScore = score / 10.0
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (anime.year != null) {
+                                        Text(text = anime.year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                                        Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                                    }
                                     Text(
-                                        "★ ${String.format(Locale.US, "%.1f", displayScore)}",
-                                        color = Color(0xFFFFD700),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
+                                        text = anime.genres.take(3).joinToString(" - "),
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
-                                    Spacer(modifier = Modifier.width(12.dp))
                                 }
-
-                                anime.latestEpisode?.let { ep ->
-                                    val releasedEp = ep - 1
-                                    if (releasedEp > 0) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (anime.averageScore != null) {
                                         Text(
-                                            "Ep $releasedEp ${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}",
-                                            color = Color.White.copy(alpha = 0.8f),
-                                            style = MaterialTheme.typography.labelMedium
+                                            text = "★ ${String.format(Locale.US, "%.1f", anime.averageScore / 10.0)}",
+                                            color = Color(0xFFFFD700),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold
                                         )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                    }
+                                    if (anime.latestEpisode != null && anime.latestEpisode > 1) {
+                                        val epText = "Ep ${anime.latestEpisode - 1}${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}"
+                                        Text(text = epText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }
@@ -288,24 +176,16 @@ fun FeaturedCarousel(
             }
         }
 
-        // Page indicators with animation
+        // Indicators
         Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 12.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            repeat(animeList.size) { index ->
-                Box(
-                    modifier = Modifier
-                        .height(4.dp)
-                        .width(if (index == pagerState.currentPage) 24.dp else 8.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(
-                            if (index == pagerState.currentPage) Color.White
-                            else Color.White.copy(alpha = 0.4f)
-                        )
-                )
+            repeat(actualCount) { index ->
+                val isSelected = (pagerState.currentPage % actualCount) == index
+                val width by animateDpAsState(if (isSelected) 24.dp else 8.dp, tween(300), label = "w")
+                val alpha by animateFloatAsState(if (isSelected) 1f else 0.4f, tween(300), label = "a")
+                Box(modifier = Modifier.height(4.dp).width(width).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = alpha)))
             }
         }
     }

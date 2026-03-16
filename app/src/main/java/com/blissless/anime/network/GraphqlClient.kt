@@ -36,14 +36,14 @@ data class GraphQLError(
  * Configuration for the GraphQL client
  */
 data class GraphQLConfig(
-    val maxConcurrentRequests: Int = 3,
-    val minRequestIntervalMs: Long = 500L,
+    val maxConcurrentRequests: Int = 5, // Increased concurrency
+    val minRequestIntervalMs: Long = 100L, // Reduced interval for faster sequential requests
     val defaultTimeout: Int = 30000,
     val maxRetries: Int = 3,
     val baseRetryDelayMs: Long = 1000L,
     val maxRetryDelayMs: Long = 30000L,
     val cacheDurationMs: Long = 5 * 60 * 1000L, // 5 minutes
-    val maxCacheSize: Int = 100
+    val maxCacheSize: Int = 200 // Increased cache size
 )
 
 /**

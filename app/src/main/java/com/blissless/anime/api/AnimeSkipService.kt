@@ -10,9 +10,12 @@ import kotlinx.serialization.json.Json
 import java.net.URL
 import java.net.URLEncoder
 import javax.net.ssl.HttpsURLConnection
+import com.blissless.anime.data.models.EpisodeTimestamps
+import com.blissless.anime.data.models.Timestamp
 
 /**
- * Service for fetching anime opening/ending timestamps from multiple sources.
+ * Service for fetching skip timestamps from multiple sources.
+ * Priority: Animekai (PRIMARY) > AniSkip (FALLBACK) > AnimeThemes (FALLBACK)
  */
 class AnimeSkipService(private val context: Context? = null) {
 
@@ -20,6 +23,8 @@ class AnimeSkipService(private val context: Context? = null) {
         private const val TAG = "AnimeSkipService"
         private const val API_URL = "https://api.aniskip.com/v2/skip-times"
         private const val DEFAULT_EPISODE_LENGTH = 1440
+        private const val MAX_INTRO_DURATION = 150
+        private const val MAX_OUTRO_DURATION = 180
     }
 
     private val json = Json {
@@ -36,10 +41,88 @@ class AnimeSkipService(private val context: Context? = null) {
         context?.let { TimestampCache(it) }
     }
 
-    private val audioFingerprinter: AudioFingerprinter? by lazy {
-        context?.let { AudioFingerprinter(it) }
+    // ==================== VALIDATION ====================
+
+    private fun isValidIntro(start: Int?, end: Int?, episodeLength: Int?): Boolean {
+        if (start == null || end == null) return false
+        if (start < 0 || end <= start) return false
+        val duration = end - start
+        if (duration > MAX_INTRO_DURATION) {
+            Log.w(TAG, "Intro duration too long: ${duration}s, rejecting")
+            return false
+        }
+        if (episodeLength != null && start > episodeLength * 0.25) {
+            Log.w(TAG, "Intro starts too late: ${start}s in ${episodeLength}s episode, rejecting")
+            return false
+        }
+        return true
     }
 
+    private fun isValidOutro(start: Int?, end: Int?, episodeLength: Int?): Boolean {
+        if (start == null || end == null) return false
+        if (start < 0 || end <= start) return false
+        val duration = end - start
+        if (duration > MAX_OUTRO_DURATION) {
+            Log.w(TAG, "Outro duration too long: ${duration}s, rejecting")
+            return false
+        }
+        if (episodeLength != null && start < episodeLength * 0.7) {
+            Log.w(TAG, "Outro starts too early: ${start}s in ${episodeLength}s episode, rejecting")
+            return false
+        }
+        return true
+    }
+
+    // ==================== PRIMARY: ANIMEKAI ====================
+
+    /**
+     * Create EpisodeTimestamps from Animekai skip data.
+     * This is the PRIMARY source for timestamps.
+     */
+    fun createTimestampsFromAnimekai(
+        episodeNumber: Int,
+        introStart: Int?,
+        introEnd: Int?,
+        outroStart: Int?,
+        outroEnd: Int?,
+        episodeLength: Int? = null
+    ): EpisodeTimestamps? {
+        val validIntroStart = if (isValidIntro(introStart, introEnd, episodeLength)) introStart else null
+        val validIntroEnd = if (isValidIntro(introStart, introEnd, episodeLength)) introEnd else null
+        val validOutroStart = if (isValidOutro(outroStart, outroEnd, episodeLength)) outroStart else null
+        val validOutroEnd = if (isValidOutro(outroStart, outroEnd, episodeLength)) outroEnd else null
+
+        if (validIntroStart == null && validIntroEnd == null && validOutroStart == null && validOutroEnd == null) {
+            return null
+        }
+
+        val allTimestamps = mutableListOf<Timestamp>()
+
+        if (validIntroStart != null && validIntroEnd != null) {
+            allTimestamps.add(Timestamp(validIntroStart.toDouble(), "op", "op"))
+        }
+
+        if (validOutroStart != null && validOutroEnd != null) {
+            allTimestamps.add(Timestamp(validOutroStart.toDouble(), "ed", "ed"))
+        }
+
+        return EpisodeTimestamps(
+            episodeNumber = episodeNumber,
+            introStart = validIntroStart?.toLong(),
+            introEnd = validIntroEnd?.toLong(),
+            creditsStart = validOutroStart?.toLong(),
+            creditsEnd = validOutroEnd?.toLong(),
+            recapStart = null,
+            recapEnd = null,
+            allTimestamps = allTimestamps
+        )
+    }
+
+    // ==================== MAIN API ====================
+
+    /**
+     * Get timestamps using Animekai as PRIMARY, AnimeSkip/AnimeThemes as FALLBACK.
+     */
     suspend fun getSkipTimestampsWithFallback(
         malId: Int,
         episodeNumber: Int,
@@ -47,30 +130,64 @@ class AnimeSkipService(private val context: Context? = null) {
         animeName: String = "",
         animeYear: Int? = null,
         animeId: Int = 0,
-        episodePath: String? = null
+        episodePath: String? = null,
+        animekaiIntroStart: Int? = null,
+        animekaiIntroEnd: Int? = null,
+        animekaiOutroStart: Int? = null,
+        animekaiOutroEnd: Int? = null
     ): EpisodeTimestamps? {
-        // 1. Check local cache first
-        timestampCache?.let { cache ->
-            val cached = if (malId > 0) cache.getTimestamp(malId, episodeNumber) else cache.getTimestampByName(animeName, episodeNumber)
-            if (cached != null) return cache.toEpisodeTimestamps(cached)
+        // 1. PRIMARY: Use Animekai timestamps if available
+        val animekaiTimestamps = createTimestampsFromAnimekai(
+            episodeNumber,
+            animekaiIntroStart,
+            animekaiIntroEnd,
+            animekaiOutroStart,
+            animekaiOutroEnd,
+            episodeLength
+        )
+
+        if (animekaiTimestamps != null && animekaiTimestamps.hasTimestamps()) {
+            Log.d(TAG, "Using Animekai timestamps as PRIMARY: intro=[$animekaiIntroStart-$animekaiIntroEnd], outro=[$animekaiOutroStart-$animekaiOutroEnd]")
+            timestampCache?.saveFromEpisodeTimestamps(
+                malId, animeName, episodeNumber, animekaiTimestamps, "animekai"
+            )
+            return animekaiTimestamps
         }
 
-        // 2. Try AniSkip API
+        Log.d(TAG, "Animekai timestamps not available or invalid, trying fallback sources...")
+
+        // 2. FALLBACK: Check local cache
+        timestampCache?.let { cache ->
+            val cached = if (malId > 0) cache.getTimestamp(malId, episodeNumber) else cache.getTimestampByName(animeName, episodeNumber)
+            if (cached != null && cached.hasTimestamps()) {
+                Log.d(TAG, "Using cached timestamps as fallback")
+                return cache.toEpisodeTimestamps(cached)
+            }
+        }
+
+        // 3. FALLBACK: Try AniSkip API
         val aniskipResult = getSkipTimestamps(malId, episodeNumber, episodeLength)
         if (aniskipResult != null && aniskipResult.hasTimestamps()) {
-            timestampCache?.saveFromEpisodeTimestamps(malId, animeName, episodeNumber, aniskipResult, "aniskip")
+            Log.d(TAG, "Using AniSkip timestamps as fallback")
+            timestampCache?.saveFromEpisodeTimestamps(
+                malId, animeName, episodeNumber, aniskipResult, "aniskip"
+            )
             return aniskipResult
         }
 
-        // 3. Try AnimeThemes fallback
+        // 4. FALLBACK: Try AnimeThemes
         if (animeName.isNotEmpty()) {
             val fingerprintResult = tryAnimeThemesFallback(animeName, animeYear, episodeNumber, episodeLength, episodePath)
             if (fingerprintResult != null && fingerprintResult.hasTimestamps()) {
-                timestampCache?.saveFromEpisodeTimestamps(animeId, animeName, episodeNumber, fingerprintResult, "animethemes")
+                Log.d(TAG, "Using AnimeThemes timestamps as fallback")
+                timestampCache?.saveFromEpisodeTimestamps(
+                    animeId, animeName, episodeNumber, fingerprintResult, "animethemes"
+                )
                 return fingerprintResult
             }
         }
 
+        Log.d(TAG, "No timestamps available from any source")
         return null
     }
 
@@ -88,10 +205,10 @@ class AnimeSkipService(private val context: Context? = null) {
             val opDuration = (firstOp?.duration ?: 90).coerceAtMost(90)
             val edDuration = (firstEd?.duration ?: 90).coerceAtMost(90)
 
-            var introStart: Long? = if (firstOp != null) 0L else null
-            var introEnd: Long? = if (firstOp != null) opDuration.toLong() else null
-            var creditsStart: Long? = if (firstEd != null) (episodeLength - edDuration).toLong().coerceAtLeast(0) else null
-            var creditsEnd: Long? = if (firstEd != null) episodeLength.toLong() else null
+            val introStart: Long? = if (firstOp != null) 0L else null
+            val introEnd: Long? = if (firstOp != null) opDuration.toLong() else null
+            val creditsStart: Long? = if (firstEd != null) (episodeLength - edDuration).toLong().coerceAtLeast(0) else null
+            val creditsEnd: Long? = if (firstEd != null) episodeLength.toLong() else null
 
             if (introStart != null || creditsStart != null) {
                 EpisodeTimestamps(
@@ -124,12 +241,28 @@ class AnimeSkipService(private val context: Context? = null) {
         animeName: String,
         episodeNumber: Int,
         episodeLength: Int = DEFAULT_EPISODE_LENGTH,
-        year: Int? = null
+        year: Int? = null,
+        animekaiIntroStart: Int? = null,
+        animekaiIntroEnd: Int? = null,
+        animekaiOutroStart: Int? = null,
+        animekaiOutroEnd: Int? = null
     ): EpisodeTimestamps? {
         if (animeName.isEmpty()) return null
+
+        // Try Animekai first
+        val animekaiTimestamps = createTimestampsFromAnimekai(
+            episodeNumber, animekaiIntroStart, animekaiIntroEnd, animekaiOutroStart, animekaiOutroEnd, episodeLength
+        )
+        if (animekaiTimestamps != null && animekaiTimestamps.hasTimestamps()) {
+            return animekaiTimestamps
+        }
+
+        // Fallback to AniSkip
         val malId = searchMalId(animeName, year)
         return if (malId != null) getSkipTimestamps(malId, episodeNumber, episodeLength) else null
     }
+
+    // ==================== HELPERS ====================
 
     private suspend fun searchMalId(animeName: String, targetYear: Int? = null): Int? = withContext(Dispatchers.IO) {
         try {
@@ -205,6 +338,8 @@ class AnimeSkipService(private val context: Context? = null) {
     }
 }
 
+// ==================== API RESPONSE CLASSES ====================
+
 @Serializable
 data class AniSkipResponse(val found: Boolean, val results: List<AniSkipResult>)
 
@@ -233,18 +368,3 @@ data class JikanAired(val from: String? = null)
 
 @Serializable
 data class JikanTitle(val type: String, val title: String)
-
-data class EpisodeTimestamps(
-    val episodeNumber: Int,
-    val introStart: Long?,
-    val introEnd: Long?,
-    val creditsStart: Long?,
-    val creditsEnd: Long?,
-    val recapStart: Long?,
-    val recapEnd: Long?,
-    val allTimestamps: List<Timestamp>
-) {
-    fun hasTimestamps(): Boolean = introStart != null || creditsStart != null || recapStart != null
-}
-
-data class Timestamp(val at: Double, val typeName: String, val typeId: String)

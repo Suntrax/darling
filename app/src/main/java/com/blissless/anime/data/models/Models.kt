@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 data class ExploreAnime(
     val id: Int,
     val title: String,
+    val titleEnglish: String? = null,
     val cover: String,
     val banner: String?,
     val episodes: Int,
@@ -24,6 +25,7 @@ data class ExploreAnime(
 data class AnimeMedia(
     val id: Int,
     val title: String,
+    val titleEnglish: String? = null,
     val cover: String,
     val banner: String? = null,
     val progress: Int = 0,
@@ -75,6 +77,71 @@ data class TmdbEpisode(
     val description: String,
     val image: String?
 )
+
+// ============================================
+// SKIP TIMESTAMP MODELS
+// ============================================
+
+/**
+ * Represents a single skip timestamp marker (intro, outro, recap, etc.)
+ *
+ * @param startTime The start time in seconds
+ * @param skipType The type of skip ("op", "ed", "recap", "mixed-ed", "mixed-op")
+ * @param skipId Unique identifier for this skip marker
+ */
+@Serializable
+data class Timestamp(
+    val startTime: Double,
+    val skipType: String,
+    val skipId: String
+)
+
+/**
+ * Represents all skip timestamps for an episode.
+ * Contains intro/outro/recap timing information for skip functionality.
+ *
+ * @param episodeNumber The episode number these timestamps belong to
+ * @param introStart Start time of the opening in seconds (null if no intro)
+ * @param introEnd End time of the opening in seconds (null if no intro)
+ * @param creditsStart Start time of the ending credits in seconds (null if no outro)
+ * @param creditsEnd End time of the ending credits in seconds (null if no outro)
+ * @param recapStart Start time of a recap in seconds (null if no recap)
+ * @param recapEnd End time of a recap in seconds (null if no recap)
+ * @param allTimestamps List of all timestamp markers for this episode
+ */
+@Serializable
+data class EpisodeTimestamps(
+    val episodeNumber: Int,
+    val introStart: Long? = null,
+    val introEnd: Long? = null,
+    val creditsStart: Long? = null,
+    val creditsEnd: Long? = null,
+    val recapStart: Long? = null,
+    val recapEnd: Long? = null,
+    val allTimestamps: List<Timestamp> = emptyList()
+) {
+    /**
+     * Check if this episode has any valid skip timestamps
+     */
+    fun hasTimestamps(): Boolean {
+        return introStart != null || creditsStart != null || recapStart != null
+    }
+
+    /**
+     * Check if intro timestamps are valid
+     */
+    fun hasIntro(): Boolean = introStart != null && introEnd != null && introEnd > introStart
+
+    /**
+     * Check if outro/credits timestamps are valid
+     */
+    fun hasOutro(): Boolean = creditsStart != null && creditsEnd != null && creditsEnd > creditsStart
+
+    /**
+     * Check if recap timestamps are valid
+     */
+    fun hasRecap(): Boolean = recapStart != null && recapEnd != null && recapEnd > recapStart
+}
 
 // ============================================
 // DETAILED ANIME DATA
@@ -131,6 +198,57 @@ data class StudioData(
 )
 
 // ============================================
+// STREAM MODELS (API)
+// ============================================
+
+/**
+ * Quality option for a stream (e.g., 1080p, 720p, 480p).
+ */
+data class QualityOption(
+    val quality: String,   // e.g., "1080p", "720p", "480p"
+    val url: String,
+    val width: Int
+)
+
+/**
+ * Result of a stream fetch operation.
+ * Includes skip timestamps from Animekai embed.
+ */
+data class AniwatchStreamResult(
+    val url: String,
+    val isDirectStream: Boolean = true,
+    val headers: Map<String, String>? = null,
+    val subtitleUrl: String? = null,
+    val serverName: String = "Unknown",
+    val category: String = "sub",
+    val qualities: List<QualityOption> = emptyList(),
+    // Skip timestamps from Animekai (in seconds)
+    val introStart: Int? = null,
+    val introEnd: Int? = null,
+    val outroStart: Int? = null,
+    val outroEnd: Int? = null
+)
+
+/**
+ * Server information for an episode.
+ */
+data class ServerInfo(
+    val name: String,
+    val url: String,
+    val qualities: List<QualityOption> = emptyList()
+)
+
+/**
+ * Episode streams containing sub and dub servers.
+ */
+data class EpisodeStreams(
+    val subServers: List<ServerInfo>,
+    val dubServers: List<ServerInfo>,
+    val animeId: String = "",
+    val episodeId: String = ""
+)
+
+// ============================================
 // CACHE MODELS
 // ============================================
 
@@ -145,13 +263,26 @@ data class StreamCacheEntry(
 )
 
 @Serializable
+data class CachedQuality(
+    val quality: String,
+    val url: String,
+    val width: Int
+)
+
+@Serializable
 data class CachedStream(
     val url: String,
     val isDirectStream: Boolean,
     val headers: Map<String, String>?,
     val subtitleUrl: String?,
     val serverName: String,
-    val category: String
+    val category: String,
+    val qualities: List<CachedQuality> = emptyList(),
+    // Skip timestamps (in seconds)
+    val introStart: Int? = null,
+    val introEnd: Int? = null,
+    val outroStart: Int? = null,
+    val outroEnd: Int? = null
 )
 
 @Serializable
@@ -163,7 +294,11 @@ data class CachedEpisodeInfo(
 )
 
 @Serializable
-data class CachedServer(val name: String, val url: String)
+data class CachedServer(
+    val name: String,
+    val url: String,
+    val qualities: List<CachedQuality> = emptyList()
+)
 
 @Serializable
 data class AiringCacheData(
@@ -202,11 +337,11 @@ data class PlaybackPositionCache(
 )
 
 // ============================================
-// STREAM MODELS
+// STREAM FETCH RESULT
 // ============================================
 
 data class StreamFetchResult(
-    val stream: com.blissless.anime.api.AniwatchStreamResult?,
+    val stream: AniwatchStreamResult?,
     val isFallback: Boolean,
     val requestedCategory: String,
     val actualCategory: String
@@ -218,7 +353,7 @@ data class GraphQLCacheEntry(
 )
 
 // ============================================
-// API RESPONSE MODELS
+// API RESPONSE MODELS (AniList)
 // ============================================
 
 @Serializable
@@ -479,7 +614,7 @@ data class DetailedAnimeStudioNode(
 )
 
 // ============================================
-// ANIME RELATIONS (for episode offset calculation)
+// ANIME RELATIONS
 // ============================================
 
 @Serializable
@@ -493,6 +628,7 @@ data class AnimeRelationsMedia(
     val id: Int,
     val title: MediaTitle? = null,
     val episodes: Int? = null,
+    val format: String? = null,
     val relations: AnimeRelations? = null
 )
 
@@ -512,7 +648,8 @@ data class AnimeRelationNode(
     val id: Int,
     val title: MediaTitle? = null,
     val episodes: Int? = null,
-    val type: String? = null
+    val type: String? = null,
+    val format: String? = null
 )
 
 // ============================================
@@ -608,6 +745,8 @@ fun ExploreAnime.toDetailedAnimeData(): DetailedAnimeData {
     return DetailedAnimeData(
         id = id,
         title = title,
+        titleRomaji = title,
+        titleEnglish = titleEnglish,
         cover = cover,
         banner = banner,
         episodes = episodes,
@@ -623,6 +762,8 @@ fun AnimeMedia.toDetailedAnimeData(): DetailedAnimeData {
     return DetailedAnimeData(
         id = id,
         title = title,
+        titleRomaji = title,
+        titleEnglish = titleEnglish,
         cover = cover,
         banner = banner,
         episodes = totalEpisodes,

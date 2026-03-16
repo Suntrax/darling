@@ -37,6 +37,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_ENABLE_THUMBNAIL_PREVIEW = "enable_thumbnail_preview"
         private const val KEY_LOCAL_FAVORITES_V2 = "local_favorites_v2"
         private const val KEY_LOCAL_FAVORITES = "local_favorites"
+        private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -93,6 +94,10 @@ class UserPreferences(private val context: Context) {
     private val _enableThumbnailPreview = MutableStateFlow(false)
     val enableThumbnailPreview: StateFlow<Boolean> = _enableThumbnailPreview.asStateFlow()
 
+    // Preferred Scraper
+    private val _preferredScraper = MutableStateFlow("Animekai")
+    val preferredScraper: StateFlow<String> = _preferredScraper.asStateFlow()
+
     // Local favorites
     private val _localFavorites = MutableStateFlow<Map<Int, StoredFavorite>>(emptyMap())
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> = _localFavorites.asStateFlow()
@@ -121,17 +126,18 @@ class UserPreferences(private val context: Context) {
         _backwardSkipSeconds.value = sharedPreferences.getInt(KEY_BACKWARD_SKIP_SECONDS, 10)
         _forceHighRefreshRate.value = sharedPreferences.getBoolean(KEY_FORCE_HIGH_REFRESH_RATE, false)
         _hideNavbarText.value = sharedPreferences.getBoolean(KEY_HIDE_NAVBAR_TEXT, false)
-        _simplifyEpisodeMenu.value = sharedPreferences.getBoolean(KEY_SIMPLIFY_EPISODE_MENU, true)
-        _simplifyAnimeDetails.value = sharedPreferences.getBoolean(KEY_SIMPLIFY_ANIME_DETAILS, true)
+        _simplifyEpisodeMenu.value = sharedPreferences.getBoolean(KEY_SIMPLIFY_EPISODE_MENU, false)
+        _simplifyAnimeDetails.value = sharedPreferences.getBoolean(KEY_SIMPLIFY_ANIME_DETAILS, false)
         _autoSkipOpening.value = sharedPreferences.getBoolean(KEY_AUTO_SKIP_OPENING, false)
         _autoSkipEnding.value = sharedPreferences.getBoolean(KEY_AUTO_SKIP_ENDING, false)
-        _autoPlayNextEpisode.value = sharedPreferences.getBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, false)
+        _autoPlayNextEpisode.value = sharedPreferences.getBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, true)
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
+        _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
 
         // Load local favorites
         loadLocalFavorites()
 
-        Log.d(TAG, "Preferences loaded - thumbnailPreview: ${_enableThumbnailPreview.value}")
+        Log.d(TAG, "Preferences loaded - preferredScraper: ${_preferredScraper.value}")
     }
 
     // ============================================
@@ -235,6 +241,11 @@ class UserPreferences(private val context: Context) {
         _enableThumbnailPreview.value = enabled
         sharedPreferences.edit {putBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, enabled) }
         Log.d(TAG, "Thumbnail preview set to: $enabled")
+    }
+
+    fun setPreferredScraper(scraper: String) {
+        _preferredScraper.value = scraper
+        sharedPreferences.edit { putString(KEY_PREFERRED_SCRAPER, scraper) }
     }
 
     // ============================================

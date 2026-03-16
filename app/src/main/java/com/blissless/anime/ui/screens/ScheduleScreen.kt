@@ -63,7 +63,8 @@ private sealed class TimelineItem {
 fun ScheduleScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
-    isVisible: Boolean = false, // Added parameter
+    isVisible: Boolean = false,
+    disableMaterialColors: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     onShowAnimeDialog: (ExploreAnime) -> Unit = {}
 ) {
@@ -323,7 +324,7 @@ fun ScheduleScreen(
         }
     }
 
-    // **NEW**: Automatically scroll to NOW indicator when screen becomes visible or data loads
+    // Automatically scroll to NOW indicator when screen becomes visible or data loads
     LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay) {
         if (isVisible) {
             val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
@@ -445,10 +446,15 @@ fun ScheduleScreen(
                         }
                     }
                 },
-                label = { Text("All Upcoming") },
+                label = { 
+                    Text(
+                        "All Upcoming",
+                        color = if (viewMode == 0 && disableMaterialColors) Color.Black else Color.Unspecified
+                    ) 
+                },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = Color.White,
+                    selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
             )
@@ -465,10 +471,15 @@ fun ScheduleScreen(
                         }
                     }
                 },
-                label = { Text("By Day") },
+                label = { 
+                    Text(
+                        "By Day",
+                        color = if (viewMode == 1 && disableMaterialColors) Color.Black else Color.Unspecified
+                    ) 
+                },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = Color.White,
+                    selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
             )
@@ -512,13 +523,18 @@ fun ScheduleScreen(
                                 Text(
                                     text = DayAbbreviations[dayIndex],
                                     fontSize = 12.sp,
-                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected && disableMaterialColors) Color.Black else Color.Unspecified
                                 )
                                 if (dayAnimeCount > 0) {
                                     Text(
                                         text = "$dayAnimeCount",
                                         fontSize = 10.sp,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
+                                        color = if (isSelected) {
+                                            if (disableMaterialColors) Color.Black else Color.White
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        }
                                     )
                                 }
                             }
@@ -526,7 +542,7 @@ fun ScheduleScreen(
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = Color.White,
+                            selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
                             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
                             labelColor = if (isToday) MaterialTheme.colorScheme.primary
                             else if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
@@ -580,13 +596,18 @@ fun ScheduleScreen(
                                 Text(
                                     text = DayAbbreviations[dayIndex],
                                     fontSize = 12.sp,
-                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected && disableMaterialColors) Color.Black else Color.Unspecified
                                 )
                                 if (dayAnimeCount > 0) {
                                     Text(
                                         text = "$dayAnimeCount",
                                         fontSize = 10.sp,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
+                                        color = if (isSelected) {
+                                            if (disableMaterialColors) Color.Black else Color.White
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        }
                                     )
                                 }
                             }
@@ -594,7 +615,7 @@ fun ScheduleScreen(
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = Color.White,
+                            selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
                             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
                             labelColor = if (isToday) MaterialTheme.colorScheme.primary
                             else if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant

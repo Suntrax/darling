@@ -9,6 +9,11 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -33,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -47,19 +53,15 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
-import androidx.core.net.toUri
+import com.blissless.anime.api.AnimeSkipService
+import com.blissless.anime.data.models.EpisodeTimestamps
+import com.blissless.anime.data.models.Timestamp
+import com.blissless.anime.data.models.EpisodeStreams
+import com.blissless.anime.data.models.QualityOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import com.blissless.anime.api.EpisodeStreams
-import com.blissless.anime.api.AnimeSkipService
-import com.blissless.anime.api.EpisodeTimestamps
 import java.util.Locale
 import kotlin.math.abs
 
@@ -91,18 +93,29 @@ fun PlayerScreen(
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
     savedPosition: Long = 0L,
+    qualityOptions: List<QualityOption> = emptyList(),
+    currentQuality: String = "Auto",
+    // PRIMARY: Animekai skip timestamps (in seconds)
+    animekaiIntroStart: Int? = null,
+    animekaiIntroEnd: Int? = null,
+    animekaiOutroStart: Int? = null,
+    animekaiOutroEnd: Int? = null,
     onSavePosition: ((Long) -> Unit)? = null,
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
     onNextEpisode: (() -> Unit)? = null,
     onServerChange: ((serverName: String, category: String) -> Unit)? = null,
-    onPlaybackError: (() -> Unit)? = null
+    onQualityChange: ((qualityUrl: String, qualityName: String) -> Unit)? = null,
+    onPlaybackError: (() -> Unit)? = null,
+    onPrefetchAdjacent: (() -> Unit)? = null,
+    onInvalidateStreamCache: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
     var hasTriggeredProgressUpdate by remember { mutableStateOf(false) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var hasError by remember { mutableStateOf(false) }
+    var isChangingServer by remember { mutableStateOf(false) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
@@ -116,6 +129,10 @@ fun PlayerScreen(
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var showServerMenu by remember { mutableStateOf(false) }
+    var showQualityMenu by remember { mutableStateOf(false) }
+
+    // Local quality state that can be updated
+    var selectedQuality by remember { mutableStateOf(currentQuality) }
 
     var sliderValue by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
@@ -135,14 +152,38 @@ fun PlayerScreen(
     var hasFetchedTimestamps by remember(videoUrl) { mutableStateOf(false) }
     var actualEpisodeLength by remember(videoUrl) { mutableStateOf<Int?>(null) }
 
+    var pendingQualityChange by remember { mutableStateOf<String?>(null) }
+    var savedPositionForQuality by remember { mutableLongStateOf(0L) }
+
     val scope = rememberCoroutineScope()
 
     var hasShownFallbackToast by remember(videoUrl) { mutableStateOf(false) }
     var hasRestoredPosition by remember(videoUrl) { mutableStateOf(false) }
+    var hasTriggeredPrefetch by remember(videoUrl) { mutableStateOf(false) }
 
-    val effectiveTimestamps by remember(episodeTimestamps) {
+    // PRIMARY: Use Animekai timestamps if available, create initial timestamps immediately
+    val animekaiTimestamps = remember(animekaiIntroStart, animekaiIntroEnd, animekaiOutroStart, animekaiOutroEnd, currentEpisode) {
+        if (animekaiIntroStart != null || animekaiOutroStart != null) {
+            Log.d(PLAYER_TAG, "PRIMARY: Using Animekai timestamps: intro=[$animekaiIntroStart-$animekaiIntroEnd], outro=[$animekaiOutroStart-$animekaiOutroEnd]")
+            EpisodeTimestamps(
+                episodeNumber = currentEpisode,
+                introStart = animekaiIntroStart?.toLong(),
+                introEnd = animekaiIntroEnd?.toLong(),
+                creditsStart = animekaiOutroStart?.toLong(),
+                creditsEnd = animekaiOutroEnd?.toLong(),
+                recapStart = null,
+                recapEnd = null,
+                allTimestamps = buildList {
+                    if (animekaiIntroStart != null) add(Timestamp(animekaiIntroStart.toDouble(), "op", "op"))
+                    if (animekaiOutroStart != null) add(Timestamp(animekaiOutroStart.toDouble(), "ed", "ed"))
+                }
+            )
+        } else null
+    }
+
+    val effectiveTimestamps by remember(episodeTimestamps, animekaiTimestamps) {
         derivedStateOf {
-            episodeTimestamps ?: EpisodeTimestamps(
+            episodeTimestamps ?: animekaiTimestamps ?: EpisodeTimestamps(
                 episodeNumber = currentEpisode,
                 introStart = null,
                 introEnd = null,
@@ -153,6 +194,11 @@ fun PlayerScreen(
                 allTimestamps = emptyList()
             )
         }
+    }
+
+    // Update selected quality when currentQuality prop changes
+    LaunchedEffect(currentQuality) {
+        selectedQuality = currentQuality
     }
 
     LaunchedEffect(Unit) {
@@ -188,6 +234,8 @@ fun PlayerScreen(
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(context).setDataSourceFactory(
                     DefaultHttpDataSource.Factory()
+                        .setConnectTimeoutMs(20000)
+                        .setReadTimeoutMs(20000)
                         .setDefaultRequestProperties(mapOf("Referer" to referer))
                 )
             )
@@ -199,15 +247,22 @@ fun PlayerScreen(
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        Log.e(PLAYER_TAG, "Playback error: ${error.message}")
                         hasError = true
                         playbackError = error.message ?: "Unknown playback error"
-                        onPlaybackError?.invoke()
+                        showControls = true
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_READY) {
                             hasError = false
                             playbackError = null
+                            isChangingServer = false
+                            if (pendingQualityChange != null && savedPositionForQuality > 0) {
+                                seekTo(savedPositionForQuality)
+                                pendingQualityChange = null
+                                savedPositionForQuality = 0L
+                            }
                         }
                         if (playbackState == Player.STATE_ENDED) {
                             if (autoPlayNextEpisode && onNextEpisode != null) {
@@ -223,6 +278,10 @@ fun PlayerScreen(
         hasError = false
         playbackError = null
         hasRestoredPosition = false
+        hasSkippedIntro = false
+        hasSkippedOutro = false
+        hasTriggeredPrefetch = false
+        isChangingServer = false
 
         val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl)
@@ -253,6 +312,17 @@ fun PlayerScreen(
         }
     }
 
+    LaunchedEffect(isPlaying, hasTriggeredPrefetch, hasError) {
+        if (isPlaying && !hasTriggeredPrefetch && !hasError && onPrefetchAdjacent != null) {
+            delay(5000)
+            if (!hasTriggeredPrefetch && isPlaying && !hasError) {
+                hasTriggeredPrefetch = true
+                Log.d(PLAYER_TAG, "Triggering prefetch for adjacent episodes")
+                onPrefetchAdjacent.invoke()
+            }
+        }
+    }
+
     LaunchedEffect(videoUrl, isFallbackStream) {
         if (isFallbackStream && !hasShownFallbackToast && videoUrl.isNotEmpty()) {
             hasShownFallbackToast = true
@@ -264,6 +334,7 @@ fun PlayerScreen(
     fun seekBy(milliseconds: Long, isForward: Boolean) {
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
+        exoPlayer.play()
         val seconds = abs(milliseconds / 1000)
         skipIndicatorText = if (milliseconds > 0) "+${seconds}s" else "-${seconds}s"
         skipIsForward = isForward
@@ -290,12 +361,26 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(actualEpisodeLength, videoUrl, malId, animeYear, animeName) {
+    // FALLBACK: Only fetch from AnimeSkip/AnimeThemes if Animekai timestamps are NOT available
+    LaunchedEffect(
+        actualEpisodeLength,
+        videoUrl,
+        malId,
+        animeYear,
+        animeName,
+        animekaiTimestamps?.hasTimestamps()
+    ) {
         val epLength = actualEpisodeLength
         if (epLength == null || hasFetchedTimestamps) return@LaunchedEffect
 
+        if (animekaiTimestamps?.hasTimestamps() == true) {
+            Log.d(PLAYER_TAG, "PRIMARY: Animekai timestamps available, skipping fallback fetch")
+            hasFetchedTimestamps = true
+            return@LaunchedEffect
+        }
+
         isFetchingTimestamps = true
-        Log.d(PLAYER_TAG, "Fetching timestamps for: $animeName")
+        Log.d(PLAYER_TAG, "FALLBACK: Fetching timestamps from AnimeSkip/AnimeThemes for: $animeName")
 
         withContext(Dispatchers.IO) {
             try {
@@ -317,12 +402,12 @@ fun PlayerScreen(
                     )
                 } else null
 
-                if (timestamps != null) {
+                if (timestamps != null && timestamps.hasTimestamps()) {
                     episodeTimestamps = timestamps
-                    Log.d(PLAYER_TAG, "Got timestamps: OP=${timestamps.introStart}-${timestamps.introEnd}")
+                    Log.d(PLAYER_TAG, "FALLBACK: Got timestamps: OP=${timestamps.introStart}-${timestamps.introEnd}")
                 }
             } catch (e: Exception) {
-                Log.e(PLAYER_TAG, "Error fetching timestamps", e)
+                Log.e(PLAYER_TAG, "Error fetching fallback timestamps", e)
             }
         }
 
@@ -330,7 +415,9 @@ fun PlayerScreen(
         hasFetchedTimestamps = true
     }
 
-    LaunchedEffect(currentPosition, effectiveTimestamps) {
+    LaunchedEffect(currentPosition, effectiveTimestamps, hasError) {
+        if (hasError) return@LaunchedEffect
+
         val ts = effectiveTimestamps
         val posSeconds = currentPosition / 1000
 
@@ -338,7 +425,8 @@ fun PlayerScreen(
             val isInIntro = posSeconds >= ts.introStart && posSeconds < ts.introEnd
             if (isInIntro) {
                 if (autoSkipOpening && !hasSkippedIntro) {
-                    exoPlayer.seekTo(ts.introEnd * 1000)
+                    exoPlayer.seekTo(ts.introEnd * 1000L)
+                    exoPlayer.play()
                     hasSkippedIntro = true
                 }
                 showSkipOpeningButton = !autoSkipOpening
@@ -371,10 +459,10 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, isDragging) {
-        if (showControls && isPlaying && !isDragging) {
+    LaunchedEffect(showControls, isPlaying, isDragging, hasError) {
+        if (showControls && isPlaying && !isDragging && !hasError) {
             delay(3000)
-            if (!isDragging) {
+            if (!isDragging && !hasError && isPlaying) {
                 showControls = false
             }
         }
@@ -408,6 +496,29 @@ fun PlayerScreen(
         (effectiveTimestamps.creditsStart!! * 1000).toFloat() / duration.toFloat()
     } else null
 
+    fun handleServerChange(serverName: String, category: String) {
+        Log.d(PLAYER_TAG, "Changing server to: $serverName ($category)")
+        hasError = false
+        playbackError = null
+        isChangingServer = true
+        exoPlayer.stop()
+        onServerChange?.invoke(serverName, category)
+    }
+
+    fun handleQualityChange(qualityUrl: String, qualityName: String) {
+        Log.d(PLAYER_TAG, "Changing quality to: $qualityName")
+        savedPositionForQuality = exoPlayer.currentPosition
+        pendingQualityChange = qualityName
+        selectedQuality = qualityName
+        onQualityChange?.invoke(qualityUrl, qualityName)
+    }
+
+    fun handlePlaybackError() {
+        Log.d(PLAYER_TAG, "Playback error - invalidating cache and notifying parent")
+        onInvalidateStreamCache?.invoke()
+        onPlaybackError?.invoke()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -429,8 +540,8 @@ fun PlayerScreen(
                 .align(Alignment.CenterStart)
                 .pointerInput(backwardSkipSeconds) {
                     detectTapGestures(
-                        onTap = { showControls = !showControls },
-                        onDoubleTap = { seekBy(-(backwardSkipSeconds * 1000L), false) }
+                        onTap = { if (!hasError) showControls = !showControls },
+                        onDoubleTap = { if (!hasError) seekBy(-(backwardSkipSeconds * 1000L), false) }
                     )
                 }
         )
@@ -440,7 +551,7 @@ fun PlayerScreen(
                 .fillMaxHeight()
                 .fillMaxWidth(0.4f)
                 .align(Alignment.Center)
-                .pointerInput(Unit) { detectTapGestures(onTap = { showControls = !showControls }) }
+                .pointerInput(Unit) { detectTapGestures(onTap = { if (!hasError) showControls = !showControls }) }
         )
 
         Box(
@@ -451,8 +562,8 @@ fun PlayerScreen(
                 .align(Alignment.CenterEnd)
                 .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
-                        onTap = { showControls = !showControls },
-                        onDoubleTap = { seekBy(forwardSkipSeconds * 1000L, true) }
+                        onTap = { if (!hasError) showControls = !showControls },
+                        onDoubleTap = { if (!hasError) seekBy(forwardSkipSeconds * 1000L, true) }
                     )
                 }
         )
@@ -508,7 +619,9 @@ fun PlayerScreen(
                 onClick = {
                     val ts = effectiveTimestamps
                     if (ts.introEnd != null) {
-                        exoPlayer.seekTo(ts.introEnd * 1000)
+                        exoPlayer.seekTo(ts.introEnd * 1000L)
+                        exoPlayer.play()
+                        hasSkippedIntro = true
                     }
                 }
             )
@@ -530,7 +643,7 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = showControls,
+            visible = showControls || hasError,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -589,10 +702,63 @@ fun PlayerScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
+                            if (isChangingServer) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = Color.Yellow
+                                )
+                            }
                         }
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (qualityOptions.isNotEmpty() && onQualityChange != null) {
+                            Box {
+                                IconButton(
+                                    onClick = { showQualityMenu = true },
+                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                ) {
+                                    Icon(Icons.Default.Hd, "Quality", tint = Color.White)
+                                }
+
+                                DropdownMenu(
+                                    expanded = showQualityMenu,
+                                    onDismissRequest = { showQualityMenu = false },
+                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(140.dp)
+                                ) {
+                                    Text(
+                                        "QUALITY",
+                                        color = Color.Gray,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                    QualityMenuItem(
+                                        qualityName = "Auto",
+                                        isSelected = selectedQuality == "Auto",
+                                        onClick = {
+                                            if (selectedQuality != "Auto") {
+                                                handleQualityChange(videoUrl, "Auto")
+                                            }
+                                            showQualityMenu = false
+                                        }
+                                    )
+                                    qualityOptions.forEach { quality ->
+                                        QualityMenuItem(
+                                            qualityName = quality.quality,
+                                            isSelected = selectedQuality == quality.quality,
+                                            onClick = {
+                                                if (selectedQuality != quality.quality) {
+                                                    handleQualityChange(quality.url, quality.quality)
+                                                }
+                                                showQualityMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
                             Box {
                                 IconButton(
@@ -613,7 +779,10 @@ fun PlayerScreen(
                                             ServerMenuItem(
                                                 serverName = server.name,
                                                 isSelected = server.name == currentServerName && currentCategory == "sub",
-                                                onClick = { onServerChange(server.name, "sub"); showServerMenu = false }
+                                                onClick = {
+                                                    showServerMenu = false
+                                                    handleServerChange(server.name, "sub")
+                                                }
                                             )
                                         }
                                     }
@@ -624,7 +793,10 @@ fun PlayerScreen(
                                             ServerMenuItem(
                                                 serverName = server.name,
                                                 isSelected = server.name == currentServerName && currentCategory == "dub",
-                                                onClick = { onServerChange(server.name, "dub"); showServerMenu = false }
+                                                onClick = {
+                                                    showServerMenu = false
+                                                    handleServerChange(server.name, "dub")
+                                                }
                                             )
                                         }
                                     }
@@ -649,19 +821,27 @@ fun PlayerScreen(
                     ) {
                         IconButton(
                             onClick = { onPreviousEpisode?.invoke() },
-                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream) 1f else 0.3f),
-                            enabled = onPreviousEpisode != null && !isLoadingStream
+                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                            enabled = onPreviousEpisode != null && !isLoadingStream && !isChangingServer
                         ) {
                             Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                         }
 
                         IconButton(
-                            onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
+                            onClick = {
+                                if (hasError) {
+                                    handlePlaybackError()
+                                    exoPlayer.prepare()
+                                    exoPlayer.playWhenReady = true
+                                } else {
+                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                }
+                            },
                             modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         ) {
                             Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
                                 tint = Color.White,
                                 modifier = Modifier.size(42.dp)
                             )
@@ -669,8 +849,8 @@ fun PlayerScreen(
 
                         IconButton(
                             onClick = { onNextEpisode?.invoke() },
-                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream) 1f else 0.3f),
-                            enabled = onNextEpisode != null && !isLoadingStream
+                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                            enabled = onNextEpisode != null && !isLoadingStream && !isChangingServer
                         ) {
                             Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                         }
@@ -713,7 +893,7 @@ fun PlayerScreen(
                     }
                 }
 
-                if (isLoadingStream) {
+                if (isLoadingStream || isChangingServer) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp), color = Color.White)
                 }
 
@@ -728,16 +908,38 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("Stream Error", color = Color.White, style = MaterialTheme.typography.titleMedium)
                             Text(playbackError ?: "Unknown error", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-                            if (onServerChange != null && subServers.size > 1) {
-                                Spacer(modifier = Modifier.height(12.dp))
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
-                                        val currentIndex = subServers.indexOfFirst { it.name == currentServerName }
-                                        val nextIndex = (currentIndex + 1) % subServers.size
-                                        onServerChange(subServers[nextIndex].name, currentCategory)
+                                        handlePlaybackError()
+                                        hasError = false
+                                        playbackError = null
+                                        exoPlayer.prepare()
+                                        exoPlayer.playWhenReady = true
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) { Text("Try Next Server") }
+                                ) {
+                                    Text("Retry")
+                                }
+
+                                if (onServerChange != null) {
+                                    val servers = if (currentCategory == "sub") subServers else dubServers
+                                    if (servers.size > 1) {
+                                        Button(
+                                            onClick = {
+                                                val currentIndex = servers.indexOfFirst { it.name == currentServerName }
+                                                val nextIndex = (currentIndex + 1) % servers.size
+                                                handleServerChange(servers[nextIndex].name, currentCategory)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                        ) {
+                                            Text("Try Next Server")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -761,6 +963,7 @@ fun PlayerScreen(
                         onValueChangeFinished = {
                             isDragging = false
                             exoPlayer.seekTo(sliderValue.toLong())
+                            exoPlayer.play()
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -840,6 +1043,19 @@ private fun ServerMenuItem(serverName: String, isSelected: Boolean, onClick: () 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                 Text(serverName, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White)
+            }
+        },
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun QualityMenuItem(qualityName: String, isSelected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Text(qualityName, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White)
             }
         },
         onClick = onClick

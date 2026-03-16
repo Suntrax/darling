@@ -21,7 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import android.util.Log
-import com.blissless.anime.api.EpisodeStreams
+import com.blissless.anime.data.models.EpisodeStreams
+import com.blissless.anime.data.models.QualityOption
+import com.blissless.anime.data.models.AniwatchStreamResult
+import com.blissless.anime.data.models.CachedStream
 import com.blissless.anime.ui.screens.DetailedAnimeScreen
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.screens.ExploreScreen
@@ -42,6 +45,7 @@ import com.blissless.anime.data.models.ExploreAnime
 class MainActivity : ComponentActivity() {
 
     private val mainViewModel: MainViewModel by viewModels()
+
     companion object {
         const val PREFS_NAME = "anilist_prefs"
         const val TOKEN_KEY = "auth_token"
@@ -223,10 +227,20 @@ fun MainScreen(
     var actualCategory by remember { mutableStateOf("sub") }
     var isManualServerChange by remember { mutableStateOf(false) }
 
+    // Quality state
+    var currentQualityOptions by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
+    var currentQuality by remember { mutableStateOf("Auto") }
+
     var savedPlaybackPosition by remember { mutableLongStateOf(0L) }
 
     var selectedExploreAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showExploreDialog by remember { mutableStateOf(false) }
+
+    // Animekai timestamps (PRIMARY source)
+    var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
+    var animekaiIntroEnd by remember { mutableStateOf<Int?>(null) }
+    var animekaiOutroStart by remember { mutableStateOf<Int?>(null) }
+    var animekaiOutroEnd by remember { mutableStateOf<Int?>(null) }
 
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
@@ -243,6 +257,11 @@ fun MainScreen(
         showExploreDialog = true
     }
 
+    // Helper to get English title for scraping (Animekai works better with English titles)
+    fun getScrapingName(anime: AnimeMedia): String {
+        return anime.titleEnglish ?: anime.title
+    }
+
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int) {
         currentAnime = anime
         currentEpisode = episode
@@ -250,50 +269,68 @@ fun MainScreen(
         streamError = null
         showPlayer = false
 
+        // Reset timestamps for new episode
+        animekaiIntroStart = null
+        animekaiIntroEnd = null
+        animekaiOutroStart = null
+        animekaiOutroEnd = null
+
         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, episode)
 
-        val cacheKey = "${anime.id}_$episode"
-        prefetchedStreams[cacheKey]?.let { cached ->
-            if (cached != null) {
-                Log.d("MainActivity", "Using cached stream for ${anime.title} ep $episode")
-                currentVideoUrl = cached.url
-                currentReferer = cached.headers?.get("Referer") ?: "https://megacloud.tv/"
-                currentSubtitleUrl = cached.subtitleUrl
-                currentServerName = cached.serverName
-                currentCategory = cached.category
-                actualCategory = cached.category
-                requestedCategory = preferredCategory
-                isFallbackStream = cached.category != preferredCategory
-                showPlayer = true
+        val cachedStream = viewModel.getCachedStreamImmediate(anime.id, episode, preferredCategory)
 
-                prefetchedEpisodeInfo[cacheKey]?.let { currentEpisodeInfo = it }
-                currentServerIndex = 0
-                val latestAiredForPrefetch = anime.latestEpisode ?: anime.totalEpisodes
-                viewModel.prefetchAdjacentEpisodes(anime.title, episode, anime.id, latestAiredForPrefetch)
+        if (cachedStream != null) {
+            Log.d("MainActivity", "Cache HIT for ${anime.title} ep $episode ($preferredCategory) - playing instantly")
+            currentVideoUrl = cachedStream.url
+            currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+            currentSubtitleUrl = cachedStream.subtitleUrl
+            currentServerName = cachedStream.serverName
+            currentCategory = cachedStream.category
+            actualCategory = cachedStream.category
+            requestedCategory = preferredCategory
+            isFallbackStream = cachedStream.category != preferredCategory
+            isLoadingStream = false
 
-                if (isFallbackStream) {
-                    val message = if (requestedCategory == "dub") {
-                        "Dub not available, playing sub"
-                    } else {
-                        "Sub not available, playing dub"
-                    }
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                }
-                return
+            currentQualityOptions = cachedStream.qualities.map {
+                QualityOption(quality = it.quality, url = it.url, width = it.width)
             }
+            currentQuality = "Auto"
+
+            // Extract Animekai timestamps from CachedStream (PRIMARY)
+            animekaiIntroStart = cachedStream.introStart
+            animekaiIntroEnd = cachedStream.introEnd
+            animekaiOutroStart = cachedStream.outroStart
+            animekaiOutroEnd = cachedStream.outroEnd
+
+            val epInfoKey = "${anime.id}_$episode"
+            prefetchedEpisodeInfo[epInfoKey]?.let { currentEpisodeInfo = it }
+            currentServerIndex = 0
+
+            showPlayer = true
+
+            val latestAiredForPrefetch = anime.latestEpisode ?: anime.totalEpisodes
+            viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), episode, anime.id, latestAiredForPrefetch)
+
+            if (isFallbackStream) {
+                val message = if (requestedCategory == "dub") {
+                    "Dub not available, playing sub"
+                } else {
+                    "Sub not available, playing dub"
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+            return
         }
 
+        Log.d("MainActivity", "Cache MISS for ${anime.title} ep $episode ($preferredCategory) - fetching...")
         isLoadingStream = true
         scope.launch {
-            Log.d("MainActivity", "Fetching stream for ${anime.title} ep $episode")
-
-            // Get latest aired episode to prevent fetching unaired episodes
             val latestAired = anime.latestEpisode ?: anime.totalEpisodes
 
-            val epInfo = viewModel.getEpisodeInfo(anime.title, episode, anime.id, latestAired)
+            val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), episode, anime.id, latestAired)
             currentEpisodeInfo = epInfo
 
-            val result = viewModel.tryAllServersWithFallback(anime.title, episode, anime.id, latestAired)
+            val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), episode, anime.id, latestAired)
 
             if (result.stream != null) {
                 Log.d("MainActivity", "Stream URL found: ${result.stream.url.take(50)}...")
@@ -308,8 +345,17 @@ fun MainScreen(
                 requestedCategory = result.requestedCategory
                 actualCategory = result.actualCategory
 
+                currentQualityOptions = result.stream.qualities
+                currentQuality = "Auto"
+
+                // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
+                animekaiIntroStart = result.stream.introStart
+                animekaiIntroEnd = result.stream.introEnd
+                animekaiOutroStart = result.stream.outroStart
+                animekaiOutroEnd = result.stream.outroEnd
+
                 showPlayer = true
-                viewModel.prefetchAdjacentEpisodes(anime.title, episode, anime.id, latestAired)
+                viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), episode, anime.id, latestAired)
 
                 if (result.isFallback) {
                     val message = if (result.requestedCategory == "dub") {
@@ -337,13 +383,66 @@ fun MainScreen(
         currentAnime?.let { anime ->
             if (currentEpisode > 1) {
                 val prevEp = currentEpisode - 1
+
+                // Reset timestamps for previous episode
+                animekaiIntroStart = null
+                animekaiIntroEnd = null
+                animekaiOutroStart = null
+                animekaiOutroEnd = null
+
+                val cachedStream = viewModel.getCachedStreamImmediate(anime.id, prevEp, preferredCategory)
+
+                if (cachedStream != null) {
+                    Log.d("MainActivity", "Prev ep cache HIT - playing instantly")
+                    savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
+                    currentVideoUrl = cachedStream.url
+                    currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                    currentSubtitleUrl = cachedStream.subtitleUrl
+                    currentEpisode = prevEp
+                    currentServerName = cachedStream.serverName
+                    currentCategory = cachedStream.category
+                    currentServerIndex = 0
+
+                    isFallbackStream = cachedStream.category != preferredCategory
+                    requestedCategory = preferredCategory
+                    actualCategory = cachedStream.category
+
+                    currentQualityOptions = cachedStream.qualities.map {
+                        QualityOption(quality = it.quality, url = it.url, width = it.width)
+                    }
+                    currentQuality = "Auto"
+
+                    // Extract Animekai timestamps from CachedStream (PRIMARY)
+                    animekaiIntroStart = cachedStream.introStart
+                    animekaiIntroEnd = cachedStream.introEnd
+                    animekaiOutroStart = cachedStream.outroStart
+                    animekaiOutroEnd = cachedStream.outroEnd
+
+                    scope.launch {
+                        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        currentEpisodeInfo = epInfo
+                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
+                    }
+
+                    if (isFallbackStream) {
+                        val message = if (requestedCategory == "dub") {
+                            "Dub not available, playing sub"
+                        } else {
+                            "Sub not available, playing dub"
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                    return@let
+                }
+
                 isLoadingStream = true
                 scope.launch {
                     val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                    val epInfo = viewModel.getEpisodeInfo(anime.title, prevEp, anime.id, latestAired)
+                    val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
                     currentEpisodeInfo = epInfo
 
-                    val result = viewModel.tryAllServersWithFallback(anime.title, prevEp, anime.id, latestAired)
+                    val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), prevEp, anime.id, latestAired)
                     if (result.stream != null) {
                         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
                         currentVideoUrl = result.stream.url
@@ -358,7 +457,16 @@ fun MainScreen(
                         requestedCategory = result.requestedCategory
                         actualCategory = result.actualCategory
 
-                        viewModel.prefetchAdjacentEpisodes(anime.title, prevEp, anime.id, latestAired)
+                        currentQualityOptions = result.stream.qualities
+                        currentQuality = "Auto"
+
+                        // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
+                        animekaiIntroStart = result.stream.introStart
+                        animekaiIntroEnd = result.stream.introEnd
+                        animekaiOutroStart = result.stream.outroStart
+                        animekaiOutroEnd = result.stream.outroEnd
+
+                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
 
                         if (result.isFallback) {
                             val message = if (result.requestedCategory == "dub") {
@@ -381,13 +489,66 @@ fun MainScreen(
         currentAnime?.let { anime ->
             if (totalEpisodes == 0 || currentEpisode < totalEpisodes) {
                 val nextEp = currentEpisode + 1
+
+                // Reset timestamps for next episode
+                animekaiIntroStart = null
+                animekaiIntroEnd = null
+                animekaiOutroStart = null
+                animekaiOutroEnd = null
+
+                val cachedStream = viewModel.getCachedStreamImmediate(anime.id, nextEp, preferredCategory)
+
+                if (cachedStream != null) {
+                    Log.d("MainActivity", "Next ep cache HIT - playing instantly")
+                    savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
+                    currentVideoUrl = cachedStream.url
+                    currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                    currentSubtitleUrl = cachedStream.subtitleUrl
+                    currentEpisode = nextEp
+                    currentServerName = cachedStream.serverName
+                    currentCategory = cachedStream.category
+                    currentServerIndex = 0
+
+                    isFallbackStream = cachedStream.category != preferredCategory
+                    requestedCategory = preferredCategory
+                    actualCategory = cachedStream.category
+
+                    currentQualityOptions = cachedStream.qualities.map {
+                        QualityOption(quality = it.quality, url = it.url, width = it.width)
+                    }
+                    currentQuality = "Auto"
+
+                    // Extract Animekai timestamps from CachedStream (PRIMARY)
+                    animekaiIntroStart = cachedStream.introStart
+                    animekaiIntroEnd = cachedStream.introEnd
+                    animekaiOutroStart = cachedStream.outroStart
+                    animekaiOutroEnd = cachedStream.outroEnd
+
+                    scope.launch {
+                        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
+                        currentEpisodeInfo = epInfo
+                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
+                    }
+
+                    if (isFallbackStream) {
+                        val message = if (requestedCategory == "dub") {
+                            "Dub not available, playing sub"
+                        } else {
+                            "Sub not available, playing dub"
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                    return@let
+                }
+
                 isLoadingStream = true
                 scope.launch {
                     val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                    val epInfo = viewModel.getEpisodeInfo(anime.title, nextEp, anime.id, latestAired)
+                    val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
                     currentEpisodeInfo = epInfo
 
-                    val result = viewModel.tryAllServersWithFallback(anime.title, nextEp, anime.id, latestAired)
+                    val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), nextEp, anime.id, latestAired)
                     if (result.stream != null) {
                         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
                         currentVideoUrl = result.stream.url
@@ -402,7 +563,16 @@ fun MainScreen(
                         requestedCategory = result.requestedCategory
                         actualCategory = result.actualCategory
 
-                        viewModel.prefetchAdjacentEpisodes(anime.title, nextEp, anime.id, latestAired)
+                        currentQualityOptions = result.stream.qualities
+                        currentQuality = "Auto"
+
+                        // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
+                        animekaiIntroStart = result.stream.introStart
+                        animekaiIntroEnd = result.stream.introEnd
+                        animekaiOutroStart = result.stream.outroStart
+                        animekaiOutroEnd = result.stream.outroEnd
+
+                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
 
                         if (result.isFallback) {
                             val message = if (result.requestedCategory == "dub") {
@@ -423,28 +593,101 @@ fun MainScreen(
 
     fun changeServer(serverName: String, category: String) {
         currentAnime?.let { anime ->
+            // Reset timestamps when changing server
+            animekaiIntroStart = null
+            animekaiIntroEnd = null
+            animekaiOutroStart = null
+            animekaiOutroEnd = null
+
+            // Check if we have episode info cached with server list
+            val epInfoKey = "${anime.id}_$currentEpisode"
+            val cachedEpInfo = prefetchedEpisodeInfo[epInfoKey] ?: currentEpisodeInfo
+
+            if (cachedEpInfo == null) {
+                Log.e("MainActivity", "No episode info available for server switch")
+                Toast.makeText(context, "No server info available", Toast.LENGTH_SHORT).show()
+                return@let
+            }
+
+            // Find the server in the list to verify it exists
+            val servers = if (category == "sub") cachedEpInfo.subServers else cachedEpInfo.dubServers
+            val serverExists = servers.any { it.name == serverName }
+
+            if (!serverExists) {
+                // Try the other category
+                val fallbackServers = if (category == "sub") cachedEpInfo.dubServers else cachedEpInfo.subServers
+                val fallbackExists = fallbackServers.any { it.name == serverName }
+                if (!fallbackExists) {
+                    Log.e("MainActivity", "Server not found: $serverName")
+                    Toast.makeText(context, "Server not found: $serverName", Toast.LENGTH_SHORT).show()
+                    return@let
+                }
+            }
+
+            val cachedStream = viewModel.getCachedStreamImmediate(anime.id, currentEpisode, category)
+
+            if (cachedStream != null && cachedStream.serverName == serverName) {
+                Log.d("MainActivity", "Server cache HIT - switching instantly")
+                currentVideoUrl = cachedStream.url
+                currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                currentSubtitleUrl = cachedStream.subtitleUrl
+                currentServerName = cachedStream.serverName
+                currentCategory = cachedStream.category
+                requestedCategory = category
+                actualCategory = cachedStream.category
+                isFallbackStream = cachedStream.category != category
+
+                currentQualityOptions = cachedStream.qualities.map {
+                    QualityOption(quality = it.quality, url = it.url, width = it.width)
+                }
+                currentQuality = "Auto"
+
+                // Extract Animekai timestamps from CachedStream (PRIMARY)
+                animekaiIntroStart = cachedStream.introStart
+                animekaiIntroEnd = cachedStream.introEnd
+                animekaiOutroStart = cachedStream.outroStart
+                animekaiOutroEnd = cachedStream.outroEnd
+
+                currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
+                return@let
+            }
+
             isLoadingStream = true
             isManualServerChange = true
             scope.launch {
                 val result = viewModel.getStreamForServer(
-                    anime.title,
+                    getScrapingName(anime),
                     currentEpisode,
                     serverName,
                     category,
                     anime.id
                 )
                 if (result != null) {
+                    Log.d("MainActivity", "Server switch successful: ${result.serverName}")
                     currentVideoUrl = result.url
                     currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
                     currentSubtitleUrl = result.subtitleUrl
                     currentServerName = result.serverName
                     currentCategory = result.category
 
+                    currentQualityOptions = result.qualities
+                    currentQuality = "Auto"
+
+                    // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
+                    animekaiIntroStart = result.introStart
+                    animekaiIntroEnd = result.introEnd
+                    animekaiOutroStart = result.outroStart
+                    animekaiOutroEnd = result.outroEnd
+
                     val servers = if (category == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
                     currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
 
+                    requestedCategory = category
                     actualCategory = result.category
-                    isFallbackStream = result.category != preferredCategory
+                    isFallbackStream = result.category != category
+                } else {
+                    Log.e("MainActivity", "Failed to switch to server: $serverName")
+                    Toast.makeText(context, "Failed to load $serverName", Toast.LENGTH_SHORT).show()
                 }
                 isLoadingStream = false
                 isManualServerChange = false
@@ -452,7 +695,23 @@ fun MainScreen(
         }
     }
 
+    fun changeQuality(qualityUrl: String, qualityName: String) {
+        Log.d("MainActivity", "Changing quality to: $qualityName")
+        currentVideoUrl = qualityUrl
+        currentQuality = qualityName
+    }
+
+    fun invalidateCurrentStreamCache() {
+        currentAnime?.let { anime ->
+            Log.d("MainActivity", "Invalidating stream cache for ${anime.title} ep $currentEpisode ($currentCategory)")
+            viewModel.invalidateStreamCache(anime.id, currentEpisode, currentCategory)
+        }
+    }
+
     fun onPlaybackError() {
+        // Invalidate the cache for this stream
+        invalidateCurrentStreamCache()
+
         currentAnime?.let { anime ->
             val servers = if (currentCategory == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
 
@@ -466,8 +725,6 @@ fun MainScreen(
         }
     }
 
-
-    // Show Anime Dialog
     if (showExploreDialog && selectedExploreAnime != null) {
         if (simplifyAnimeDetails) {
             val isAnimeFavorite = localFavorites.containsKey(selectedExploreAnime!!.id)
@@ -501,6 +758,7 @@ fun MainScreen(
                     val animeMedia = AnimeMedia(
                         id = selectedExploreAnime!!.id,
                         title = selectedExploreAnime!!.title,
+                        titleEnglish = selectedExploreAnime!!.titleEnglish,
                         cover = selectedExploreAnime!!.cover,
                         banner = selectedExploreAnime!!.banner,
                         progress = 0,
@@ -537,6 +795,7 @@ fun MainScreen(
                     val animeMedia = AnimeMedia(
                         id = selectedExploreAnime!!.id,
                         title = selectedExploreAnime!!.title,
+                        titleEnglish = selectedExploreAnime!!.titleEnglish,
                         cover = selectedExploreAnime!!.cover,
                         banner = selectedExploreAnime!!.banner,
                         progress = 0,
@@ -570,7 +829,6 @@ fun MainScreen(
         }
     }
 
-    // Show player
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
             PlayerScreen(
@@ -593,6 +851,13 @@ fun MainScreen(
                 forwardSkipSeconds = forwardSkipSeconds,
                 backwardSkipSeconds = backwardSkipSeconds,
                 savedPosition = savedPlaybackPosition,
+                qualityOptions = currentQualityOptions,
+                currentQuality = currentQuality,
+                // Animekai timestamps (PRIMARY source)
+                animekaiIntroStart = animekaiIntroStart,
+                animekaiIntroEnd = animekaiIntroEnd,
+                animekaiOutroStart = animekaiOutroStart,
+                animekaiOutroEnd = animekaiOutroEnd,
                 onSavePosition = { position ->
                     viewModel.savePlaybackPosition(anime.id, currentEpisode, position)
                 },
@@ -605,10 +870,16 @@ fun MainScreen(
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
                 onNextEpisode = if (totalEpisodes == 0 || currentEpisode < totalEpisodes) onNextEpisode else null,
                 onServerChange = { server, category -> changeServer(server, category) },
+                onQualityChange = { qualityUrl, qualityName -> changeQuality(qualityUrl, qualityName) },
                 onPlaybackError = { onPlaybackError() },
+                onInvalidateStreamCache = { invalidateCurrentStreamCache() },
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
-                autoPlayNextEpisode = autoPlayNextEpisode
+                autoPlayNextEpisode = autoPlayNextEpisode,
+                onPrefetchAdjacent = {
+                    val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                    viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, latestAired)
+                }
             )
         }
 
@@ -672,6 +943,7 @@ fun MainScreen(
                             viewModel = viewModel,
                             isOled = isOled,
                             isVisible = isScheduleVisible,
+                            disableMaterialColors = disableMaterialColors,
                             onPlayEpisode = onPlayEpisode,
                             onShowAnimeDialog = onShowAnimeDialog
                         )

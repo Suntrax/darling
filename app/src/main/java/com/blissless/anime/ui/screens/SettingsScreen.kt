@@ -1,5 +1,6 @@
 package com.blissless.anime.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,10 +16,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -35,21 +38,25 @@ fun SettingsScreen(
     hideNavbarText: Boolean = false,
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
-    autoPlayNextEpisode: Boolean = false,
+    autoPlayNextEpisode: Boolean = true,
     disableMaterialColors: Boolean = false,
     preferredCategory: String = "sub",
-    simplifyEpisodeMenu: Boolean = true,
-    simplifyAnimeDetails: Boolean = true,
-    enableThumbnailPreview: Boolean = false
+    simplifyEpisodeMenu: Boolean = false,
+    simplifyAnimeDetails: Boolean = false,
+    preferredScraper: String = "Animekai"
 ) {
+    val context = LocalContext.current
     val scrollState = rememberScrollState()
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
 
     // Collect the settings from ViewModel
-    val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
-    val simplifyAnimeDetailsState by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
+    val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = false)
+    val simplifyAnimeDetailsState by viewModel.simplifyAnimeDetails.collectAsState(initial = false)
+    val rawPreferredScraper by viewModel.preferredScraper.collectAsState(initial = "Animekai")
+    // Ensure Animekai is always the selected scraper (only working option)
+    val preferredScraperState = rawPreferredScraper.ifBlank { "Animekai" }
 
     // Track thumbnail preview state for showing info dialog
     var showThumbnailInfoDialog by remember { mutableStateOf(false) }
@@ -150,37 +157,118 @@ fun SettingsScreen(
             icon = Icons.Default.Subtitles,
             isOled = isOled
         ) {
-            // Preferred Category Selection
+            // Preferred Scraper Selection
             Text(
-                "Preferred Audio Category",
+                "Preferred Anime Scraper",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
                 color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
             )
             Text(
-                "Try servers from this category first when playing",
+                "Choose the source for fetching anime streams",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // First row of scrapers - Animekai is the only enabled option
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Animekai - Default and ONLY working option (always selected)
                 CategoryChip(
-                    label = "SUB",
-                    isSelected = preferredCategory == "sub",
-                    onClick = { viewModel.setPreferredCategory("sub") },
-                    isOled = isOled
+                    label = "Animekai",
+                    isSelected = true,
+                    onClick = { viewModel.setPreferredScraper("Animekai") },
+                    isOled = isOled,
+                    disableMaterialColors = disableMaterialColors
                 )
+                // Hianime - Greyed out / disabled
                 CategoryChip(
-                    label = "DUB",
-                    isSelected = preferredCategory == "dub",
-                    onClick = { viewModel.setPreferredCategory("dub") },
-                    isOled = isOled
+                    label = "Hianime",
+                    isSelected = false,
+                    onClick = {
+                        Toast.makeText(context, "Hianime is currently unavailable", Toast.LENGTH_SHORT).show()
+                    },
+                    isOled = isOled,
+                    enabled = false,
+                    disableMaterialColors = disableMaterialColors
                 )
+                // Zenime - Greyed out / disabled
+                CategoryChip(
+                    label = "Zenime",
+                    isSelected = false,
+                    onClick = {
+                        Toast.makeText(context, "Zenime is currently unavailable", Toast.LENGTH_SHORT).show()
+                    },
+                    isOled = isOled,
+                    enabled = false,
+                    disableMaterialColors = disableMaterialColors
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Second row of scrapers - Animepahe disabled
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Animepahe - Greyed out / disabled
+                CategoryChip(
+                    label = "Animepahe",
+                    isSelected = false,
+                    onClick = {
+                        Toast.makeText(context, "Animepahe is currently unavailable", Toast.LENGTH_SHORT).show()
+                    },
+                    isOled = isOled,
+                    enabled = false,
+                    disableMaterialColors = disableMaterialColors
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Preferred Category Selection
+            // Animekai supports both SUB and DUB
+            Column {
+                Text(
+                    "Preferred Audio Category",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "Try servers from this category first when playing",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CategoryChip(
+                        label = "SUB",
+                        isSelected = preferredCategory == "sub",
+                        onClick = { viewModel.setPreferredCategory("sub") },
+                        isOled = isOled,
+                        enabled = true,
+                        disableMaterialColors = disableMaterialColors
+                    )
+                    CategoryChip(
+                        label = "DUB",
+                        isSelected = preferredCategory == "dub",
+                        onClick = { viewModel.setPreferredCategory("dub") },
+                        isOled = isOled,
+                        enabled = true,
+                        disableMaterialColors = disableMaterialColors
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -539,22 +627,32 @@ private fun CategoryChip(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    isOled: Boolean
+    isOled: Boolean,
+    enabled: Boolean = true,
+    disableMaterialColors: Boolean = false
 ) {
+    // When disabled, we still want onClick to fire for toast messages
+    // so we handle the visual disabled state manually instead of using FilterChip's enabled parameter
     FilterChip(
         selected = isSelected,
         onClick = onClick,
         label = {
             Text(
                 label,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    !enabled -> if (isOled) Color.White.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    isSelected && disableMaterialColors -> Color.Black
+                    else -> Color.Unspecified
+                }
             )
         },
         colors = FilterChipDefaults.filterChipColors(
             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedContainerColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
             labelColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-            selectedLabelColor = Color.White
-        )
+            selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White
+        ),
+        modifier = if (!enabled) Modifier.alpha(0.5f) else Modifier
     )
 }

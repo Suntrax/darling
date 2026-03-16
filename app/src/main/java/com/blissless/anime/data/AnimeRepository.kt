@@ -3,12 +3,15 @@ package com.blissless.anime.data
 import android.util.Log
 import com.blissless.anime.BuildConfig
 import com.blissless.anime.api.AniwatchService
-import com.blissless.anime.api.AniwatchStreamResult
-import com.blissless.anime.api.EpisodeStreams
+import com.blissless.anime.data.models.AniwatchStreamResult
+import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.*
 import com.blissless.anime.network.GraphQLClient
 import com.blissless.anime.network.GraphQLConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.net.URL
@@ -39,8 +42,8 @@ class AnimeRepository(
     // High-performance GraphQL client
     private val graphQLClient = GraphQLClient(
         config = GraphQLConfig(
-            maxConcurrentRequests = 4,
-            minRequestIntervalMs = 500L,
+            maxConcurrentRequests = 5,
+            minRequestIntervalMs = 100L,
             cacheDurationMs = 5 * 60 * 1000L // 5 minutes
         )
     )
@@ -51,7 +54,7 @@ class AnimeRepository(
 
     suspend fun graphqlRequest(query: String, variables: Map<String, Any?>): String? {
         val token = userPreferences.authToken.value ?: return null
-        
+
         val result = graphQLClient.execute(
             query = query,
             variables = variables,
@@ -538,7 +541,8 @@ class AnimeRepository(
         episodeNumber: Int,
         animeId: Int,
         latestAiredEpisode: Int = Int.MAX_VALUE,
-        preferredCategory: String
+        preferredCategory: String,
+        englishTitle: String? = null
     ): StreamFetchResult = withContext(Dispatchers.IO) {
         val key = "${animeId}_$episodeNumber"
 
@@ -624,6 +628,7 @@ class AnimeRepository(
         latestAiredEpisode: Int = Int.MAX_VALUE
     ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "TMDB: [START] fetchTmdbEpisodes for '$animeTitle' ($animeId)")
             val baseTitle = extractBaseTitle(animeTitle)
             var searchResults = searchTmdb(baseTitle)
             if (searchResults.isEmpty()) searchResults = searchTmdb(animeTitle)
@@ -632,10 +637,21 @@ class AnimeRepository(
             val bestMatch = findBestMatch(searchResults, animeTitle, animeYear) ?: return@withContext emptyList()
             val tvDetails = fetchTvDetails(bestMatch.id) ?: return@withContext emptyList()
 
-            val (episodeOffset, maxEpisodes) = calculateEpisodeOffset(tvDetails, animeTitle, animeId)
-            fetchAllSeasons(tvDetails, episodeOffset, latestAiredEpisode, maxEpisodes)
+            // Fetch all seasons in parallel to speed up and prevent timeouts
+            val sortedSeasons = tvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }
+            val allSeasonDetails = coroutineScope {
+                sortedSeasons.map { season ->
+                    async { fetchSeason(tvDetails.id, season.season_number) }
+                }.awaitAll().filterNotNull()
+            }
+
+            val (episodeOffset, maxEpisodes) = calculateEpisodeOffset(tvDetails, allSeasonDetails, animeTitle, animeId)
+
+            val result = buildEpisodesFromPool(allSeasonDetails, episodeOffset, latestAiredEpisode, maxEpisodes)
+            Log.d(TAG, "TMDB: Returning ${result.size} episodes after offset logic")
+            result
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching TMDB episodes", e)
+            Log.e(TAG, "TMDB: Error", e)
             emptyList()
         }
     }
@@ -644,11 +660,14 @@ class AnimeRepository(
         return try {
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
             val url = URL("https://api.themoviedb.org/3/search/tv?query=$encodedTitle")
-            val connection = url.openConnection() as HttpsURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
-            connection.setRequestProperty("accept", "application/json")
-            
+            val connection = (url.openConnection() as HttpsURLConnection).apply {
+                readTimeout = 15000 // Increased to 15s
+                connectTimeout = 15000
+                requestMethod = "GET"
+                setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+                setRequestProperty("accept", "application/json")
+            }
+
             if (connection.responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
                 json.decodeFromString<TmdbSearchResponse>(response).results
@@ -659,10 +678,13 @@ class AnimeRepository(
     private fun fetchTvDetails(tmdbId: Int): TmdbTvDetails? {
         return try {
             val url = URL("https://api.themoviedb.org/3/tv/$tmdbId?language=en-US")
-            val connection = url.openConnection() as HttpsURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
-            
+            val connection = (url.openConnection() as HttpsURLConnection).apply {
+                readTimeout = 15000
+                connectTimeout = 15000
+                requestMethod = "GET"
+                setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+            }
+
             if (connection.responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
                 json.decodeFromString<TmdbTvDetails>(response)
@@ -670,13 +692,16 @@ class AnimeRepository(
         } catch (e: Exception) { null }
     }
 
-    private fun fetchSeason(tvId: Int, seasonNumber: Int): TmdbSeasonDetails? {
-        return try {
+    private suspend fun fetchSeason(tvId: Int, seasonNumber: Int): TmdbSeasonDetails? = withContext(Dispatchers.IO) {
+        try {
             val url = URL("https://api.themoviedb.org/3/tv/$tvId/season/$seasonNumber?language=en-US")
-            val connection = url.openConnection() as HttpsURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
-            
+            val connection = (url.openConnection() as HttpsURLConnection).apply {
+                readTimeout = 15000
+                connectTimeout = 15000
+                requestMethod = "GET"
+                setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+            }
+
             if (connection.responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
                 json.decodeFromString<TmdbSeasonDetails>(response)
@@ -684,42 +709,199 @@ class AnimeRepository(
         } catch (e: Exception) { null }
     }
 
-    private fun fetchAllSeasons(
-        tvDetails: TmdbTvDetails,
+    private fun buildEpisodesFromPool(
+        allSeasonDetails: List<TmdbSeasonDetails>,
         episodeOffset: Int,
         latestAiredEpisode: Int,
-        maxEpisodes: Int = 0
+        maxEpisodes: Int
     ): List<TmdbEpisode> {
         val allEpisodes = mutableListOf<TmdbEpisode>()
-        var currentEpisodeNumber = 1 - episodeOffset
-        var displayNumber = 1
+        var absoluteIndex = 1
 
-        val sortedSeasons = tvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }
+        for (season in allSeasonDetails) {
+            for (episode in season.episodes) {
+                val isTarget = if (maxEpisodes > 0) {
+                    absoluteIndex > episodeOffset && absoluteIndex <= (episodeOffset + maxEpisodes)
+                } else {
+                    absoluteIndex > episodeOffset
+                }
 
-        for (season in sortedSeasons) {
-            val seasonDetails = fetchSeason(tvDetails.id, season.season_number) ?: continue
-            for (episode in seasonDetails.episodes) {
-                if (episodeOffset == 0 && maxEpisodes > 0 && displayNumber > maxEpisodes) return allEpisodes
-                
-                val continuousEpisodeNum = currentEpisodeNumber + episodeOffset
-                if (continuousEpisodeNum > episodeOffset) {
-                    val hasAired = latestAiredEpisode == Int.MAX_VALUE || displayNumber <= latestAiredEpisode
-                    val episodeTitle = if (hasAired && episode.name != null && episode.name != "Episode ${episode.episode_number}") {
+                if (isTarget) {
+                    val relativeNum = absoluteIndex - episodeOffset
+                    val hasAired = latestAiredEpisode == Int.MAX_VALUE || relativeNum <= latestAiredEpisode
+
+                    val title = if (hasAired && episode.name != null && !episode.name.startsWith("Episode", ignoreCase = true)) {
                         episode.name
-                    } else "Episode $displayNumber"
+                    } else "Episode $relativeNum"
 
                     allEpisodes.add(TmdbEpisode(
-                        episode = displayNumber,
-                        title = episodeTitle,
+                        episode = relativeNum,
+                        title = title,
                         description = if (hasAired) (episode.overview ?: "") else "",
                         image = if (hasAired) episode.still_path?.let { "https://image.tmdb.org/t/p/w500$it" } else null
                     ))
-                    displayNumber++
                 }
-                currentEpisodeNumber++
+                absoluteIndex++
             }
         }
         return allEpisodes
+    }
+
+    private suspend fun calculateEpisodeOffset(
+        tvDetails: TmdbTvDetails,
+        allSeasonDetails: List<TmdbSeasonDetails>,
+        animeTitle: String,
+        animeId: Int
+    ): Pair<Int, Int> {
+        Log.d(TAG, "TMDB: Calculating offset for $animeTitle")
+
+        // 1. Recursive AniList search (Most reliable for multi-season shows)
+        val recursiveOffset = calculateRecursiveOffset(animeId)
+        val aniListMedia = fetchAnimeRelations(animeId)
+        val totalEps = aniListMedia?.episodes ?: 0
+
+        if (recursiveOffset > 0) {
+            Log.d(TAG, "TMDB: Final recursive offset from AniList: $recursiveOffset")
+            return Pair(recursiveOffset, totalEps)
+        }
+
+        // 2. Title matching via Aniwatch first episode title
+        Log.d(TAG, "TMDB: Falling back to Aniwatch title matching...")
+        val (aniwatchOffset, hianimeCount) = fetchEpisodeOffsetFromAniwatch(animeTitle, allSeasonDetails)
+        if (aniwatchOffset >= 0) {
+            Log.d(TAG, "TMDB: Found offset via title matching: $aniwatchOffset")
+            return Pair(aniwatchOffset, if (totalEps > 0) totalEps else hianimeCount)
+        }
+
+        Log.d(TAG, "TMDB: No offset found, defaulting to 0")
+        return Pair(0, totalEps)
+    }
+
+    private val visitedOffsetIds = mutableSetOf<Int>()
+
+    private suspend fun calculateRecursiveOffset(animeId: Int): Int {
+        visitedOffsetIds.clear()
+        val offset = getPrequelEpisodesSum(animeId)
+        return offset
+    }
+
+    private suspend fun getPrequelEpisodesSum(animeId: Int): Int {
+        if (visitedOffsetIds.contains(animeId)) return 0
+        visitedOffsetIds.add(animeId)
+
+        val media = fetchAnimeRelations(animeId) ?: return 0
+
+        // Find ALL PREQUEL relations.
+        val prequels = media.relations?.edges?.filter {
+            it.relationType == "PREQUEL" && it.node.type == "ANIME"
+        } ?: emptyList()
+
+        var totalOffset = 0
+        for (edge in prequels) {
+            val node = edge.node
+            // Only add episodes for Series formats (TV, ONA, TV_SHORT)
+            // But ALWAYS recurse, even into Movies/Specials, to find older seasons
+            val isSeriesFormat = node.format == "TV" || node.format == "ONA" || node.format == "TV_SHORT"
+            val episodes = if (isSeriesFormat) (node.episodes ?: 0) else 0
+
+            if (episodes > 0) {
+                Log.d(TAG, "TMDB: Found prequel season '${node.title?.romaji}' with $episodes episodes")
+            } else {
+                Log.d(TAG, "TMDB: Found non-series prequel '${node.title?.romaji}' (Format: ${node.format}), recursing without adding episodes")
+            }
+
+            totalOffset += episodes + getPrequelEpisodesSum(node.id)
+        }
+
+        return totalOffset
+    }
+
+    suspend fun fetchAnimeRelations(animeId: Int): AnimeRelationsMedia? {
+        val query = """
+            query (${'$'}id: Int) {
+                Media(id: ${'$'}id, type: ANIME) {
+                    id
+                    title { romaji english }
+                    episodes
+                    format
+                    relations {
+                        edges {
+                            relationType
+                            node {
+                                id
+                                title { romaji english }
+                                episodes
+                                type
+                                format
+                            }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
+            try {
+                json.decodeFromString<AnimeRelationsResponse>(it).data.Media
+            } catch (e: Exception) { null }
+        }
+    }
+
+    private suspend fun fetchEpisodeOffsetFromAniwatch(
+        animeTitle: String,
+        allSeasonDetails: List<TmdbSeasonDetails>
+    ): Pair<Int, Int> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val encodedTitle = URLEncoder.encode(animeTitle, "UTF-8")
+                val url = URL("https://aniwatch-cxjn.vercel.app/api/v2/hianime/search?q=$encodedTitle&page=1")
+                val connection = (url.openConnection() as HttpsURLConnection).apply {
+                    readTimeout = 15000
+                    connectTimeout = 15000
+                }
+                if (connection.responseCode != 200) return@withContext Pair(-1, 0)
+
+                val response = connection.inputStream.bufferedReader().readText()
+                val searchJson = json.parseToJsonElement(response)
+                val animes = searchJson.jsonObject["data"]?.jsonObject?.get("animes")?.jsonArray ?: return@withContext Pair(-1, 0)
+
+                val bestMatch = animes.firstOrNull()?.jsonObject ?: return@withContext Pair(-1, 0)
+                val aniwatchId = bestMatch["id"]?.jsonPrimitive?.content ?: return@withContext Pair(-1, 0)
+
+                val episodesUrl = URL("https://aniwatch-cxjn.vercel.app/api/v2/hianime/anime/$aniwatchId/episodes")
+                val epConnection = (episodesUrl.openConnection() as HttpsURLConnection).apply {
+                    readTimeout = 15000
+                    connectTimeout = 15000
+                }
+                if (epConnection.responseCode != 200) return@withContext Pair(-1, 0)
+
+                val epResponse = epConnection.inputStream.bufferedReader().readText()
+                val epJson = json.parseToJsonElement(epResponse).jsonObject["data"]?.jsonObject
+                val totalEps = epJson?.get("totalEpisodes")?.jsonPrimitive?.int ?: 0
+                val firstEpTitle = epJson?.get("episodes")?.jsonArray?.firstOrNull()?.jsonObject?.get("title")?.jsonPrimitive?.content ?: return@withContext Pair(-1, 0)
+
+                Log.d(TAG, "TMDB: Matching Hianime episode title '$firstEpTitle' against TMDB pool")
+                Pair(findTmdbEpisodeOffsetByTitle(allSeasonDetails, firstEpTitle), totalEps)
+            } catch (e: Exception) { Pair(-1, 0) }
+        }
+    }
+
+    private fun findTmdbEpisodeOffsetByTitle(allSeasonDetails: List<TmdbSeasonDetails>, targetTitle: String): Int {
+        val normalizedTarget = normalizeTitle(targetTitle)
+        if (normalizedTarget.startsWith("episode") && normalizedTarget.length < 12) return -1
+
+        var absoluteIndex = 0
+        for (season in allSeasonDetails) {
+            for (episode in season.episodes) {
+                val normalizedEpisode = normalizeTitle(episode.name ?: "")
+                if (normalizedTarget == normalizedEpisode || (normalizedEpisode.isNotEmpty() && normalizedTarget.contains(normalizedEpisode))) {
+                    Log.d(TAG, "TMDB: Found title match at absolute index $absoluteIndex! TMDB Title: ${episode.name}")
+                    return absoluteIndex
+                }
+                absoluteIndex++
+            }
+        }
+        return -1
     }
 
     private fun findBestMatch(results: List<TmdbSearchResult>, originalTitle: String, year: Int?): TmdbSearchResult? {
@@ -752,69 +934,6 @@ class AnimeRepository(
         )
         for (pattern in suffixesToRemove) baseTitle = baseTitle.replace(pattern, "")
         return baseTitle.replace(Regex("""[\s:－-]+$"""), "").trim()
-    }
-
-    private suspend fun calculateEpisodeOffset(tvDetails: TmdbTvDetails, animeTitle: String, animeId: Int): Pair<Int, Int> {
-        val (offset, totalEpisodes) = fetchEpisodeOffsetFromAniwatch(animeTitle, tvDetails)
-        if (offset >= 0 && totalEpisodes > 0) {
-            episodeOffsetCache[animeId] = offset
-            return Pair(offset, totalEpisodes)
-        }
-        return Pair(episodeOffsetCache[animeId] ?: 0, 0)
-    }
-
-    private suspend fun fetchEpisodeOffsetFromAniwatch(animeTitle: String, tvDetails: TmdbTvDetails): Pair<Int, Int> {
-        return withContext(Dispatchers.IO) {
-            var result = searchAniwatchAndMatch(animeTitle, tvDetails)
-            if (result.first < 0) {
-                val tmdbName = tvDetails.name ?: tvDetails.original_name
-                if (tmdbName != null && tmdbName != animeTitle) result = searchAniwatchAndMatch(tmdbName, tvDetails)
-            }
-            result
-        }
-    }
-
-    private suspend fun searchAniwatchAndMatch(searchTitle: String, tvDetails: TmdbTvDetails): Pair<Int, Int> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val encodedTitle = URLEncoder.encode(searchTitle, "UTF-8")
-                val searchUrl = URL("https://aniwatch-cxjn.vercel.app/api/v2/hianime/search?q=$encodedTitle&page=1")
-                val searchConnection = searchUrl.openConnection() as HttpsURLConnection
-                if (searchConnection.responseCode != 200) return@withContext Pair(-1, 0)
-                
-                val searchResponse = searchConnection.inputStream.bufferedReader().readText()
-                val searchJson = json.parseToJsonElement(searchResponse)
-                val animes = searchJson.jsonObject["data"]?.jsonObject?.get("animes")?.jsonArray ?: return@withContext Pair(-1, 0)
-
-                val bestMatch = animes.firstOrNull()?.jsonObject ?: return@withContext Pair(-1, 0)
-                val aniwatchId = bestMatch["id"]?.jsonPrimitive?.content ?: return@withContext Pair(-1, 0)
-
-                val episodesUrl = URL("https://aniwatch-cxjn.vercel.app/api/v2/hianime/anime/$aniwatchId/episodes")
-                val episodesConnection = episodesUrl.openConnection() as HttpsURLConnection
-                if (episodesConnection.responseCode != 200) return@withContext Pair(-1, 0)
-
-                val episodesResponse = episodesConnection.inputStream.bufferedReader().readText()
-                val episodesJson = json.parseToJsonElement(episodesResponse).jsonObject["data"]?.jsonObject
-                val totalEpisodes = episodesJson?.get("totalEpisodes")?.jsonPrimitive?.int ?: 0
-                val firstEpisodeTitle = episodesJson?.get("episodes")?.jsonArray?.firstOrNull()?.jsonObject?.get("title")?.jsonPrimitive?.content ?: return@withContext Pair(-1, 0)
-
-                Pair(findTmdbEpisodeOffset(tvDetails, firstEpisodeTitle), totalEpisodes)
-            } catch (e: Exception) { Pair(-1, 0) }
-        }
-    }
-
-    private fun findTmdbEpisodeOffset(tvDetails: TmdbTvDetails, targetTitle: String): Int {
-        var episodeIndex = 0
-        val normalizedTarget = normalizeTitle(targetTitle)
-        for (season in tvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }) {
-            val seasonDetails = fetchSeason(tvDetails.id, season.season_number) ?: continue
-            for (episode in seasonDetails.episodes) {
-                val normalizedEpisode = normalizeTitle(episode.name ?: "")
-                if (normalizedTarget == normalizedEpisode || normalizedEpisode.contains(normalizedTarget)) return episodeIndex
-                episodeIndex++
-            }
-        }
-        return -1
     }
 
     suspend fun fetchUserActivity(userId: Int): List<UserActivity>? {

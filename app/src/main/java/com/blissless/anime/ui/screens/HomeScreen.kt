@@ -1,6 +1,12 @@
 package com.blissless.anime.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,7 +32,6 @@ import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.ui.components.EpisodeSelectionDialog
 import com.blissless.anime.ui.components.HomeAnimeHorizontalList
 import com.blissless.anime.dialogs.HomeAnimeInfoDialog
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
@@ -34,6 +39,7 @@ import com.blissless.anime.dialogs.UserProfileDialog
 import com.blissless.anime.ui.components.HomeStatusColors
 import com.blissless.anime.ui.components.LoadingSkeleton
 import com.blissless.anime.ui.components.RichEpisodeScreen
+import com.blissless.anime.ui.components.EpisodeSelectionDialog
 import com.blissless.anime.ui.components.SearchOverlay
 import com.blissless.anime.ui.components.SectionHeader
 import com.blissless.anime.data.models.toDetailedAnimeData
@@ -81,6 +87,11 @@ fun HomeScreen(
 
     var previousScreenIndex by remember { mutableIntStateOf(currentScreenIndex) }
 
+    val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
+
+    val authToken by viewModel.authToken.collectAsState()
+    val actuallyLoggedIn = authToken != null
+
     LaunchedEffect(currentScreenIndex) {
         if (currentScreenIndex != previousScreenIndex) {
             showSearchOverlay = false
@@ -97,8 +108,15 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Column(modifier = Modifier.fillMaxSize().background(if (isOled) Color.Black else MaterialTheme.colorScheme.background).padding(horizontal = 16.dp)) {
-                // Header
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp).clickable(enabled = isLoggedIn) { showUserProfileDialog = true }, verticalAlignment = Alignment.CenterVertically) {
+                // Header - Corrected vertical padding
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(bottom = 16.dp)
+                        .clickable(enabled = isLoggedIn) { showUserProfileDialog = true },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     if (isLoggedIn && userAvatar != null) { AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(), contentDescription = "User Avatar", contentScale = ContentScale.Crop, modifier = Modifier.size(42.dp).clip(CircleShape)); Spacer(modifier = Modifier.width(12.dp)) }
                     else if (isLoggedIn) { Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(42.dp)); Spacer(modifier = Modifier.width(12.dp)) }
 
@@ -315,7 +333,11 @@ fun HomeScreen(
             }
         }
 
-        if (showSearchOverlay) {
+        AnimatedVisibility(
+            visible = showSearchOverlay,
+            enter = slideInVertically(animationSpec = tween(durationMillis = 250), initialOffsetY = { -it }) + fadeIn(animationSpec = tween(250)),
+            exit = slideOutVertically(animationSpec = tween(durationMillis = 250), targetOffsetY = { -it }) + fadeOut(animationSpec = tween(250))
+        ) {
             SearchOverlay(
                 viewModel = viewModel,
                 isOled = isOled,
@@ -335,31 +357,29 @@ fun HomeScreen(
 
     // Dialogs
     if (showEpisodeSheet && selectedAnime != null) {
-        val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
         if (simplifyEpisodeMenu) {
             EpisodeSelectionDialog(
                 anime = selectedAnime!!,
                 isOled = isOled,
+                disableMaterialColors = disableMaterialColors,
                 onDismiss = { showEpisodeSheet = false },
                 onEpisodeSelect = { episode ->
-                    onPlayEpisode(
-                        selectedAnime!!,
-                        episode
-                    ); showEpisodeSheet = false
-                })
-        }
-        else {
+                    onPlayEpisode(selectedAnime!!, episode)
+                    showEpisodeSheet = false
+                }
+            )
+        } else {
             RichEpisodeScreen(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
                 isOled = isOled,
+                disableMaterialColors = disableMaterialColors,
                 onDismiss = { showEpisodeSheet = false },
                 onEpisodeSelect = { episode ->
-                    onPlayEpisode(
-                        selectedAnime!!,
-                        episode
-                    ); showEpisodeSheet = false
-                })
+                    onPlayEpisode(selectedAnime!!, episode)
+                    showEpisodeSheet = false
+                }
+            )
         }
     }
 

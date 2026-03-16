@@ -194,7 +194,7 @@ fun ExploreScreen(
                 FeaturedCarousel(
                     animeList = featuredAnime,
                     onAnimeClick = onAnimeClickStable,
-                    autoScrollEnabled = isVisible
+                    autoScrollEnabled = isVisible && !showDialog
                 )
             } else {
                 Box(

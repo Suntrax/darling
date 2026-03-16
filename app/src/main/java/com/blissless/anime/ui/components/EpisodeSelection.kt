@@ -1,34 +1,35 @@
 package com.blissless.anime.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
+import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -41,27 +42,45 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
-import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.TmdbEpisode
+import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
-fun EpisodeSelectionDialog(anime: AnimeMedia, isOled: Boolean, onDismiss: () -> Unit, onEpisodeSelect: (Int) -> Unit) {
+fun EpisodeSelectionDialog(
+    anime: AnimeMedia,
+    isOled: Boolean,
+    disableMaterialColors: Boolean = false,
+    onDismiss: () -> Unit,
+    onEpisodeSelect: (Int) -> Unit
+) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
     val currentProgress = anime.progress
+    val gridState = rememberLazyGridState()
     val imageRequest = remember(anime.cover) {
         ImageRequest.Builder(context).data(anime.cover).memoryCacheKey(anime.cover).diskCacheKey(anime.cover).crossfade(false).build()
+    }
+
+    // Auto-scroll to current episode in the simple dialog smoothly
+    LaunchedEffect(currentProgress) {
+        if (currentProgress > 0) {
+            delay(300)
+            // Scroll to current episode, keeping it somewhat centered
+            val target = (currentProgress - 5).coerceAtLeast(0)
+            gridState.animateScrollToItem(target)
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -78,17 +97,27 @@ fun EpisodeSelectionDialog(anime: AnimeMedia, isOled: Boolean, onDismiss: () -> 
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))); Spacer(modifier = Modifier.width(4.dp)); Text("Watched", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant) }
-                    Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(12.dp).background(Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(2.dp))); Spacer(modifier = Modifier.width(4.dp)); Text("Not aired", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                LazyVerticalGrid(columns = GridCells.Fixed(5), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(state = gridState, columns = GridCells.Fixed(5), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
                     items(episodeCount) { index ->
                         val episodeNum = index + 1
                         val isWatched = episodeNum <= currentProgress
+                        val isCurrent = episodeNum == currentProgress + 1
                         val hasAired = episodeNum <= released
-                        EpisodeButton(episodeNumber = episodeNum, isWatched = isWatched, hasAired = hasAired, isOled = isOled, onClick = { if (hasAired) onEpisodeSelect(episodeNum) })
+                        EpisodeButton(
+                            episodeNumber = episodeNum,
+                            isWatched = isWatched,
+                            isCurrent = isCurrent,
+                            hasAired = hasAired,
+                            isOled = isOled,
+                            disableMaterialColors = disableMaterialColors,
+                            onClick = {
+                                if (hasAired) {
+                                    onEpisodeSelect(episodeNum)
+                                } else {
+                                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -106,26 +135,65 @@ fun EpisodeSelectionDialog(anime: AnimeMedia, isOled: Boolean, onDismiss: () -> 
 }
 
 @Composable
-private fun EpisodeButton(episodeNumber: Int, isWatched: Boolean, hasAired: Boolean, isOled: Boolean, onClick: () -> Unit) {
+private fun EpisodeButton(
+    episodeNumber: Int,
+    isWatched: Boolean,
+    isCurrent: Boolean,
+    hasAired: Boolean,
+    isOled: Boolean,
+    disableMaterialColors: Boolean = false,
+    onClick: () -> Unit
+) {
+    // Current episode now has same badge styling as other aired episodes, but keeps outline indicator
     val backgroundColor = when {
         isWatched -> MaterialTheme.colorScheme.primary
         hasAired -> if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        else -> Color(0xFF1A1A1A).copy(alpha = 0.5f)
+        else -> if (isOled) Color(0xFF333333) else Color(0xFFD0D0D0) // More visible unaired background
     }
-    val contentColor = when { isWatched -> Color.White; hasAired -> Color.White; else -> Color.Gray.copy(alpha = 0.5f) }
-    val borderColor = when { isWatched -> MaterialTheme.colorScheme.primary; hasAired -> Color.White.copy(alpha = 0.1f); else -> Color.Gray.copy(alpha = 0.2f) }
+    val contentColor = when {
+        isWatched -> if (disableMaterialColors) Color.Black else Color.White
+        hasAired -> Color.White
+        else -> if (isOled) Color.White.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.6f)
+    }
+    // Keep outline indicator for current episode
+    val borderColor = when {
+        isWatched -> MaterialTheme.colorScheme.primary
+        isCurrent -> MaterialTheme.colorScheme.secondary
+        hasAired -> Color.White.copy(alpha = 0.1f)
+        else -> Color.Gray.copy(alpha = 0.4f)
+    }
 
-    Surface(onClick = onClick, shape = RoundedCornerShape(8.dp), color = backgroundColor, contentColor = contentColor, modifier = Modifier.size(48.dp).alpha(if (hasAired) 1f else 0.5f), border = BorderStroke(1.dp, borderColor)) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = backgroundColor,
+        contentColor = contentColor,
+        modifier = Modifier.size(48.dp).alpha(if (hasAired) 1f else 0.9f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+    ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("$episodeNumber", style = MaterialTheme.typography.labelLarge, fontWeight = if (isWatched) FontWeight.Bold else FontWeight.Medium)
-            if (isWatched) { Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).padding(2.dp), tint = Color.White) }
+            Text("$episodeNumber", style = MaterialTheme.typography.labelLarge, fontWeight = if (isWatched || isCurrent) FontWeight.Bold else FontWeight.Medium)
+            if (isWatched) {
+                Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).padding(2.dp), tint = contentColor)
+            } else if (isCurrent) {
+                // Play icon uses primary color to indicate it's the current episode
+                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).padding(2.dp), tint = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boolean, onDismiss: () -> Unit, onEpisodeSelect: (Int) -> Unit) {
+fun RichEpisodeScreen(
+    anime: AnimeMedia,
+    viewModel: MainViewModel,
+    isOled: Boolean,
+    disableMaterialColors: Boolean = false,
+    onDismiss: () -> Unit,
+    onEpisodeSelect: (Int) -> Unit
+) {
+    val context = LocalContext.current
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
@@ -137,13 +205,34 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    // Animation states for entry
+    var isVisible by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "alpha"
+    )
+
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
     // Filter episodes to match the AniList progress count
     val displayEpisodes = remember(tmdbEpisodes, episodeCount) {
         tmdbEpisodes.filter { it.episode <= episodeCount }
     }
 
     val windowInfo = LocalWindowInfo.current
-    val screenHeightPx = windowInfo.containerSize.height.toFloat()
+    val containerSize = windowInfo.containerSize
+    val screenHeightPx = containerSize.height.toFloat()
     val dismissThreshold = screenHeightPx / 2f
 
     val offsetY = remember { Animatable(0f) }
@@ -226,13 +315,27 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
         isLoadingEpisodes = false
     }
 
-    LaunchedEffect(Unit) { if (currentProgress in 1..<episodeCount) {
-        delay(100); listState.animateScrollToItem(currentProgress) } }
+    // Scroll to current episode (next to watch or last watched) with smooth animation
+    LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
+        if (!isLoadingEpisodes) {
+            // Wait a bit for layout to settle
+            delay(300)
+            val scrollIndex = if (currentProgress < episodeCount) currentProgress else currentProgress - 1
+            if (scrollIndex >= 0) {
+                listState.animateScrollToItem(scrollIndex)
+            }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = false)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    this.scaleX = scale
+                    this.scaleY = scale
+                    this.alpha = alpha
+                }
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
                 .nestedScroll(nestedScrollConnection)
@@ -296,15 +399,9 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(10.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))); Spacer(modifier = Modifier.width(4.dp)); Text("Watched", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant) }
-                            Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(10.dp).background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(2.dp))); Spacer(modifier = Modifier.width(4.dp)); Text("Current", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant) }
-                            Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(10.dp).background(Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(2.dp))); Spacer(modifier = Modifier.width(4.dp)); Text("Unaired", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant) }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             val nextEp = currentProgress + 1
-                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = Color.White)) } }
+                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White)) } }
                             item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(0) } }, label = { Text("Ep 1") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) }
                             if (released > 1) { item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(released - 1) } }, label = { Text("Latest: Ep $released") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) } }
                         }
@@ -320,7 +417,13 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
                             val hasAired = episodeNum <= released
-                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, onSelect = { selectedEpisode = episodeNum }, onPlay = { if (hasAired) onEpisodeSelect(episodeNum) })
+                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, onSelect = { selectedEpisode = episodeNum }, onPlay = {
+                                if (hasAired) {
+                                    onEpisodeSelect(episodeNum)
+                                } else {
+                                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                                }
+                            })
                         }
                     } else if (!isLoadingEpisodes) {
                         items(episodeCount) { index ->
@@ -328,10 +431,135 @@ fun RichEpisodeScreen(anime: AnimeMedia, viewModel: MainViewModel, isOled: Boole
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
                             val hasAired = episodeNum <= released
-                            SimpleRichEpisodeCard(episodeNumber = episodeNum, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, onSelect = { selectedEpisode = episodeNum }, onPlay = { if (hasAired) onEpisodeSelect(episodeNum) })
+                            SimpleRichEpisodeCard(
+                                episodeNumber = episodeNum,
+                                isWatched = isWatched,
+                                isCurrent = isCurrent,
+                                hasAired = hasAired,
+                                isOled = isOled,
+                                isSelected = selectedEpisode == episodeNum,
+                                disableMaterialColors = disableMaterialColors,
+                                onSelect = { selectedEpisode = episodeNum },
+                                onPlay = {
+                                    if (hasAired) {
+                                        onEpisodeSelect(episodeNum)
+                                    } else {
+                                        Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
                         }
                     }
                     item { Spacer(modifier = Modifier.height(80.dp)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimpleRichEpisodeCard(
+    episodeNumber: Int,
+    isWatched: Boolean,
+    isCurrent: Boolean,
+    hasAired: Boolean,
+    isOled: Boolean,
+    isSelected: Boolean,
+    disableMaterialColors: Boolean = false,
+    onSelect: () -> Unit,
+    onPlay: () -> Unit
+) {
+    val context = LocalContext.current
+    // Current episode has same background as other aired episodes
+    val backgroundColor = when {
+        isWatched -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        hasAired -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface
+        else -> Color.Transparent
+    }
+
+    // Keep outline indicator for current episode
+    val borderColor = when {
+        isCurrent -> MaterialTheme.colorScheme.secondary
+        isSelected -> MaterialTheme.colorScheme.secondary
+        else -> Color.Transparent
+    }
+
+    val contentAlpha = if (hasAired) 1f else 0.4f
+
+    // Consistent dark style for badges and icons
+    val badgeBg = Color.Black.copy(alpha = 0.7f)
+    val badgeText = Color.White
+
+    AnimatedVisibility(visible = true, enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.95f), exit = fadeOut(tween(200))) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (borderColor != Color.Transparent) Modifier.border(1.dp, borderColor, RoundedCornerShape(12.dp)) else Modifier),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = backgroundColor),
+            onClick = {
+                if (hasAired) {
+                    onSelect()
+                    onPlay()
+                } else {
+                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                }
+            }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp).alpha(contentAlpha),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.size(44.dp).background(badgeBg, RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isWatched -> Icon(Icons.Default.Check, contentDescription = "Watched", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        isCurrent -> Icon(Icons.Default.PlayArrow, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        else -> Text(
+                            text = "$episodeNumber",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = badgeText
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Episode $episodeNumber",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = when {
+                            !hasAired -> "Not yet aired"
+                            isCurrent -> "Up next"
+                            isWatched -> "Watched"
+                            else -> "Available"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            !hasAired -> Color.Gray
+                            isCurrent -> MaterialTheme.colorScheme.primary
+                            isWatched -> MaterialTheme.colorScheme.primary
+                            else -> if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                if (hasAired) {
+                    FilledTonalIconButton(
+                        onClick = onPlay,
+                        modifier = Modifier.size(40.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }
@@ -350,36 +578,44 @@ private fun RichTmdbEpisodeCard(
     hasAired: Boolean,
     isOled: Boolean,
     isSelected: Boolean,
+    disableMaterialColors: Boolean = false,
     onSelect: () -> Unit,
     onPlay: () -> Unit
 ) {
+    val context = LocalContext.current
+    // Current episode has same background as other aired episodes
     val backgroundColor = when {
-        isCurrent -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
         isWatched -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         hasAired -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface
         else -> Color.Transparent
     }
 
+    // Keep outline indicator for current episode
     val borderColor = when {
-        isCurrent -> MaterialTheme.colorScheme.primary
+        isCurrent -> MaterialTheme.colorScheme.secondary
         isSelected -> MaterialTheme.colorScheme.secondary
         else -> Color.Transparent
     }
 
     val contentAlpha = if (hasAired) 1f else 0.4f
 
-    val surfaceColor = when {
-        isWatched -> MaterialTheme.colorScheme.primary
-        isCurrent -> MaterialTheme.colorScheme.secondary
-        else -> Color.Black.copy(alpha = 0.6f)
-    }
+    // Consistent dark style for badges and icons in rich menu
+    val badgeBg = Color.Black.copy(alpha = 0.7f)
+    val badgeText = Color.White
 
     AnimatedVisibility(visible = true, enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.95f), exit = fadeOut(tween(200))) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (borderColor != Color.Transparent) Modifier.border(1.dp, borderColor, RoundedCornerShape(12.dp)) else Modifier),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = backgroundColor),
-            onClick = { if (hasAired) { onSelect(); onPlay() } }
+            onClick = {
+                if (hasAired) {
+                    onSelect()
+                    onPlay()
+                } else {
+                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                }
+            }
         ) {
             Column(modifier = Modifier.fillMaxWidth().alpha(contentAlpha)) {
                 if (!image.isNullOrEmpty()) {
@@ -388,29 +624,31 @@ private fun RichTmdbEpisodeCard(
                         Box(
                             modifier = Modifier.fillMaxWidth().height(60.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                         )
+                        // Episode Badge - Standardized Dark Style
                         Surface(
                             modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
                             shape = RoundedCornerShape(6.dp),
-                            color = surfaceColor
+                            color = badgeBg
                         ) {
                             Text(
                                 text = "EP $episodeNumber",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = badgeText,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
+                        // Watched Icon - Standardized Dark Style with primary color check
                         if (isWatched) {
                             Surface(
                                 modifier = Modifier.padding(8.dp).align(Alignment.TopEnd),
                                 shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary
+                                color = badgeBg
                             ) {
                                 Icon(
-                                    Icons.Outlined.CheckCircle,
+                                    Icons.Default.Check,
                                     contentDescription = "Watched",
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.padding(4.dp).size(16.dp)
                                 )
                             }
@@ -434,29 +672,17 @@ private fun RichTmdbEpisodeCard(
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         if (image.isNullOrEmpty()) {
                             Box(
-                                modifier = Modifier.size(44.dp).background(
-                                    when {
-                                        isWatched -> MaterialTheme.colorScheme.primary
-                                        isCurrent -> MaterialTheme.colorScheme.secondary
-                                        hasAired -> if (isOled) Color(0xFF2A2A2A) else MaterialTheme.colorScheme.surfaceVariant
-                                        else -> Color.Gray.copy(alpha = 0.2f)
-                                    },
-                                    RoundedCornerShape(10.dp)
-                                ),
+                                modifier = Modifier.size(44.dp).background(badgeBg, RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 when {
-                                    isWatched -> Icon(Icons.Outlined.CheckCircle, contentDescription = "Watched", tint = Color.White, modifier = Modifier.size(24.dp))
-                                    isCurrent -> Icon(Icons.Default.PlayArrow, contentDescription = "Current", tint = Color.White, modifier = Modifier.size(24.dp))
+                                    isWatched -> Icon(Icons.Default.Check, contentDescription = "Watched", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                    isCurrent -> Icon(Icons.Default.PlayArrow, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                                     else -> Text(
                                         text = "$episodeNumber",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (hasAired) {
-                                            if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                        } else {
-                                            Color.Gray
-                                        }
+                                        color = badgeText
                                     )
                                 }
                             }
@@ -482,7 +708,7 @@ private fun RichTmdbEpisodeCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = when {
                                     !hasAired -> Color.Gray
-                                    isCurrent -> MaterialTheme.colorScheme.secondary
+                                    isCurrent -> MaterialTheme.colorScheme.primary
                                     isWatched -> MaterialTheme.colorScheme.primary
                                     else -> if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 }
@@ -494,8 +720,8 @@ private fun RichTmdbEpisodeCard(
                                 modifier = Modifier.size(40.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = if (isCurrent) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                    contentColor = if (isCurrent) Color.White else MaterialTheme.colorScheme.primary
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    contentColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
@@ -509,114 +735,6 @@ private fun RichTmdbEpisodeCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SimpleRichEpisodeCard(
-    episodeNumber: Int,
-    isWatched: Boolean,
-    isCurrent: Boolean,
-    hasAired: Boolean,
-    isOled: Boolean,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
-    onPlay: () -> Unit
-) {
-    val backgroundColor = when {
-        isCurrent -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-        isWatched -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        hasAired -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface
-        else -> Color.Transparent
-    }
-
-    val borderColor = when {
-        isCurrent -> MaterialTheme.colorScheme.primary
-        isSelected -> MaterialTheme.colorScheme.secondary
-        else -> Color.Transparent
-    }
-
-    val contentAlpha = if (hasAired) 1f else 0.4f
-
-    AnimatedVisibility(visible = true, enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.95f), exit = fadeOut(tween(200))) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (borderColor != Color.Transparent) Modifier.border(1.dp, borderColor, RoundedCornerShape(12.dp)) else Modifier),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = backgroundColor),
-            onClick = { if (hasAired) { onSelect(); onPlay() } }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp).alpha(contentAlpha),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(44.dp).background(
-                        when {
-                            isWatched -> MaterialTheme.colorScheme.primary
-                            isCurrent -> MaterialTheme.colorScheme.secondary
-                            hasAired -> if (isOled) Color(0xFF2A2A2A) else MaterialTheme.colorScheme.surfaceVariant
-                            else -> Color.Gray.copy(alpha = 0.2f)
-                        },
-                        RoundedCornerShape(10.dp)
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when {
-                        isWatched -> Icon(Icons.Outlined.CheckCircle, contentDescription = "Watched", tint = Color.White, modifier = Modifier.size(24.dp))
-                        isCurrent -> Icon(Icons.Default.PlayArrow, contentDescription = "Current", tint = Color.White, modifier = Modifier.size(24.dp))
-                        else -> Text(
-                            text = "$episodeNumber",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (hasAired) {
-                                if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                Color.Gray
-                            }
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Episode $episodeNumber",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = when {
-                            !hasAired -> "Not yet aired"
-                            isCurrent -> "Up next"
-                            isWatched -> "Watched"
-                            else -> "Available"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = when {
-                            !hasAired -> Color.Gray
-                            isCurrent -> MaterialTheme.colorScheme.secondary
-                            isWatched -> MaterialTheme.colorScheme.primary
-                            else -> if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-                if (hasAired) {
-                    FilledTonalIconButton(
-                        onClick = onPlay,
-                        modifier = Modifier.size(40.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = if (isCurrent) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                            contentColor = if (isCurrent) Color.White else MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
                     }
                 }
             }

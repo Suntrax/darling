@@ -2,9 +2,10 @@ package com.blissless.anime.data
 
 import android.content.SharedPreferences
 import android.util.Log
-import com.blissless.anime.api.AniwatchStreamResult
-import com.blissless.anime.api.EpisodeStreams
-import com.blissless.anime.api.ServerInfo
+import com.blissless.anime.data.models.AniwatchStreamResult
+import com.blissless.anime.data.models.EpisodeStreams
+import com.blissless.anime.data.models.ServerInfo
+import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,21 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import androidx.core.content.edit
 
-/**
- * Manages persistent caching operations for the app.
- * In-memory GraphQL caching is now handled by GraphQLClient for better deduplication.
- */
 class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     companion object {
         private const val TAG = "CacheManager"
-
-        // Cache durations
-        private const val CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L      // 7 days
-        private const val AIRING_CACHE_DURATION_MS = 1 * 60 * 60 * 1000L  // 1 hour
+        private const val CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
+        private const val AIRING_CACHE_DURATION_MS = 1 * 60 * 60 * 1000L
         private const val STREAM_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
 
-        // Cache keys
         private const val CACHE_EXPLORE_TIME = "cache_explore_time"
         private const val CACHE_HOME_TIME = "cache_home_time"
         private const val CACHE_EXPLORE_DATA = "cache_explore_data"
@@ -43,7 +37,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         coerceInputValues = true
     }
 
-    // State flows for UI
     private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
 
@@ -63,10 +56,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 .remove(CACHE_HOME_TIME)
         }
     }
-
-    // ============================================
-    // Persistence Cache (SharedPreferences)
-    // ============================================
 
     private fun isCacheValid(cacheKey: String, customDuration: Long = CACHE_DURATION_MS): Boolean {
         val cacheTime = sharedPreferences.getLong(cacheKey, 0)
@@ -139,10 +128,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         return null
     }
 
-    // ============================================
-    // Stream & Playback Cache
-    // ============================================
-
     fun loadStreamCache() {
         try {
             val cachedData = sharedPreferences.getString(CACHE_STREAM_DATA, null) ?: return
@@ -155,12 +140,32 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             cacheData.entries.filter { (now - it.value.timestamp) < STREAM_CACHE_DURATION_MS }
                 .forEach { (key, entry) ->
                     streamMap[key] = entry.stream?.let {
-                        AniwatchStreamResult(it.url, it.isDirectStream, it.headers, it.subtitleUrl, it.serverName, it.category)
+                        val qualities = it.qualities.map { q -> QualityOption(q.quality, q.url, q.width) }
+                        AniwatchStreamResult(
+                            it.url,
+                            it.isDirectStream,
+                            it.headers,
+                            it.subtitleUrl,
+                            it.serverName,
+                            it.category,
+                            qualities,
+                            // Skip timestamps
+                            it.introStart,
+                            it.introEnd,
+                            it.outroStart,
+                            it.outroEnd
+                        )
                     }
                     entry.episodeInfo?.let { ep ->
                         episodeMap[key] = EpisodeStreams(
-                            ep.subServers.map { ServerInfo(it.name, it.url) },
-                            ep.dubServers.map { ServerInfo(it.name, it.url) },
+                            ep.subServers.map { s ->
+                                val quals = s.qualities.map { q -> QualityOption(q.quality, q.url, q.width) }
+                                ServerInfo(s.name, s.url, quals)
+                            },
+                            ep.dubServers.map { s ->
+                                val quals = s.qualities.map { q -> QualityOption(q.quality, q.url, q.width) }
+                                ServerInfo(s.name, s.url, quals)
+                            },
                             ep.animeId, ep.episodeId
                         )
                     }
@@ -168,6 +173,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
             _prefetchedStreams.value = streamMap
             _prefetchedEpisodeInfo.value = episodeMap
+            Log.d(TAG, "Loaded stream cache: ${streamMap.size} streams, ${episodeMap.size} episode infos")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load stream cache", e)
         }
@@ -179,11 +185,33 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val entries = _prefetchedStreams.value.mapValues { (key, stream) ->
                 val ep = _prefetchedEpisodeInfo.value[key]
                 StreamCacheEntry(
-                    stream = stream?.let { CachedStream(it.url, it.isDirectStream, it.headers, it.subtitleUrl, it.serverName, it.category) },
+                    stream = stream?.let {
+                        val qualities = it.qualities.map { q -> CachedQuality(q.quality, q.url, q.width) }
+                        CachedStream(
+                            it.url,
+                            it.isDirectStream,
+                            it.headers,
+                            it.subtitleUrl,
+                            it.serverName,
+                            it.category,
+                            qualities,
+                            // Skip timestamps
+                            it.introStart,
+                            it.introEnd,
+                            it.outroStart,
+                            it.outroEnd
+                        )
+                    },
                     episodeInfo = ep?.let { info ->
                         CachedEpisodeInfo(
-                            info.subServers.map { CachedServer(it.name, it.url) },
-                            info.dubServers.map { CachedServer(it.name, it.url) },
+                            info.subServers.map { s ->
+                                val quals = s.qualities.map { q -> CachedQuality(q.quality, q.url, q.width) }
+                                CachedServer(s.name, s.url, quals)
+                            },
+                            info.dubServers.map { s ->
+                                val quals = s.qualities.map { q -> CachedQuality(q.quality, q.url, q.width) }
+                                CachedServer(s.name, s.url, quals)
+                            },
                             info.animeId, info.episodeId
                         )
                     },
@@ -223,7 +251,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val key = "${animeId}_$episode"
         if (_playbackPositions.value.containsKey(key)) {
             _playbackPositions.value = _playbackPositions.value - key
-            sharedPreferences.edit { 
+            sharedPreferences.edit {
                 val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
                 putString(CACHE_PLAYBACK_POSITIONS, jsonString)
             }
@@ -234,28 +262,133 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val prefix = "${animeId}_"
         val newMap = _playbackPositions.value.filterKeys { !it.startsWith(prefix) }
         _playbackPositions.value = newMap
-        sharedPreferences.edit { 
+        sharedPreferences.edit {
             val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
             putString(CACHE_PLAYBACK_POSITIONS, jsonString)
         }
     }
 
-    // ============================================
-    // In-Memory Helpers
-    // ============================================
+    fun getCachedStream(key: String): AniwatchStreamResult? {
+        val stream = _prefetchedStreams.value[key]
+        if (stream != null) {
+            Log.d(TAG, "Cache hit for stream: $key, timestamps: intro=[${stream.introStart}-${stream.introEnd}], outro=[${stream.outroStart}-${stream.outroEnd}]")
+        }
+        return stream
+    }
 
-    fun getCachedStream(key: String): AniwatchStreamResult? = _prefetchedStreams.value[key]
+    fun getCachedStreamImmediate(animeId: Int, episode: Int, category: String): AniwatchStreamResult? {
+        val key = "${animeId}_${episode}_$category"
+        return _prefetchedStreams.value[key]
+    }
+
     fun cacheStream(key: String, stream: AniwatchStreamResult?) {
         _prefetchedStreams.value = _prefetchedStreams.value + (key to stream)
+        Log.d(TAG, "Cached stream for key: $key, category: ${stream?.category}, timestamps: intro=[${stream?.introStart}-${stream?.introEnd}], outro=[${stream?.outroStart}-${stream?.outroEnd}]")
         saveStreamCache()
     }
 
-    fun getCachedEpisodeInfo(key: String): EpisodeStreams? = _prefetchedEpisodeInfo.value[key]
-    fun cacheEpisodeInfo(key: String, info: EpisodeStreams) {
-        _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
+    fun getCachedEpisodeInfo(key: String): EpisodeStreams? {
+        return _prefetchedEpisodeInfo.value[key]
     }
 
-    fun hasStream(key: String): Boolean = _prefetchedStreams.value.containsKey(key)
+    fun cacheEpisodeInfo(key: String, info: EpisodeStreams) {
+        _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
+        Log.d(TAG, "Cached episode info for key: $key, subServers=${info.subServers.size}, dubServers=${info.dubServers.size}")
+    }
+
+    fun hasStream(key: String): Boolean {
+        val exists = _prefetchedStreams.value.containsKey(key)
+        Log.d(TAG, "hasStream($key) = $exists")
+        return exists
+    }
+
+    fun hasAnyStreamForEpisode(animeId: Int, episode: Int): String? {
+        val subKey = "${animeId}_${episode}_sub"
+        val dubKey = "${animeId}_${episode}_dub"
+
+        return when {
+            _prefetchedStreams.value.containsKey(subKey) -> "sub"
+            _prefetchedStreams.value.containsKey(dubKey) -> "dub"
+            else -> null
+        }
+    }
+
+    fun getAvailableCategories(animeId: Int, episode: Int): List<String> {
+        val categories = mutableListOf<String>()
+        val subKey = "${animeId}_${episode}_sub"
+        val dubKey = "${animeId}_${episode}_dub"
+
+        if (_prefetchedStreams.value.containsKey(subKey)) categories.add("sub")
+        if (_prefetchedStreams.value.containsKey(dubKey)) categories.add("dub")
+
+        return categories
+    }
+
+    /**
+     * Clear stream cache for a specific episode.
+     * Call this when a stream fails to force refetch on next attempt.
+     */
+    fun invalidateStreamCache(animeId: Int, episode: Int, category: String? = null) {
+        val keysToRemove = mutableListOf<String>()
+
+        if (category != null) {
+            // Remove specific category cache
+            keysToRemove.add("${animeId}_${episode}_$category")
+        } else {
+            // Remove both sub and dub caches
+            keysToRemove.add("${animeId}_${episode}_sub")
+            keysToRemove.add("${animeId}_${episode}_dub")
+        }
+
+        // Also remove the old-style key
+        keysToRemove.add("${animeId}_$episode")
+
+        val newMap = _prefetchedStreams.value.toMutableMap()
+        var removed = false
+        keysToRemove.forEach { key ->
+            if (newMap.containsKey(key)) {
+                newMap.remove(key)
+                Log.d(TAG, "Invalidated stream cache for key: $key")
+                removed = true
+            }
+        }
+
+        if (removed) {
+            _prefetchedStreams.value = newMap
+            saveStreamCache()
+        }
+    }
+
+    /**
+     * Clear stream cache for a specific server/category combination.
+     */
+    fun invalidateServerCache(animeId: Int, episode: Int, serverName: String, category: String) {
+        val key = "${animeId}_${episode}_${serverName}_$category"
+
+        if (_prefetchedStreams.value.containsKey(key)) {
+            val newMap = _prefetchedStreams.value.toMutableMap()
+            newMap.remove(key)
+            _prefetchedStreams.value = newMap
+            Log.d(TAG, "Invalidated server cache for key: $key")
+            saveStreamCache()
+        }
+    }
+
+    fun clearStreamForEpisode(animeId: Int, episode: Int) {
+        val subKey = "${animeId}_${episode}_sub"
+        val dubKey = "${animeId}_${episode}_dub"
+
+        val newMap = _prefetchedStreams.value.toMutableMap()
+        newMap.remove(subKey)
+        newMap.remove(dubKey)
+        _prefetchedStreams.value = newMap
+
+        val oldKey = "${animeId}_$episode"
+        newMap.remove(oldKey)
+
+        saveStreamCache()
+    }
+
     fun getCachedDetailedAnime(animeId: Int): DetailedAnimeData? = _detailedAnimeCache.value[animeId]
     fun cacheDetailedAnime(animeId: Int, data: DetailedAnimeData) {
         _detailedAnimeCache.value = _detailedAnimeCache.value + (animeId to data)
