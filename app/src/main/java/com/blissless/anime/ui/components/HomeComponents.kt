@@ -94,7 +94,8 @@ fun HomeAnimeHorizontalList(
     listType: String,
     isOled: Boolean,
     showStatusColors: Boolean = false,
-    isLoggedIn: Boolean = false, // Added parameter
+    isLoggedIn: Boolean = false,
+    playbackPositions: Map<String, Long> = emptyMap(),
     onAnimeClick: (AnimeMedia) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
     onStatusClick: (AnimeMedia) -> Unit,
@@ -107,7 +108,8 @@ fun HomeAnimeHorizontalList(
                 listType = listType,
                 isOled = isOled,
                 showStatusColors = showStatusColors,
-                isLoggedIn = isLoggedIn, // Pass down
+                isLoggedIn = isLoggedIn,
+                playbackPositions = playbackPositions,
                 onClick = { onAnimeClick(anime) },
                 onPlayClick = { onPlayClick(anime) },
                 onStatusClick = { onStatusClick(anime) },
@@ -123,7 +125,8 @@ fun HomeAnimeCard(
     listType: String,
     isOled: Boolean,
     showStatusColors: Boolean = false,
-    isLoggedIn: Boolean = false, // Added parameter
+    isLoggedIn: Boolean = false,
+    playbackPositions: Map<String, Long> = emptyMap(),
     onClick: () -> Unit,
     onPlayClick: () -> Unit,
     onStatusClick: () -> Unit,
@@ -135,6 +138,12 @@ fun HomeAnimeCard(
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val isFinished = total in 1..released
+
+    val nextEpisode = anime.progress + 1
+    val playbackKey = "${anime.id}_$nextEpisode"
+    val savedPosition = playbackPositions[playbackKey] ?: 0L
+    val defaultEpisodeDuration = 24 * 60 * 1000L
+    val progressPercent = if (savedPosition > 0) (savedPosition.toFloat() / defaultEpisodeDuration.toFloat()).coerceIn(0f, 1f) else 0f
 
     val progressText = when (listType) {
         "CURRENT" -> {
@@ -178,6 +187,28 @@ fun HomeAnimeCard(
                     Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(3.dp).background(statusColor))
                 }
 
+                // Progress bar at bottom (continue watching indicator)
+                if (progressPercent > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progressPercent)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.3f))
+                        )
+                    }
+                }
+
                 // TOP START: Episode Counter
                 Surface(
                     modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
@@ -204,7 +235,7 @@ fun HomeAnimeCard(
 
                 // Bottom Row
                 Row(
-                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 6.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // BOTTOM START: Info Button

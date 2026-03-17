@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val hasToken = prefs.getString(TOKEN_KEY, null) != null
+        val savedToken = prefs.getString(TOKEN_KEY, null)
 
         Log.d("MainActivity", "Has saved token: $hasToken")
 
@@ -71,8 +72,11 @@ class MainActivity : ComponentActivity() {
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
             val forceHighRefreshRate by mainViewModel.forceHighRefreshRate.collectAsState()
 
-            val token by mainViewModel.authToken.collectAsState(initial = if (hasToken) "loading" else null)
-            val isLoggedIn = token != null && token != "loading"
+            var isLoggedIn by remember { mutableStateOf(savedToken != null) }
+            val token by mainViewModel.authToken.collectAsState()
+            LaunchedEffect(token) {
+                isLoggedIn = token != null
+            }
 
             LaunchedEffect(forceHighRefreshRate) {
                 if (forceHighRefreshRate) {
@@ -163,6 +167,7 @@ fun MainScreen(
 
     val localFavorites by viewModel.localFavorites.collectAsState()
     val canAddFavorite = remember(localFavorites) { viewModel.canAddFavorite() }
+    val playbackPositions by viewModel.playbackPositions.collectAsState()
 
     val autoSkipOpening by viewModel.autoSkipOpening.collectAsState(initial = false)
     val autoSkipEnding by viewModel.autoSkipEnding.collectAsState(initial = false)
@@ -184,6 +189,11 @@ fun MainScreen(
         if (!isLoadingHome && 0 !in preloadedPages) {
             preloadedPages = preloadedPages + 0
         }
+    }
+
+    var isLoggedInKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(isLoggedIn) {
+        isLoggedInKey++
     }
 
     LaunchedEffect(pagerState.currentPage, pagerState.currentPageOffsetFraction) {
@@ -235,6 +245,26 @@ fun MainScreen(
 
     var selectedExploreAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showExploreDialog by remember { mutableStateOf(false) }
+    
+    // Track the first anime opened (for back navigation)
+    var firstOpenedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+    
+    // Helper to close all anime pages and reset
+    fun closeAllAnimePages() {
+        showExploreDialog = false
+        selectedExploreAnime = null
+        firstOpenedAnime = null
+    }
+    
+    // Helper to go back to first anime
+    fun goBackToFirstAnime(): Boolean {
+        return if (firstOpenedAnime != null && selectedExploreAnime?.id != firstOpenedAnime?.id) {
+            selectedExploreAnime = firstOpenedAnime
+            true
+        } else {
+            false
+        }
+    }
 
     // Animekai timestamps (PRIMARY source)
     var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
@@ -252,9 +282,23 @@ fun MainScreen(
         map
     }
 
-    val onShowAnimeDialog: (ExploreAnime) -> Unit = { anime ->
+    val onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { anime, previousAnime ->
+        // Set first anime if this is the first one being opened
+        if (firstOpenedAnime == null) {
+            firstOpenedAnime = previousAnime ?: anime
+        }
         selectedExploreAnime = anime
         showExploreDialog = true
+    }
+    
+    // Wrapper for callbacks that expect single parameter
+    val onShowAnimeDialogSingle: (ExploreAnime) -> Unit = { anime -> 
+        onShowAnimeDialog(anime, null) 
+    }
+
+    // Callback to clear the first anime (when closing from ExploreScreen inline dialog)
+    val onClearAnimeStack: () -> Unit = {
+        firstOpenedAnime = null
     }
 
     // Helper to get English title for scraping (Animekai works better with English titles)
@@ -739,8 +783,13 @@ fun MainScreen(
                     viewModel.toggleLocalFavorite(selectedExploreAnime!!)
                 },
                 onDismiss = {
-                    showExploreDialog = false
-                    selectedExploreAnime = null
+                    // Check if there's a first anime to go back to
+                    if (goBackToFirstAnime()) {
+                        // Go back to first anime - don't close
+                    } else {
+                        // This is the first anime, actually close the dialog
+                        closeAllAnimePages()
+                    }
                 },
                 onAddToPlanning = {
                     viewModel.addExploreAnimeToList(selectedExploreAnime!!, "PLANNING")
@@ -776,7 +825,8 @@ fun MainScreen(
                     onPlayEpisode(animeMedia, episode)
                     showExploreDialog = false
                 },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                onLoginClick = { viewModel.loginWithAniList() }
             )
         } else {
             val isAnimeFavorite = localFavorites.containsKey(selectedExploreAnime!!.id)
@@ -788,9 +838,15 @@ fun MainScreen(
                 isFavorite = isAnimeFavorite,
                 canAddFavorite = canAddFavorite || isAnimeFavorite,
                 onDismiss = {
-                    showExploreDialog = false
-                    selectedExploreAnime = null
+                    // Check if there's a first anime to go back to
+                    if (goBackToFirstAnime()) {
+                        // Go back to first anime - don't close
+                    } else {
+                        // This is the first anime, actually close the dialog
+                        closeAllAnimePages()
+                    }
                 },
+                onSwipeToClose = { closeAllAnimePages() },
                 onPlayEpisode = { episode ->
                     val animeMedia = AnimeMedia(
                         id = selectedExploreAnime!!.id,
@@ -824,10 +880,52 @@ fun MainScreen(
                 onToggleFavorite = { _ ->
                     viewModel.toggleLocalFavorite(selectedExploreAnime!!)
                 },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                onLoginClick = { viewModel.loginWithAniList() },
+                onRelationClick = { relation ->
+                    try {
+                        Log.d("MainActivity", "Relation clicked: ${relation.title} (id: ${relation.id}), cover: ${relation.cover}")
+                        scope.launch {
+                            try {
+                                delay(100)
+                                Log.d("MainActivity", "Fetching detailed data for: ${relation.id}")
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                Log.d("MainActivity", "Fetched data: title=${detailedData?.title}, cover=${detailedData?.cover}")
+                                if (detailedData != null) {
+                                    selectedExploreAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year
+                                    )
+                                    Log.d("MainActivity", "Setting selectedExploreAnime to: ${selectedExploreAnime?.title}, cover: ${selectedExploreAnime?.cover}")
+                                    showExploreDialog = true
+                                    Log.d("MainActivity", "showExploreDialog set to true")
+                                } else {
+                                    Log.d("MainActivity", "Failed to fetch detailed data for relation!")
+                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Error in scope.launch: ${e.message}", e)
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error in onRelationClick: ${e.message}", e)
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
         }
     }
+
+    Log.d("MainActivity", "Render: showExploreDialog=$showExploreDialog, selectedExploreAnime=${selectedExploreAnime?.title}")
 
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
@@ -961,7 +1059,9 @@ fun MainScreen(
                             completed = completed,
                             onHold = onHold,
                             dropped = dropped,
-                            isVisible = isCurrentPage
+                            isVisible = isCurrentPage,
+                            onShowAnimeDialog = onShowAnimeDialog,
+                            onClearAnimeStack = onClearAnimeStack
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,
@@ -976,7 +1076,8 @@ fun MainScreen(
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
-                            currentScreenIndex = pagerState.currentPage
+                            currentScreenIndex = pagerState.currentPage,
+                            playbackPositions = playbackPositions
                         )
                         3 -> SettingsScreen(
                             viewModel = viewModel,

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -40,6 +41,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
@@ -58,21 +60,32 @@ fun DetailedAnimeScreen(
     isFavorite: Boolean = false,
     canAddFavorite: Boolean = true,
     onDismiss: () -> Unit,
+    onSwipeToClose: () -> Unit = {},
     onPlayEpisode: (Int) -> Unit = {},
     onUpdateStatus: (String?) -> Unit = {},
     onRemove: () -> Unit = {},
     onToggleFavorite: (DetailedAnimeData) -> Unit = {},
+    onLoginClick: () -> Unit = {},
+    onRelationClick: (AnimeRelation) -> Unit = {}
 ) {
     val context = LocalContext.current
     var showFullDescription by remember { mutableStateOf(false) }
 
     var detailedData by remember { mutableStateOf<DetailedAnimeData?>(null) }
     var isLoadingDetails by remember { mutableStateOf(true) }
+    var relations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
 
-    // Animation states for entry
+    // Animation states for entry and transitions
     var isVisible by remember { mutableStateOf(false) }
+    var previousAnimeId by remember { mutableIntStateOf(anime.id) }
+    var isTransitioning by remember { mutableStateOf(false) }
+    
     val scale by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0.92f,
+        targetValue = when {
+            isTransitioning -> 0.95f
+            isVisible -> 1f
+            else -> 0.92f
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -80,7 +93,11 @@ fun DetailedAnimeScreen(
         label = "scale"
     )
     val alpha by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0f,
+        targetValue = when {
+            isTransitioning -> 0.7f
+            isVisible -> 1f
+            else -> 0f
+        },
         animationSpec = tween(durationMillis = 300),
         label = "alpha"
     )
@@ -89,10 +106,20 @@ fun DetailedAnimeScreen(
         isVisible = true
     }
 
+    // Track anime changes for transition animation
     LaunchedEffect(anime.id) {
+        if (previousAnimeId != anime.id && previousAnimeId != 0) {
+            // This is a navigation (relation click or back), trigger transition animation
+            isTransitioning = true
+            kotlinx.coroutines.delay(150)
+            isTransitioning = false
+        }
+        previousAnimeId = anime.id
+        
         isLoadingDetails = true
         detailedData = viewModel.fetchDetailedAnimeData(anime.id)
         isLoadingDetails = false
+        relations = detailedData?.relations ?: anime.relations
     }
 
     val displayData = detailedData ?: anime
@@ -171,7 +198,7 @@ fun DetailedAnimeScreen(
                 if (shouldDismiss) {
                     scope.launch {
                         offsetY.animateTo(screenHeightPx, tween(250, easing = FastOutSlowInEasing))
-                        onDismiss()
+                        onSwipeToClose()
                     }
                 } else {
                     scope.launch {
@@ -374,14 +401,10 @@ fun DetailedAnimeScreen(
                             }
                         } else {
                             Button(
-                                onClick = { },
+                                onClick = onLoginClick,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp),
-                                enabled = false,
-                                colors = ButtonDefaults.buttonColors(
-                                    disabledContainerColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
-                                    disabledContentColor = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("Log in to AniList first", fontWeight = FontWeight.Medium)
                             }
@@ -510,6 +533,80 @@ fun DetailedAnimeScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 TextButton(onClick = { showFullDescription = !showFullDescription }) {
                                     Text(if (showFullDescription) "Show Less" else "Read More")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val filteredRelations = displayData.relations.filter { relation ->
+                    relation.format != "MANGA" && relation.format != "NOVEL" && relation.format != "ONE_SHOT"
+                }
+
+                if (filteredRelations.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Text("Relations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(filteredRelations) { relation ->
+                                    Column(
+                                        modifier = Modifier.width(100.dp).clickable { 
+                                            android.util.Log.d("DetailedAnimeScreen", "Relation clicked: ${relation.title}, id: ${relation.id}")
+                                            onRelationClick(relation) 
+                                        }
+                                    ) {
+                                        Card(
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(140.dp)
+                                        ) {
+                                            AsyncImage(
+                                                model = relation.cover,
+                                                contentDescription = relation.title,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            relation.title,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            relation.averageScore?.let { score ->
+                                                Text("★ ${score / 10}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFD700))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                            }
+                                            relation.episodes?.let { eps ->
+                                                Text("${eps} eps", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                        relation.format?.let { format ->
+                                            val formatDisplay = when (format) {
+                                                "TV" -> "TV"
+                                                "TV_SHORT" -> "TV Short"
+                                                "MOVIE" -> "Movie"
+                                                "SPECIAL" -> "Special"
+                                                "OVA" -> "OVA"
+                                                "ONA" -> "ONA"
+                                                "MANGA" -> "Manga"
+                                                "NOVEL" -> "Novel"
+                                                "ONE_SHOT" -> "One Shot"
+                                                "MUSIC" -> "Music"
+                                                else -> format
+                                            }
+                                            Text(
+                                                formatDisplay,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -506,6 +506,19 @@ class MainViewModel : ViewModel() {
     suspend fun fetchDetailedAnimeData(animeId: Int): DetailedAnimeData? {
         cacheManager.getCachedDetailedAnime(animeId)?.let { return it }
         val media = repository.fetchDetailedAnime(animeId) ?: return null
+        val relationsList = media.relations?.edges?.mapNotNull { edge ->
+            edge.node?.let { node ->
+                AnimeRelation(
+                    id = node.id,
+                    title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                    cover = node.coverImage?.large ?: "",
+                    episodes = node.episodes,
+                    averageScore = node.averageScore,
+                    format = node.format,
+                    relationType = edge.relationType ?: "UNKNOWN"
+                )
+            }
+        } ?: emptyList()
         val detailedData = DetailedAnimeData(
             id = media.id,
             title = media.title?.romaji ?: media.title?.english ?: "Unknown",
@@ -518,10 +531,15 @@ class MainViewModel : ViewModel() {
             studios = media.studios?.nodes?.map { StudioData(it.id ?: 0, it.name ?: "") } ?: emptyList(),
             startDate = media.startDate?.let { "${it.year}-${it.month}-${it.day}" },
             endDate = media.endDate?.let { "${it.year}-${it.month}-${it.day}" },
-            nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt
+            nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt,
+            relations = relationsList
         )
         cacheManager.cacheDetailedAnime(animeId, detailedData)
         return detailedData
+    }
+
+    suspend fun fetchAnimeRelations(animeId: Int): List<AnimeRelation>? {
+        return repository.fetchAnimeRelationsList(animeId)
     }
 
     // Search & Activity
@@ -722,9 +740,11 @@ class MainViewModel : ViewModel() {
 
     fun logout() {
         userPreferences.clearAllUserData()
+        userPreferences.clearToken()
         cacheManager.clearAllCaches()
         _userId.value = null; _userName.value = null; _userAvatar.value = null
         _currentlyWatching.value = emptyList(); _planningToWatch.value = emptyList(); _completed.value = emptyList(); _onHold.value = emptyList(); _dropped.value = emptyList()
+        _isLoadingHome.value = false
     }
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, latest)

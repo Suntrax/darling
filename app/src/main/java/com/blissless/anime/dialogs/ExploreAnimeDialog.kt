@@ -45,7 +45,8 @@ fun ExploreAnimeDialog(
     onAddToOnHold: () -> Unit = {},
     onRemoveFromList: () -> Unit = {},
     onStartWatching: (Int) -> Unit,
-    isLoggedIn: Boolean = false
+    isLoggedIn: Boolean = false,
+    onLoginClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val displayScore = anime.averageScore?.let { it / 10.0 }
@@ -79,7 +80,7 @@ fun ExploreAnimeDialog(
                 .padding(16.dp),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else Color(0xFF1A1A1A)
+                containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface
             )
         ) {
             Column(
@@ -378,23 +379,19 @@ fun ExploreAnimeDialog(
                 } else {
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Disabled button when not logged in
                     Button(
-                        onClick = { },
+                        onClick = onLoginClick,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
                         shape = RoundedCornerShape(14.dp),
-                        enabled = false,
-                        colors = ButtonDefaults.buttonColors(
-                            disabledContainerColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
-                            disabledContentColor = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text(
                             "Log in to AniList first",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
                         )
                     }
                 }

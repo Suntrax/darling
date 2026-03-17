@@ -180,7 +180,8 @@ data class DetailedAnimeData(
     val trailerUrl: String? = null,
     val recommendations: List<ExploreAnime> = emptyList(),
     val latestEpisode: Int? = null,
-    val malId: Int? = null
+    val malId: Int? = null,
+    val relations: List<AnimeRelation> = emptyList()
 )
 
 @Serializable
@@ -195,6 +196,17 @@ data class StudioData(
     val id: Int,
     val name: String,
     val isAnimationStudio: Boolean = true
+)
+
+@Serializable
+data class AnimeRelation(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val episodes: Int?,
+    val averageScore: Int?,
+    val format: String?,
+    val relationType: String
 )
 
 // ============================================
@@ -592,7 +604,8 @@ data class DetailedAnimeMedia(
     val studios: DetailedAnimeStudios? = null,
     val startDate: FuzzyDate? = null,
     val endDate: FuzzyDate? = null,
-    val nextAiringEpisode: NextAiringEpisode? = null
+    val nextAiringEpisode: NextAiringEpisode? = null,
+    val relations: AnimeRelations? = null
 )
 
 @Serializable
@@ -647,7 +660,9 @@ data class AnimeRelationEdge(
 data class AnimeRelationNode(
     val id: Int,
     val title: MediaTitle? = null,
+    val coverImage: MediaCoverImage? = null,
     val episodes: Int? = null,
+    val averageScore: Int? = null,
     val type: String? = null,
     val format: String? = null
 )

@@ -151,8 +151,8 @@ class UserPreferences(private val context: Context) {
     }
 
     fun clearToken() {
-        sharedPreferences.edit { remove(TOKEN_KEY) }
         _authToken.value = null
+        sharedPreferences.edit { remove(TOKEN_KEY) }
         Log.d(TAG, "Token cleared")
     }
 

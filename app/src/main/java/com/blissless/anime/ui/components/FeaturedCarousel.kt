@@ -120,7 +120,7 @@ fun FeaturedCarousel(
                             onClick = { onAnimeClick(anime) }
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.7f))
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
                     ) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             AsyncImage(
@@ -165,7 +165,7 @@ fun FeaturedCarousel(
                                         Spacer(modifier = Modifier.width(12.dp))
                                     }
                                     if (anime.latestEpisode != null && anime.latestEpisode > 1) {
-                                        val epText = "Ep ${anime.latestEpisode - 1}${if (anime.episodes > 0) "/ ${anime.episodes}" else ""}"
+                                        val epText = "Ep ${anime.latestEpisode - 1}${if (anime.episodes > 0) " / ${anime.episodes}" else ""}"
                                         Text(text = epText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
                                     }
                                 }

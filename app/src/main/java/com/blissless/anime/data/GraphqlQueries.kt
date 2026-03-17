@@ -318,12 +318,12 @@ object GraphqlQueries {
     // ============================================
 
     /**
-     * Get detailed anime data
+     * Get detailed anime data with relations
      * Optimized: Only essential fields
      */
-    const val GET_DETAILED_ANIME = $$"""
-        query ($id: Int) {
-            Media(id: $id, type: ANIME) {
+    val GET_DETAILED_ANIME = """
+        query (${'$'}id: Int) {
+            Media(id: ${'$'}id, type: ANIME) {
                 id
                 title { romaji english native }
                 coverImage { large }
@@ -344,13 +344,23 @@ object GraphqlQueries {
                 startDate { year month day }
                 endDate { year month day }
                 nextAiringEpisode { episode airingAt }
+                relations {
+                    edges {
+                        relationType
+                        node {
+                            id
+                            title { romaji english }
+                            coverImage { large }
+                            episodes
+                            averageScore
+                            format
+                        }
+                    }
+                }
             }
         }
-    """
+    """.trimIndent()
 
-    /**
-     * Minimal detailed data for caching
-     */
     const val GET_MINIMAL_ANIME = $$"""
         query ($id: Int) {
             Media(id: $id, type: ANIME) {
@@ -522,4 +532,33 @@ object GraphqlQueries {
             }
         }
     """
+
+    // ============================================
+    // ANIME RELATIONS
+    // ============================================
+
+    /**
+     * Get anime relations (sequels, prequels, adaptations, etc.)
+     */
+    val GET_ANIME_RELATIONS = """
+        query (${'$'}id: Int!) {
+            Media(id: ${'$'}id, type: ANIME) {
+                id
+                title { romaji english }
+                relations {
+                    edges {
+                        relationType
+                        node {
+                            id
+                            title { romaji english }
+                            coverImage { large }
+                            episodes
+                            averageScore
+                            format
+                        }
+                    }
+                }
+            }
+        }
+    """.trimIndent()
 }

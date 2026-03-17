@@ -1,5 +1,6 @@
 package com.blissless.anime.ui.screens
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -18,6 +19,8 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,8 +63,9 @@ fun HomeScreen(
     onPlayerStateChange: (Boolean) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     onLoginClick: () -> Unit = {},
-    onShowAnimeDialog: (ExploreAnime) -> Unit = {},
-    currentScreenIndex: Int = 0
+    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
+    currentScreenIndex: Int = 0,
+    playbackPositions: Map<String, Long> = emptyMap()
 ) {
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
@@ -80,10 +84,14 @@ fun HomeScreen(
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showAnimeInfoDialog by remember { mutableStateOf(false) }
+    
+    // Track first anime for back navigation
+    var firstAnime by remember { mutableStateOf<AnimeMedia?>(null) }
 
     val allListsEmpty = currentlyWatching.isEmpty() && planningToWatch.isEmpty() && completed.isEmpty() && onHold.isEmpty() && dropped.isEmpty()
     var isRefreshing by remember { mutableStateOf(false) }
     val canAddFavoriteLocal = remember(localFavorites) { localFavorites.size < 10 }
+    val scope = rememberCoroutineScope()
 
     var previousScreenIndex by remember { mutableIntStateOf(currentScreenIndex) }
 
@@ -137,7 +145,7 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                                 Spacer(modifier = Modifier.height(8.dp)); Text("Sign in with AniList to sync your anime list and track your progress", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                 Spacer(modifier = Modifier.height(20.dp))
-                                Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF02A9FF))) { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(20.dp)); Spacer(modifier = Modifier.width(8.dp)); Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                                Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(20.dp)); Spacer(modifier = Modifier.width(8.dp)); Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                                 Spacer(modifier = Modifier.height(12.dp)); Text("Don't have an account? Sign up for free at anilist.co", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -163,6 +171,7 @@ fun HomeScreen(
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
+                                playbackPositions = playbackPositions,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -205,6 +214,7 @@ fun HomeScreen(
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
+                                playbackPositions = playbackPositions,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -233,6 +243,7 @@ fun HomeScreen(
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
+                                playbackPositions = playbackPositions,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -261,6 +272,7 @@ fun HomeScreen(
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
+                                playbackPositions = playbackPositions,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -303,6 +315,7 @@ fun HomeScreen(
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
+                                playbackPositions = playbackPositions,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -408,6 +421,11 @@ fun HomeScreen(
     }
 
     if (showAnimeInfoDialog && selectedAnime != null) {
+        // Set first anime on first open
+        if (firstAnime == null) {
+            firstAnime = selectedAnime
+        }
+        
         val exploreAnime = ExploreAnime(id = selectedAnime!!.id, title = selectedAnime!!.title, cover = selectedAnime!!.cover, banner = selectedAnime!!.banner, episodes = selectedAnime!!.totalEpisodes, latestEpisode = selectedAnime!!.latestEpisode, averageScore = selectedAnime!!.averageScore, genres = selectedAnime!!.genres, year = selectedAnime!!.year)
         val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
         if (simplifyAnimeDetails) {
@@ -434,7 +452,58 @@ fun HomeScreen(
                     viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false
                 })
         } else {
-            DetailedAnimeScreen(anime = exploreAnime.toDetailedAnimeData(), viewModel = viewModel, isOled = isOled, currentStatus = selectedAnime!!.listStatus, isFavorite = isAnimeFavorite, onToggleFavorite = { _ -> onToggleFavorite(selectedAnime!!) }, onDismiss = { showAnimeInfoDialog = false }, onPlayEpisode = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false }, onUpdateStatus = { status -> if (status != null) viewModel.updateAnimeStatus(selectedAnime!!.id, status) }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false }, isLoggedIn = true)
+            DetailedAnimeScreen(anime = exploreAnime.toDetailedAnimeData(), viewModel = viewModel, isOled = isOled, currentStatus = selectedAnime!!.listStatus, isFavorite = isAnimeFavorite, onToggleFavorite = { _ -> onToggleFavorite(selectedAnime!!) }, onDismiss = { 
+                // Go back to first anime if we've navigated, otherwise close
+                if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
+                    selectedAnime = firstAnime
+                } else {
+                    showAnimeInfoDialog = false
+                    firstAnime = null
+                }
+            }, onSwipeToClose = { 
+                showAnimeInfoDialog = false
+                firstAnime = null
+            }, onPlayEpisode = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false }, onUpdateStatus = { status -> if (status != null) viewModel.updateAnimeStatus(selectedAnime!!.id, status) }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false }, isLoggedIn = isLoggedIn, onLoginClick = onLoginClick, onRelationClick = { relation -> 
+                try { 
+                    Log.d("HomeScreen", "Relation clicked: ${relation.title} (id: ${relation.id})")
+                    scope.launch {
+                        try {
+                            Log.d("HomeScreen", "Fetching detailed data...")
+                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedData != null) {
+                                Log.d("HomeScreen", "Got data: ${detailedData.title}, updating dialog in place")
+                                // Update the current dialog instead of opening a new one
+                                selectedAnime = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = selectedAnime!!.progress,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = selectedAnime!!.listStatus,
+                                    listEntryId = selectedAnime!!.listEntryId,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                            } else {
+                                Log.d("HomeScreen", "Failed to fetch detailed data for relation!")
+                                Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) { 
+                            Log.e("HomeScreen", "Error in launch: ${e.message}", e)
+                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        } 
+                    } 
+                } catch (e: Exception) { 
+                    Log.e("HomeScreen", "Error: ${e.message}", e)
+                    Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                } 
+            })
         }
     }
 
@@ -443,7 +512,7 @@ fun HomeScreen(
             viewModel = viewModel,
             isOled = isOled,
             onDismiss = { showUserProfileDialog = false },
-            onShowAnimeDialog = onShowAnimeDialog,
+            onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) },
             planningToWatch = planningToWatch,
             onHold = onHold,
             dropped = dropped

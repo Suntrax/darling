@@ -447,6 +447,19 @@ class AnimeRepository(
                     startDate { year month day }
                     endDate { year month day }
                     nextAiringEpisode { episode airingAt }
+                    relations {
+                        edges {
+                            relationType
+                            node {
+                                id
+                                title { romaji english }
+                                coverImage { large }
+                                episodes
+                                averageScore
+                                format
+                            }
+                        }
+                    }
                 }
             }
         """.trimIndent()
@@ -459,6 +472,63 @@ class AnimeRepository(
                 Log.e(TAG, "Failed to parse detailed anime", e)
                 null
             }
+        }
+    }
+
+    suspend fun fetchAnimeRelations(animeId: Int): List<AnimeRelation>? {
+        val query = GraphqlQueries.GET_ANIME_RELATIONS
+
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
+            try {
+                val data = json.decodeFromString<AnimeRelationsResponse>(it)
+                data.data.Media.relations?.edges?.mapNotNull { edge ->
+                    edge.node?.let { node ->
+                        AnimeRelation(
+                            id = node.id,
+                            title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                            cover = node.coverImage?.large ?: "",
+                            episodes = node.episodes,
+                            averageScore = node.averageScore,
+                            format = node.format,
+                            relationType = edge.relationType ?: "UNKNOWN"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse anime relations", e)
+                null
+            }
+        }
+    }
+
+    suspend fun fetchAnimeRelationsForOffset(animeId: Int): AnimeRelationsMedia? {
+        val query = """
+            query (${'$'}id: Int!) {
+                Media(id: ${'$'}id, type: ANIME) {
+                    id
+                    title { romaji english }
+                    episodes
+                    format
+                    relations {
+                        edges {
+                            relationType
+                            node {
+                                id
+                                title { romaji english }
+                                episodes
+                                type
+                                format
+                            }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
+            try {
+                json.decodeFromString<AnimeRelationsResponse>(it).data.Media
+            } catch (e: Exception) { null }
         }
     }
 
@@ -757,7 +827,7 @@ class AnimeRepository(
 
         // 1. Recursive AniList search (Most reliable for multi-season shows)
         val recursiveOffset = calculateRecursiveOffset(animeId)
-        val aniListMedia = fetchAnimeRelations(animeId)
+        val aniListMedia = fetchAnimeRelationsForOffset(animeId)
         val totalEps = aniListMedia?.episodes ?: 0
 
         if (recursiveOffset > 0) {
@@ -789,7 +859,7 @@ class AnimeRepository(
         if (visitedOffsetIds.contains(animeId)) return 0
         visitedOffsetIds.add(animeId)
 
-        val media = fetchAnimeRelations(animeId) ?: return 0
+        val media = fetchAnimeRelationsForOffset(animeId) ?: return 0
 
         // Find ALL PREQUEL relations.
         val prequels = media.relations?.edges?.filter {
@@ -816,34 +886,29 @@ class AnimeRepository(
         return totalOffset
     }
 
-    suspend fun fetchAnimeRelations(animeId: Int): AnimeRelationsMedia? {
-        val query = """
-            query (${'$'}id: Int) {
-                Media(id: ${'$'}id, type: ANIME) {
-                    id
-                    title { romaji english }
-                    episodes
-                    format
-                    relations {
-                        edges {
-                            relationType
-                            node {
-                                id
-                                title { romaji english }
-                                episodes
-                                type
-                                format
-                            }
-                        }
-                    }
-                }
-            }
-        """.trimIndent()
+    suspend fun fetchAnimeRelationsList(animeId: Int): List<AnimeRelation>? {
+        val query = GraphqlQueries.GET_ANIME_RELATIONS
 
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
             try {
-                json.decodeFromString<AnimeRelationsResponse>(it).data.Media
-            } catch (e: Exception) { null }
+                val data = json.decodeFromString<AnimeRelationsResponse>(it)
+                data.data.Media.relations?.edges?.mapNotNull { edge ->
+                    edge.node?.let { node ->
+                        AnimeRelation(
+                            id = node.id,
+                            title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                            cover = node.coverImage?.large ?: "",
+                            episodes = node.episodes,
+                            averageScore = node.averageScore,
+                            format = node.format,
+                            relationType = edge.relationType ?: "UNKNOWN"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse anime relations", e)
+                null
+            }
         }
     }
 

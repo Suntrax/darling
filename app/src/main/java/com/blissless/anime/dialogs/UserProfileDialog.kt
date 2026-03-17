@@ -42,7 +42,7 @@ fun UserProfileDialog(
     viewModel: MainViewModel,
     isOled: Boolean,
     onDismiss: () -> Unit,
-    onShowAnimeDialog: (ExploreAnime) -> Unit,
+    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit,
     planningToWatch: List<AnimeMedia> = emptyList(),
     onHold: List<AnimeMedia> = emptyList(),
     dropped: List<AnimeMedia> = emptyList()
@@ -196,7 +196,7 @@ fun UserProfileDialog(
                             onHold = onHold,
                             dropped = dropped,
                             onAnimeClick = { anime ->
-                                onShowAnimeDialog(anime)
+                                onShowAnimeDialog(anime, null)
                             }
                         )
                         1 -> HistoryTab(

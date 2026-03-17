@@ -66,7 +66,7 @@ fun ScheduleScreen(
     isVisible: Boolean = false,
     disableMaterialColors: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
-    onShowAnimeDialog: (ExploreAnime) -> Unit = {}
+    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> }
 ) {
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
@@ -688,7 +688,7 @@ fun ScheduleScreen(
                                 genres = anime.genres,
                                 year = anime.year
                             )
-                            onShowAnimeDialog(exploreAnime)
+                            onShowAnimeDialog(exploreAnime, null)
                         }
                     )
                 }

@@ -9,6 +9,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
@@ -18,8 +19,12 @@ import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
 import com.blissless.anime.ui.components.FeaturedCarousel
 import com.blissless.anime.ui.components.LoadingPlaceholder
 import com.blissless.anime.ui.components.SectionTitle
+import android.widget.Toast
+import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.data.models.StoredFavorite
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,8 +42,11 @@ fun ExploreScreen(
     completed: List<AnimeMedia> = emptyList(),
     onHold: List<AnimeMedia> = emptyList(),
     dropped: List<AnimeMedia> = emptyList(),
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
+    onClearAnimeStack: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
     val seasonalAnime by viewModel.seasonalAnime.collectAsState()
     val topSeries by viewModel.topSeries.collectAsState()
@@ -63,12 +71,23 @@ fun ExploreScreen(
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+    
+    // Track navigation history for back button
+    var firstAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+    
+    // Scope for coroutines - must be at composition level
+    val scope = rememberCoroutineScope()
 
     // Calculate canAddFavorite locally based on max 10 favorites limit
     val canAddFavoriteLocal = localFavorites.size < 10
 
     // Show appropriate dialog based on simplifyAnimeDetails setting
     if (showDialog && selectedAnime != null) {
+        // Set first anime on first open
+        if (firstAnime == null) {
+            firstAnime = selectedAnime
+        }
+        
         val anime = selectedAnime!!
         val isAnimeFavorite = localFavorites.containsKey(anime.id)
         val animeStatus = animeStatusMap[anime.id]
@@ -83,7 +102,16 @@ fun ExploreScreen(
                 isFavorite = isAnimeFavorite,
                 canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
                 onToggleFavorite = { onToggleFavorite(anime) },
-                onDismiss = { showDialog = false },
+                onDismiss = { 
+                    // Go back to first anime if we've navigated, otherwise close
+                    if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
+                        selectedAnime = firstAnime
+                    } else {
+                        showDialog = false
+                        firstAnime = null
+                        onClearAnimeStack()
+                    }
+                },
                 onAddToPlanning = { viewModel.addExploreAnimeToList(anime, "PLANNING") },
                 onAddToDropped = { viewModel.addExploreAnimeToList(anime, "DROPPED") },
                 onAddToOnHold = { viewModel.addExploreAnimeToList(anime, "PAUSED") },
@@ -118,7 +146,17 @@ fun ExploreScreen(
                 currentStatus = animeStatus,
                 isFavorite = isAnimeFavorite,
                 canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
-                onDismiss = { showDialog = false },
+                onDismiss = { 
+                    // Go back to first anime if we've navigated, otherwise close
+                    if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
+                        selectedAnime = firstAnime
+                    } else {
+                        showDialog = false
+                        firstAnime = null
+                        onClearAnimeStack()
+                    }
+                },
+                onSwipeToClose = { showDialog = false; onClearAnimeStack() },
                 onPlayEpisode = { episode ->
                     val animeMedia = AnimeMedia(
                         id = anime.id,
@@ -147,7 +185,46 @@ fun ExploreScreen(
                     viewModel.removeAnimeFromList(anime.id)
                 },
                 onToggleFavorite = { onToggleFavorite(anime) },
-                isLoggedIn = isLoggedIn
+                isLoggedIn = isLoggedIn,
+                onRelationClick = { relation ->
+                    try {
+                        android.util.Log.d("ExploreScreen", "Relation clicked: ${relation.title} (id: ${relation.id})")
+                        android.util.Log.d("ExploreScreen", "Relation cover: ${relation.cover}, format: ${relation.format}")
+                        scope.launch {
+                            try {
+                                delay(100)
+                                android.util.Log.d("ExploreScreen", "Calling fetchDetailedAnimeData with id: ${relation.id}")
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                android.util.Log.d("ExploreScreen", "Fetch result: detailedData=${detailedData?.title}, id=${detailedData?.id}")
+                                if (detailedData != null) {
+                                    android.util.Log.d("ExploreScreen", "Got data: ${detailedData.title}, updating current dialog")
+                                    // Update the current dialog instead of opening a new one
+                                    selectedAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year
+                                    )
+                                } else {
+                                    android.util.Log.d("ExploreScreen", "Failed to fetch detailed data for relation!")
+                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("ExploreScreen", "Error in scope.launch: ${e.message}", e)
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ExploreScreen", "Error in onRelationClick: ${e.message}", e)
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
         }
     }
