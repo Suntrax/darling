@@ -3,7 +3,6 @@ package com.blissless.anime.api
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -59,7 +58,6 @@ object AnimepaheScrape {
 
     suspend fun getStream(context: Context, query: String, episodeNumber: Int, englishTitle: String? = null): AniwatchStreamResult? = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Scraping Animepahe for: $query (EN: $englishTitle), Episode: $episodeNumber")
 
             // 1. Get Cookies
             val cookies = withContext(Dispatchers.Main) {
@@ -67,7 +65,6 @@ object AnimepaheScrape {
             }
 
             if (cookies.isNullOrEmpty()) {
-                Log.e(TAG, "Failed to fetch cookies")
                 return@withContext null
             }
 
@@ -76,14 +73,12 @@ object AnimepaheScrape {
             var session = animeSessionCache[normQuery]
 
             if (session == null) {
-                Log.d(TAG, "Session not in cache, performing search...")
                 var searchResults = performSearch(query, cookies)
                 if ((searchResults == null || searchResults.isEmpty()) && !englishTitle.isNullOrBlank()) {
                     searchResults = performSearch(englishTitle, cookies)
                 }
 
                 if (searchResults == null || searchResults.isEmpty()) {
-                    Log.e(TAG, "No results found on Animepahe")
                     return@withContext null
                 }
 
@@ -92,11 +87,9 @@ object AnimepaheScrape {
                     session = match["session"]?.jsonPrimitive?.content
                     if (session != null) {
                         animeSessionCache[normQuery] = session
-                        Log.d(TAG, "Cached session $session for query $normQuery")
                     }
                 }
             } else {
-                Log.d(TAG, "Using cached session: $session")
             }
 
             if (session == null) return@withContext null
@@ -123,7 +116,6 @@ object AnimepaheScrape {
                 episodeNumber
             }
 
-            Log.d(TAG, "Mapping Episode: Input $episodeNumber -> Absolute Target: $absoluteTarget (Start: $firstEpNum)")
 
             // Find Episode
             var episodeMatch = episodes.find { getEpNum(it) == absoluteTarget }
@@ -138,7 +130,6 @@ object AnimepaheScrape {
             // If missing, we return null.
 
             if (episodeMatch == null) {
-                Log.e(TAG, "Episode $episodeNumber not found in cached list for $session")
                 return@withContext null
             }
 
@@ -146,7 +137,6 @@ object AnimepaheScrape {
 
             // 4. Check Stream URL Cache
             streamUrlCache[epSession]?.let { cachedUrl ->
-                Log.d(TAG, "Using cached stream URL for episode session $epSession")
                 return@withContext createResult(cachedUrl)
             }
 
@@ -165,11 +155,9 @@ object AnimepaheScrape {
 
             val kwikRegex = Regex("https://kwik\\.cx/e/[a-zA-Z0-9]+")
             val kwikLink = kwikRegex.find(playHtml)?.value ?: run {
-                Log.e(TAG, "Kwik link not found in play page")
                 return@withContext null
             }
 
-            Log.d(TAG, "Found Kwik Link: $kwikLink")
 
             // 6. Extract M3U8
             val streamUrl = withContext(Dispatchers.Main) {
@@ -184,7 +172,6 @@ object AnimepaheScrape {
             null
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            Log.e(TAG, "Scraper Error", e)
             null
         }
     }
@@ -216,7 +203,6 @@ object AnimepaheScrape {
         val epData = json.parseToJsonElement(epResponseStr).jsonObject
         val pageEpisodes = epData["data"]?.jsonArray ?: return
         cacheList.addAll(pageEpisodes)
-        Log.d(TAG, "Fetched page $page, cached ${pageEpisodes.size} episodes. Total cached: ${cacheList.size}")
     }
 
     private fun findBestMatch(results: JsonArray, normQuery: String, normEnglish: String?): JsonObject? {
@@ -267,7 +253,6 @@ object AnimepaheScrape {
                 val cookies = cookieManager.getCookie(BASE_URL)
                 if (!cookies.isNullOrEmpty() && (cookies.contains("__ddg") || cookies.contains("animepahe_"))) {
                     finished = true
-                    Log.d(TAG, "Cookies obtained")
                     continuation.resume(cookies)
                     webView.destroy()
                 } else {
@@ -286,7 +271,6 @@ object AnimepaheScrape {
         handler.postDelayed({
             if (!finished) {
                 finished = true
-                Log.e(TAG, "Cookie fetch timeout")
                 continuation.resume(null)
                 webView.destroy()
             }
@@ -313,7 +297,6 @@ object AnimepaheScrape {
         val timeoutRunnable = Runnable {
             if (!finished) {
                 finished = true
-                Log.e(TAG, "Kwik WebView: Timeout")
                 continuation.resume(null)
                 webView.destroy()
             }

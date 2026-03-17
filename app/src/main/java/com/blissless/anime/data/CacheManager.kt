@@ -1,7 +1,6 @@
 package com.blissless.anime.data
 
 import android.content.SharedPreferences
-import android.util.Log
 import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.ServerInfo
@@ -50,7 +49,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     val playbackPositions: StateFlow<Map<String, Long>> = _playbackPositions.asStateFlow()
 
     fun invalidateUserCache() {
-        Log.d(TAG, "Invalidating persistent user cache")
         sharedPreferences.edit {
             remove(CACHE_HOME_DATA)
                 .remove(CACHE_HOME_TIME)
@@ -73,7 +71,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             sharedPreferences.edit { putString(CACHE_HOME_DATA, jsonString) }
             setCacheTime(CACHE_HOME_TIME)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save home data", e)
         }
     }
 
@@ -93,7 +90,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             sharedPreferences.edit { putString(CACHE_EXPLORE_DATA, jsonString) }
             setCacheTime(CACHE_EXPLORE_TIME)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save explore data", e)
         }
     }
 
@@ -114,7 +110,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             sharedPreferences.edit { putString(CACHE_AIRING_DATA, jsonString) }
             setCacheTime(CACHE_AIRING_TIME)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save airing schedule", e)
         }
     }
 
@@ -173,9 +168,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
             _prefetchedStreams.value = streamMap
             _prefetchedEpisodeInfo.value = episodeMap
-            Log.d(TAG, "Loaded stream cache: ${streamMap.size} streams, ${episodeMap.size} episode infos")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load stream cache", e)
         }
     }
 
@@ -222,7 +215,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val jsonString = json.encodeToString(StreamCacheData.serializer(), StreamCacheData(entries))
             sharedPreferences.edit { putString(CACHE_STREAM_DATA, jsonString) }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save stream cache", e)
         }
     }
 
@@ -232,7 +224,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val cacheData = json.decodeFromString<PlaybackPositionCache>(cachedData)
             _playbackPositions.value = cacheData.positions
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load playback positions", e)
         }
     }
 
@@ -271,7 +262,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     fun getCachedStream(key: String): AniwatchStreamResult? {
         val stream = _prefetchedStreams.value[key]
         if (stream != null) {
-            Log.d(TAG, "Cache hit for stream: $key, timestamps: intro=[${stream.introStart}-${stream.introEnd}], outro=[${stream.outroStart}-${stream.outroEnd}]")
         }
         return stream
     }
@@ -283,7 +273,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     fun cacheStream(key: String, stream: AniwatchStreamResult?) {
         _prefetchedStreams.value = _prefetchedStreams.value + (key to stream)
-        Log.d(TAG, "Cached stream for key: $key, category: ${stream?.category}, timestamps: intro=[${stream?.introStart}-${stream?.introEnd}], outro=[${stream?.outroStart}-${stream?.outroEnd}]")
         saveStreamCache()
     }
 
@@ -293,12 +282,10 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     fun cacheEpisodeInfo(key: String, info: EpisodeStreams) {
         _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
-        Log.d(TAG, "Cached episode info for key: $key, subServers=${info.subServers.size}, dubServers=${info.dubServers.size}")
     }
 
     fun hasStream(key: String): Boolean {
         val exists = _prefetchedStreams.value.containsKey(key)
-        Log.d(TAG, "hasStream($key) = $exists")
         return exists
     }
 
@@ -348,7 +335,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         keysToRemove.forEach { key ->
             if (newMap.containsKey(key)) {
                 newMap.remove(key)
-                Log.d(TAG, "Invalidated stream cache for key: $key")
                 removed = true
             }
         }
@@ -369,7 +355,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val newMap = _prefetchedStreams.value.toMutableMap()
             newMap.remove(key)
             _prefetchedStreams.value = newMap
-            Log.d(TAG, "Invalidated server cache for key: $key")
             saveStreamCache()
         }
     }

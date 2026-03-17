@@ -1,6 +1,5 @@
 package com.blissless.anime.api
 
-import android.util.Log
 import com.blissless.anime.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -68,7 +67,6 @@ object ZenimeScraper {
             try {
                 return block()
             } catch (e: Exception) {
-                Log.w(TAG, "Retry attempt ${attempt + 1} failed", e)
                 attempt++
                 if (attempt >= retries) return null
                 delay(500L * attempt)
@@ -84,7 +82,6 @@ object ZenimeScraper {
         retry {
             val encodedName = URLEncoder.encode(animeName, "UTF-8")
             val searchUrl = "$API_BASE/search?keyword=$encodedName"
-            Log.d(TAG, "Searching: $searchUrl")
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
@@ -93,7 +90,6 @@ object ZenimeScraper {
             val searchResponse = client.newCall(searchRequest).execute()
 
             if (!searchResponse.isSuccessful) {
-                Log.e(TAG, "Search failed: ${searchResponse.code}")
                 return@retry null
             }
 
@@ -102,7 +98,6 @@ object ZenimeScraper {
             val dataArray = results.optJSONArray("data")
 
             if (dataArray == null || dataArray.length() == 0) {
-                Log.e(TAG, "No anime found for: $animeName")
                 return@retry null
             }
 
@@ -112,7 +107,6 @@ object ZenimeScraper {
                 val id = anime.getString("id")
                 val title = anime.getString("title")
                 animeList.add(Pair(id, title))
-                Log.d(TAG, "Found anime: $title (id: $id)")
             }
 
             animeList
@@ -125,7 +119,6 @@ object ZenimeScraper {
     suspend fun getEpisodes(animeId: String): List<Pair<String, Int>>? = withContext(Dispatchers.IO) {
         retry {
             val episodesUrl = "$API_BASE/episodes/$animeId"
-            Log.d(TAG, "Fetching episodes: $episodesUrl")
 
             val request = Request.Builder()
                 .url(episodesUrl)
@@ -134,7 +127,6 @@ object ZenimeScraper {
             val response = client.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                Log.e(TAG, "Episodes fetch failed: ${response.code}")
                 return@retry null
             }
 
@@ -143,7 +135,6 @@ object ZenimeScraper {
             val episodesArray = results.optJSONArray("episodes")
 
             if (episodesArray == null || episodesArray.length() == 0) {
-                Log.e(TAG, "No episodes found for anime: $animeId")
                 return@retry null
             }
 
@@ -155,7 +146,6 @@ object ZenimeScraper {
                 episodes.add(Pair(epId, epNum))
             }
 
-            Log.d(TAG, "Found ${episodes.size} episodes")
             episodes
         }
     }
@@ -166,7 +156,6 @@ object ZenimeScraper {
     suspend fun getServers(episodeId: String): ZenimeEpisodeStreams? = withContext(Dispatchers.IO) {
         retry {
             val serversUrl = "$API_BASE/servers/$episodeId"
-            Log.d(TAG, "Fetching servers: $serversUrl")
 
             val request = Request.Builder()
                 .url(serversUrl)
@@ -175,7 +164,6 @@ object ZenimeScraper {
             val response = client.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                Log.e(TAG, "Servers fetch failed: ${response.code}")
                 return@retry null
             }
 
@@ -183,7 +171,6 @@ object ZenimeScraper {
             val resultsArray = data.optJSONArray("results")
 
             if (resultsArray == null || resultsArray.length() == 0) {
-                Log.e(TAG, "No servers found for episode: $episodeId")
                 return@retry null
             }
 
@@ -202,14 +189,11 @@ object ZenimeScraper {
 
                 if (type == "sub") {
                     subServers.add(serverInfo)
-                    Log.d(TAG, "Sub server: $serverName")
                 } else if (type == "dub") {
                     dubServers.add(serverInfo)
-                    Log.d(TAG, "Dub server: $serverName")
                 }
             }
 
-            Log.d(TAG, "Found ${subServers.size} sub servers, ${dubServers.size} dub servers")
 
             ZenimeEpisodeStreams(
                 subServers = subServers,
@@ -230,7 +214,6 @@ object ZenimeScraper {
     ): ZenimeStreamResult? = withContext(Dispatchers.IO) {
         retry {
             val streamUrl = "$API_BASE/stream?id=$episodeId&server=$serverName&type=$type"
-            Log.d(TAG, "Fetching stream: $streamUrl")
 
             val request = Request.Builder()
                 .url(streamUrl)
@@ -239,7 +222,6 @@ object ZenimeScraper {
             val response = client.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                Log.e(TAG, "Stream fetch failed: ${response.code}")
                 return@retry null
             }
 
@@ -247,14 +229,12 @@ object ZenimeScraper {
             val results = data.optJSONObject("results")
 
             if (results == null) {
-                Log.e(TAG, "No results in stream response")
                 return@retry null
             }
 
             val streamingLink = results.optJSONObject("streamingLink")
 
             if (streamingLink == null) {
-                Log.e(TAG, "No streamingLink in response")
                 return@retry null
             }
 
@@ -262,11 +242,9 @@ object ZenimeScraper {
             val streamUrlStr = linkObj?.optString("file")
 
             if (streamUrlStr.isNullOrEmpty()) {
-                Log.e(TAG, "No stream URL in response")
                 return@retry null
             }
 
-            Log.d(TAG, "Stream URL: ${streamUrlStr.take(80)}...")
 
             // Find English subtitle track
             var englishSubtitle: String? = null
@@ -283,7 +261,6 @@ object ZenimeScraper {
                     if (kind == "captions" && (label == "English" || label.contains("English", ignoreCase = true))) {
                         if (file.endsWith(".vtt") || file.endsWith(".srt")) {
                             englishSubtitle = file
-                            Log.d(TAG, "Found English subtitle: $englishSubtitle")
                             break
                         }
                     }
@@ -298,7 +275,6 @@ object ZenimeScraper {
 
                         if (kind == "captions" && (file.endsWith(".vtt") || file.endsWith(".srt"))) {
                             englishSubtitle = file
-                            Log.d(TAG, "Found subtitle track: $englishSubtitle")
                             break
                         }
                     }
@@ -308,7 +284,6 @@ object ZenimeScraper {
             // Headers for the stream - use correct Referer based on server
             val headers = getHeadersForServer(serverName)
 
-            Log.d(TAG, "Using headers for $serverName: Referer=${headers["Referer"]}")
 
             ZenimeStreamResult(
                 url = streamUrlStr,
@@ -330,7 +305,6 @@ object ZenimeScraper {
             // 1. Search for anime
             val searchResults = searchAnime(animeName)
             if (searchResults.isNullOrEmpty()) {
-                Log.e(TAG, "No search results for: $animeName")
                 return@retry null
             }
 
@@ -339,20 +313,17 @@ object ZenimeScraper {
             for ((id, title) in searchResults) {
                 if (title.equals(animeName, ignoreCase = true)) {
                     animeId = id
-                    Log.d(TAG, "Found exact match: $title (id: $id)")
                     break
                 }
             }
 
             if (animeId == null) {
                 animeId = searchResults[0].first
-                Log.d(TAG, "Using first result: ${searchResults[0].second} (id: $animeId)")
             }
 
             // 2. Get episodes
             val episodes = getEpisodes(animeId)
             if (episodes.isNullOrEmpty()) {
-                Log.e(TAG, "No episodes found")
                 return@retry null
             }
 
@@ -361,7 +332,6 @@ object ZenimeScraper {
             for ((epId, epNum) in episodes) {
                 if (epNum == episodeNumber) {
                     episodeId = epId
-                    Log.d(TAG, "Found episode $episodeNumber with ID: $episodeId")
                     break
                 }
             }
@@ -369,11 +339,9 @@ object ZenimeScraper {
             // If episode number not found, try by index
             if (episodeId == null && episodeNumber <= episodes.size) {
                 episodeId = episodes[episodeNumber - 1].first
-                Log.d(TAG, "Using episode by index: $episodeId")
             }
 
             if (episodeId == null) {
-                Log.e(TAG, "Episode $episodeNumber not found")
                 return@retry null
             }
 
@@ -400,7 +368,6 @@ object ZenimeScraper {
         // Get episode info
         val episodeInfo = getEpisodeInfo(animeName, episodeNumber)
         if (episodeInfo == null) {
-            Log.e(TAG, "Could not get episode info")
             return@withContext null
         }
 
@@ -435,7 +402,6 @@ object ZenimeScraper {
 
         // Fall back to other category
         if (fallbackServers.isNotEmpty()) {
-            Log.d(TAG, "Falling back to $fallbackCategory servers")
             val fallbackServer = fallbackServers[0]
             val stream = getStream(episodeInfo.episodeId, fallbackServer.name, fallbackCategory)
             if (stream != null) {
@@ -443,7 +409,6 @@ object ZenimeScraper {
             }
         }
 
-        Log.e(TAG, "Could not get any stream")
         null
     }
 
@@ -459,7 +424,6 @@ object ZenimeScraper {
     ): ZenimeStreamResult? = withContext(Dispatchers.IO) {
         val episodeInfo = getEpisodeInfo(animeName, episodeNumber)
         if (episodeInfo == null) {
-            Log.e(TAG, "Could not get episode info")
             return@withContext null
         }
 

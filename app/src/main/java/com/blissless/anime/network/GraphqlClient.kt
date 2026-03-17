@@ -1,6 +1,5 @@
 package com.blissless.anime.network
 
-import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
@@ -106,7 +105,6 @@ class GraphQLClient(
      */
     private fun startQueueProcessor() {
         queueProcessorJob = scope.launch {
-            Log.d(TAG, "Starting GraphQL request queue processor")
             for (request in requestChannel) {
                 processRequest(request)
             }
@@ -150,7 +148,6 @@ class GraphQLClient(
         repeat(config.maxRetries + 1) { attempt ->
             if (attempt > 0) {
                 val delay = calculateBackoffDelay(attempt - 1, lastError?.retryAfter)
-                Log.d(TAG, "Retry attempt $attempt after ${delay}ms")
                 kotlinx.coroutines.delay(delay)
             }
 
@@ -271,7 +268,6 @@ class GraphQLClient(
             rateLimitState.isLimited = true
             rateLimitState.lastLimitedTime = System.currentTimeMillis()
             rateLimitState.retryAfterMs = (retryAfter ?: 60) * 1000 // Default to 60s if not specified
-            Log.w(TAG, "Rate limit detected. Waiting ${rateLimitState.retryAfterMs}ms")
         }
     }
 
@@ -295,7 +291,6 @@ class GraphQLClient(
         }
 
         if (delayNeeded > 0) {
-            Log.d(TAG, "Waiting for rate limit: ${delayNeeded}ms remaining")
             kotlinx.coroutines.delay(delayNeeded)
             synchronized(rateLimitState) {
                 rateLimitState.isLimited = false
@@ -387,7 +382,6 @@ class GraphQLClient(
         val entry = responseCache[cacheKey] ?: return null
         val now = System.currentTimeMillis()
         if (now - entry.timestamp < config.cacheDurationMs) {
-            Log.d(TAG, "Cache hit for key: ${cacheKey.take(20)}...")
             return entry.response
         }
         responseCache.remove(cacheKey)
@@ -448,7 +442,6 @@ class GraphQLClient(
         // Check for pending duplicate request
         val existingPending = pendingRequests[cacheKey]
         if (existingPending != null) {
-            Log.d(TAG, "Deduplicating pending request")
             scope.launch {
                 try {
                     val response = existingPending.await()
@@ -524,7 +517,6 @@ class GraphQLClient(
     fun invalidateCache(predicate: (String) -> Boolean = { true }) {
         val keysToRemove = responseCache.keys.filter(predicate)
         keysToRemove.forEach { responseCache.remove(it) }
-        Log.d(TAG, "Invalidated ${keysToRemove.size} cache entries")
     }
 
     /**
@@ -533,7 +525,6 @@ class GraphQLClient(
     fun clearCache() {
         responseCache.clear()
         pendingRequests.clear()
-        Log.d(TAG, "All caches cleared")
     }
 
     /**

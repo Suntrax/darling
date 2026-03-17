@@ -1,6 +1,5 @@
 package com.blissless.anime.ui.screens
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -465,13 +464,10 @@ fun HomeScreen(
                 firstAnime = null
             }, onPlayEpisode = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false }, onUpdateStatus = { status -> if (status != null) viewModel.updateAnimeStatus(selectedAnime!!.id, status) }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false }, isLoggedIn = isLoggedIn, onLoginClick = onLoginClick, onRelationClick = { relation -> 
                 try { 
-                    Log.d("HomeScreen", "Relation clicked: ${relation.title} (id: ${relation.id})")
                     scope.launch {
                         try {
-                            Log.d("HomeScreen", "Fetching detailed data...")
                             val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                             if (detailedData != null) {
-                                Log.d("HomeScreen", "Got data: ${detailedData.title}, updating dialog in place")
                                 // Update the current dialog instead of opening a new one
                                 selectedAnime = AnimeMedia(
                                     id = detailedData.id,
@@ -491,16 +487,13 @@ fun HomeScreen(
                                     malId = detailedData.malId
                                 )
                             } else {
-                                Log.d("HomeScreen", "Failed to fetch detailed data for relation!")
                                 Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) { 
-                            Log.e("HomeScreen", "Error in launch: ${e.message}", e)
                             Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                         } 
                     } 
                 } catch (e: Exception) { 
-                    Log.e("HomeScreen", "Error: ${e.message}", e)
                     Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                 } 
             })

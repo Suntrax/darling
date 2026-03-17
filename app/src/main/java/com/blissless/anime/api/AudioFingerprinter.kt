@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -63,7 +62,6 @@ class AudioFingerprinter(private val context: Context) {
             audioFile.delete()
             fingerprint
         } catch (e: Exception) {
-            Log.e(TAG, "Error extracting fingerprint", e)
             null
         }
     }

@@ -2,7 +2,6 @@ package com.blissless.anime.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import com.blissless.anime.data.models.StoredFavorite
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -113,7 +112,6 @@ class UserPreferences(private val context: Context) {
         if (hasToken) {
             val token = sharedPreferences.getString(TOKEN_KEY, null)
             _authToken.value = token
-            Log.d(TAG, "Token loaded: ${token?.take(20)}...")
         }
 
         // Load UI preferences
@@ -137,7 +135,6 @@ class UserPreferences(private val context: Context) {
         // Load local favorites
         loadLocalFavorites()
 
-        Log.d(TAG, "Preferences loaded - preferredScraper: ${_preferredScraper.value}")
     }
 
     // ============================================
@@ -147,13 +144,11 @@ class UserPreferences(private val context: Context) {
     fun saveToken(token: String) {
         sharedPreferences.edit { putString(TOKEN_KEY, token) }
         _authToken.value = token
-        Log.d(TAG, "Token saved")
     }
 
     fun clearToken() {
         _authToken.value = null
         sharedPreferences.edit { remove(TOKEN_KEY) }
-        Log.d(TAG, "Token cleared")
     }
 
     // ============================================
@@ -240,7 +235,6 @@ class UserPreferences(private val context: Context) {
     fun setEnableThumbnailPreview(enabled: Boolean) {
         _enableThumbnailPreview.value = enabled
         sharedPreferences.edit {putBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, enabled) }
-        Log.d(TAG, "Thumbnail preview set to: $enabled")
     }
 
     fun setPreferredScraper(scraper: String) {
@@ -280,7 +274,6 @@ class UserPreferences(private val context: Context) {
         } else {
             // Add new favorite (max 10)
             if (currentFavorites.size >= 10) {
-                Log.w(TAG, "Cannot add more than 10 local favorites")
                 return
             }
             currentFavorites[mediaId] = StoredFavorite(mediaId, title, cover, banner, year, averageScore)
@@ -335,11 +328,9 @@ class UserPreferences(private val context: Context) {
                     val fav = json.decodeFromString(StoredFavorite.serializer(), favJson)
                     favorites[fav.id] = fav
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to parse favorite: ${e.message}")
                 }
             }
             _localFavorites.value = favorites
-            Log.d(TAG, "Loaded ${favorites.size} favorites (v2 format)")
             return
         }
 
@@ -351,7 +342,6 @@ class UserPreferences(private val context: Context) {
                 favorites[id] = StoredFavorite(id, "", "")
             }
             _localFavorites.value = favorites
-            Log.d(TAG, "Migrated ${favorites.size} favorites (v1 format)")
 
             // Save in v2 format
             saveLocalFavorites(favorites)
@@ -375,7 +365,6 @@ class UserPreferences(private val context: Context) {
                 .remove("cache_airing_data")
                 .remove("cache_airing_time")
         }
-        Log.d(TAG, "User data cleared")
     }
 
     /**
@@ -383,7 +372,6 @@ class UserPreferences(private val context: Context) {
      */
     fun clearAllPreferences() {
         sharedPreferences.edit {clear()}
-        Log.d(TAG, "All preferences cleared")
     }
 
     fun getSharedPreferences(): SharedPreferences = sharedPreferences

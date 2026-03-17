@@ -120,15 +120,11 @@ fun DetailedAnimeScreen(
         previousAnimeId = anime.id
         
         try {
-            android.util.Log.d("DetailedAnimeScreen", "Fetching details for anime.id=${anime.id}")
             detailedData = viewModel.fetchDetailedAnimeData(anime.id)
-            android.util.Log.d("DetailedAnimeScreen", "Fetch complete, data=${detailedData?.title}")
             relations = detailedData?.relations ?: anime.relations
         } catch (e: Exception) {
-            android.util.Log.e("DetailedAnimeScreen", "Error fetching details for ${anime.id}", e)
         } finally {
             isLoadingDetails = false
-            android.util.Log.d("DetailedAnimeScreen", "Loading set to false")
         }
     }
     
@@ -571,7 +567,6 @@ fun DetailedAnimeScreen(
                                 items(filteredRelations) { relation ->
                                     Column(
                                         modifier = Modifier.width(100.dp).clickable { 
-                                            android.util.Log.d("DetailedAnimeScreen", "Relation clicked: ${relation.title}, id: ${relation.id}")
                                             onRelationClick(relation) 
                                         }
                                     ) {

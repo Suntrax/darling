@@ -2,7 +2,6 @@ package com.blissless.anime.player
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import androidx.core.content.edit
@@ -63,7 +62,6 @@ class TimestampManager(context: Context) {
             )
         }
 
-        Log.d(TAG, "Saved timestamps for $animeName ep $episodeNumber: intro=$introStart-$introEnd, credits=$creditsStart")
     }
 
     /**
@@ -94,7 +92,6 @@ class TimestampManager(context: Context) {
             val map = json.decodeFromString<SerializableMap>(stored)
             map.timestamps
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading timestamps", e)
             emptyMap()
         }
     }

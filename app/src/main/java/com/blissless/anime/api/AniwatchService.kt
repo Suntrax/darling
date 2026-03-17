@@ -6,7 +6,6 @@ import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.QualityOption
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -32,7 +31,6 @@ object AniwatchService {
             try {
                 return block()
             } catch (e: Exception) {
-                Log.w(TAG, "Retry attempt ${attempt + 1} failed", e)
                 attempt++
                 if (attempt >= retries) return null
                 delay(500L * attempt)
@@ -68,7 +66,6 @@ object AniwatchService {
                         url = streamUrl,
                         width = width
                     ))
-                    Log.d(TAG, "Found quality: $qualityName ($width x $height)")
                 }
             }
         }
@@ -76,7 +73,6 @@ object AniwatchService {
         // Sort by quality (highest first)
         qualities.sortByDescending { it.width }
 
-        Log.d(TAG, "Parsed ${qualities.size} quality options")
         return qualities
     }
 
@@ -92,14 +88,12 @@ object AniwatchService {
             val response = client.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                Log.e(TAG, "Failed to fetch master playlist: ${response.code}")
                 return@withContext emptyList()
             }
 
             val content = response.body.string()
             parseM3U8Qualities(masterUrl, content)
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching qualities", e)
             emptyList()
         }
     }
@@ -110,7 +104,6 @@ object AniwatchService {
             // 1. SEARCH
             val encodedName = URLEncoder.encode(animeName, "UTF-8")
             val searchUrl = "$API_BASE/search?q=$encodedName"
-            Log.d(TAG, "Searching: $searchUrl")
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
@@ -119,17 +112,14 @@ object AniwatchService {
             val searchResponse = client.newCall(searchRequest).execute()
 
             if (!searchResponse.isSuccessful) {
-                Log.e(TAG, "Search failed: ${searchResponse.code}")
                 return@retry null
             }
 
             val searchData = JSONObject(searchResponse.body.string())
-            Log.d(TAG, "Search response status: ${searchData.optInt("status", -1)}")
 
             if (searchData.getInt("status") != 200) return@retry null
             val animes = searchData.getJSONObject("data").getJSONArray("animes")
             if (animes.length() == 0) {
-                Log.e(TAG, "No anime found for: $animeName")
                 return@retry null
             }
 
@@ -137,7 +127,6 @@ object AniwatchService {
             for (i in 0 until animes.length()) {
                 val anime = animes.getJSONObject(i)
                 val name = anime.getString("name")
-                Log.d(TAG, "Found anime: $name (id: ${anime.getString("id")})")
                 if (name.equals(animeName, ignoreCase = true)) {
                     animeId = anime.getString("id")
                     break
@@ -145,12 +134,10 @@ object AniwatchService {
             }
             if (animeId == null) {
                 animeId = animes.getJSONObject(0).getString("id")
-                Log.d(TAG, "Using first result: $animeId")
             }
 
             // 2. GET EPISODES
             val epUrl = "$API_BASE/anime/$animeId/episodes"
-            Log.d(TAG, "Fetching episodes: $epUrl")
 
             val epRequest = Request.Builder()
                 .url(epUrl)
@@ -159,13 +146,11 @@ object AniwatchService {
             val epResponse = client.newCall(epRequest).execute()
 
             if (!epResponse.isSuccessful) {
-                Log.e(TAG, "Episodes fetch failed: ${epResponse.code}")
                 return@retry null
             }
 
             val epData = JSONObject(epResponse.body.string())
             val episodes = epData.getJSONObject("data").getJSONArray("episodes")
-            Log.d(TAG, "Found ${episodes.length()} episodes")
 
             var episodeId: String? = null
             for (i in 0 until episodes.length()) {
@@ -173,12 +158,10 @@ object AniwatchService {
                 val epNum = ep.get("number").toString()
                 if (epNum == episodeNumber.toString()) {
                     episodeId = ep.getString("episodeId")
-                    Log.d(TAG, "Found episode $episodeNumber with ID: $episodeId")
                     break
                 }
             }
             if (episodeId == null) {
-                Log.e(TAG, "Episode $episodeNumber not found")
                 return@retry null
             }
 
@@ -188,7 +171,6 @@ object AniwatchService {
 
             // Fetch servers (no category param - returns both)
             val serversUrl = "$API_BASE/episode/servers?animeEpisodeId=$episodeId"
-            Log.d(TAG, "Fetching servers: $serversUrl")
 
             val serversRequest = Request.Builder()
                 .url(serversUrl)
@@ -198,7 +180,6 @@ object AniwatchService {
 
             if (serversResponse.isSuccessful) {
                 val serversData = JSONObject(serversResponse.body.string())
-                Log.d(TAG, "Servers response: ${serversData.toString().take(500)}")
 
                 if (serversData.getInt("status") == 200) {
                     val dataObj = serversData.getJSONObject("data")
@@ -213,7 +194,6 @@ object AniwatchService {
                                 name = serverName,
                                 url = "" // URL not provided in servers list
                             ))
-                            Log.d(TAG, "Sub server: $serverName")
                         }
                     }
 
@@ -227,11 +207,9 @@ object AniwatchService {
                                 name = serverName,
                                 url = ""
                             ))
-                            Log.d(TAG, "Dub server: $serverName")
                         }
                     }
 
-                    Log.d(TAG, "Found ${subServers.size} sub servers, ${dubServers.size} dub servers")
                 }
             }
 
@@ -255,7 +233,6 @@ object AniwatchService {
             // 1. SEARCH
             val encodedName = URLEncoder.encode(animeName, "UTF-8")
             val searchUrl = "$API_BASE/search?q=$encodedName"
-            Log.d(TAG, "Searching for anime: $animeName")
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
@@ -264,20 +241,17 @@ object AniwatchService {
             val searchResponse = client.newCall(searchRequest).execute()
 
             if (!searchResponse.isSuccessful) {
-                Log.e(TAG, "Search request failed: ${searchResponse.code}")
                 return@retry null
             }
 
             val searchData = JSONObject(searchResponse.body.string())
 
             if (searchData.getInt("status") != 200) {
-                Log.e(TAG, "Search returned non-200 status")
                 return@retry null
             }
 
             val animes = searchData.getJSONObject("data").getJSONArray("animes")
             if (animes.length() == 0) {
-                Log.e(TAG, "No anime found in search results")
                 return@retry null
             }
 
@@ -286,18 +260,15 @@ object AniwatchService {
                 val anime = animes.getJSONObject(i)
                 if (anime.getString("name").equals(animeName, ignoreCase = true)) {
                     animeId = anime.getString("id")
-                    Log.d(TAG, "Found matching anime with ID: $animeId")
                     break
                 }
             }
             if (animeId == null) {
                 animeId = animes.getJSONObject(0).getString("id")
-                Log.d(TAG, "Using first anime result with ID: $animeId")
             }
 
             // 2. GET EPISODES
             val epUrl = "$API_BASE/anime/$animeId/episodes"
-            Log.d(TAG, "Fetching episodes from: $epUrl")
 
             val epRequest = Request.Builder()
                 .url(epUrl)
@@ -306,31 +277,26 @@ object AniwatchService {
             val epResponse = client.newCall(epRequest).execute()
 
             if (!epResponse.isSuccessful) {
-                Log.e(TAG, "Episodes request failed: ${epResponse.code}")
                 return@retry null
             }
 
             val epData = JSONObject(epResponse.body.string())
             val episodes = epData.getJSONObject("data").getJSONArray("episodes")
-            Log.d(TAG, "Found ${episodes.length()} episodes")
 
             var episodeId: String? = null
             for (i in 0 until episodes.length()) {
                 val ep = episodes.getJSONObject(i)
                 if (ep.get("number").toString() == episodeNumber.toString()) {
                     episodeId = ep.getString("episodeId")
-                    Log.d(TAG, "Found episode $episodeNumber with ID: $episodeId")
                     break
                 }
             }
             if (episodeId == null) {
-                Log.e(TAG, "Episode $episodeNumber not found in episode list")
                 return@retry null
             }
 
             // 3. GET SERVERS - fetch both sub and dub
             val serversUrl = "$API_BASE/episode/servers?animeEpisodeId=$episodeId"
-            Log.d(TAG, "Fetching servers from: $serversUrl")
 
             val serversRequest = Request.Builder()
                 .url(serversUrl)
@@ -339,15 +305,12 @@ object AniwatchService {
             val serversResponse = client.newCall(serversRequest).execute()
 
             if (!serversResponse.isSuccessful) {
-                Log.e(TAG, "Servers request failed: ${serversResponse.code}")
                 return@retry null
             }
 
             val serversData = JSONObject(serversResponse.body.string())
-            Log.d(TAG, "Servers response: ${serversData.toString().take(500)}")
 
             if (serversData.getInt("status") != 200) {
-                Log.e(TAG, "Servers returned non-200 status")
                 return@retry null
             }
 
@@ -361,11 +324,9 @@ object AniwatchService {
             }
 
             if (serversArray == null || serversArray.length() == 0) {
-                Log.e(TAG, "No $category servers available")
                 return@retry null
             }
 
-            Log.d(TAG, "Found ${serversArray.length()} $category servers")
 
             // Find the server or use first available
             var targetServerName = ""
@@ -376,7 +337,6 @@ object AniwatchService {
                     val sName = server.getString("serverName")
                     if (sName.equals(serverName, ignoreCase = true)) {
                         targetServerName = sName
-                        Log.d(TAG, "Found requested server: $targetServerName")
                         break
                     }
                 }
@@ -384,17 +344,14 @@ object AniwatchService {
 
             if (targetServerName.isEmpty() && serversArray.length() > 0) {
                 targetServerName = serversArray.getJSONObject(0).getString("serverName")
-                Log.d(TAG, "Using first available server: $targetServerName")
             }
 
             if (targetServerName.isEmpty()) {
-                Log.e(TAG, "No servers available")
                 return@retry null
             }
 
             // 4. GET SOURCES from the server
             val sourceUrl = "$API_BASE/episode/sources?animeEpisodeId=$episodeId&server=$targetServerName&category=$category"
-            Log.d(TAG, "Fetching sources from: $sourceUrl")
 
             val sourceRequest = Request.Builder()
                 .url(sourceUrl)
@@ -403,17 +360,14 @@ object AniwatchService {
             val sourceResponse = client.newCall(sourceRequest).execute()
 
             if (!sourceResponse.isSuccessful) {
-                Log.e(TAG, "Sources request failed: ${sourceResponse.code}")
                 return@retry null
             }
 
             val sourceBody = sourceResponse.body.string()
-            Log.d(TAG, "Sources response: ${sourceBody.take(500)}...")
 
             val sourceData = JSONObject(sourceBody)
 
             if (sourceData.getInt("status") != 200) {
-                Log.e(TAG, "Sources returned non-200 status: ${sourceData.optInt("status")}")
                 return@retry null
             }
 
@@ -421,13 +375,11 @@ object AniwatchService {
             val sources = data.optJSONArray("sources")
 
             if (sources == null || sources.length() == 0) {
-                Log.e(TAG, "No sources in response")
                 return@retry null
             }
 
             // Get the first source (m3u8 URL)
             val streamUrl = sources.getJSONObject(0).getString("url")
-            Log.d(TAG, "Stream URL: ${streamUrl.take(80)}...")
 
             // Fetch all quality options from master playlist
             val qualities = if (streamUrl.contains(".m3u8")) {
@@ -436,7 +388,6 @@ object AniwatchService {
                 emptyList()
             }
 
-            Log.d(TAG, "Found ${qualities.size} quality options")
 
             // Subtitles - find English track
             var englishSub: String? = null
@@ -447,7 +398,6 @@ object AniwatchService {
                     val lang = track.optString("lang", "")
                     if (lang == "English") {
                         englishSub = track.getString("url")
-                        Log.d(TAG, "Found English subtitle: $englishSub")
                         break
                     }
                 }
@@ -462,7 +412,6 @@ object AniwatchService {
                 apiHeaders.keys().forEach { key ->
                     headers[key] = apiHeaders.get(key).toString()
                 }
-                Log.d(TAG, "Got headers from response: ${headers.keys}")
             }
 
             // Ensure Referer is set

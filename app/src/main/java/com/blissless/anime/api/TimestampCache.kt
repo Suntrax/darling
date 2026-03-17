@@ -2,7 +2,6 @@ package com.blissless.anime.api
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import androidx.core.content.edit
@@ -85,7 +84,6 @@ class TimestampCache(private val context: Context) {
             val cacheData = loadCacheData()
             cacheData.entries[key]
         } catch (e: Exception) {
-            Log.e(TAG, "Error reading timestamp cache", e)
             null
         }
     }
@@ -112,9 +110,7 @@ class TimestampCache(private val context: Context) {
             val newData = CacheData(entries = mutableEntries.toMap())
             saveCacheData(newData)
 
-            Log.d(TAG, "Saved timestamp for ${timestamp.animeName} ep ${timestamp.episodeNumber}")
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving timestamp to cache", e)
         }
     }
 
@@ -176,7 +172,6 @@ class TimestampCache(private val context: Context) {
      */
     fun clearCache() {
         prefs.edit { clear() }
-        Log.d(TAG, "Cleared timestamp cache")
     }
 
     /**
@@ -196,9 +191,7 @@ class TimestampCache(private val context: Context) {
             val newData = CacheData(entries = mutableEntries.toMap())
             saveCacheData(newData)
 
-            Log.d(TAG, "Cleared ${keysToRemove.size} cached timestamps for $animeName")
         } catch (e: Exception) {
-            Log.e(TAG, "Error clearing anime cache", e)
         }
     }
 
@@ -257,7 +250,6 @@ class TimestampCache(private val context: Context) {
                 CacheData()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading cache data", e)
             CacheData()
         }
     }

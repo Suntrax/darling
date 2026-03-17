@@ -1,7 +1,6 @@
 package com.blissless.anime.api
 
 import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -48,11 +47,9 @@ class AnimeSkipService(private val context: Context? = null) {
         if (start < 0 || end <= start) return false
         val duration = end - start
         if (duration > MAX_INTRO_DURATION) {
-            Log.w(TAG, "Intro duration too long: ${duration}s, rejecting")
             return false
         }
         if (episodeLength != null && start > episodeLength * 0.25) {
-            Log.w(TAG, "Intro starts too late: ${start}s in ${episodeLength}s episode, rejecting")
             return false
         }
         return true
@@ -63,11 +60,9 @@ class AnimeSkipService(private val context: Context? = null) {
         if (start < 0 || end <= start) return false
         val duration = end - start
         if (duration > MAX_OUTRO_DURATION) {
-            Log.w(TAG, "Outro duration too long: ${duration}s, rejecting")
             return false
         }
         if (episodeLength != null && start < episodeLength * 0.7) {
-            Log.w(TAG, "Outro starts too early: ${start}s in ${episodeLength}s episode, rejecting")
             return false
         }
         return true
@@ -147,20 +142,17 @@ class AnimeSkipService(private val context: Context? = null) {
         )
 
         if (animekaiTimestamps != null && animekaiTimestamps.hasTimestamps()) {
-            Log.d(TAG, "Using Animekai timestamps as PRIMARY: intro=[$animekaiIntroStart-$animekaiIntroEnd], outro=[$animekaiOutroStart-$animekaiOutroEnd]")
             timestampCache?.saveFromEpisodeTimestamps(
                 malId, animeName, episodeNumber, animekaiTimestamps, "animekai"
             )
             return animekaiTimestamps
         }
 
-        Log.d(TAG, "Animekai timestamps not available or invalid, trying fallback sources...")
 
         // 2. FALLBACK: Check local cache
         timestampCache?.let { cache ->
             val cached = if (malId > 0) cache.getTimestamp(malId, episodeNumber) else cache.getTimestampByName(animeName, episodeNumber)
             if (cached != null && cached.hasTimestamps()) {
-                Log.d(TAG, "Using cached timestamps as fallback")
                 return cache.toEpisodeTimestamps(cached)
             }
         }
@@ -168,7 +160,6 @@ class AnimeSkipService(private val context: Context? = null) {
         // 3. FALLBACK: Try AniSkip API
         val aniskipResult = getSkipTimestamps(malId, episodeNumber, episodeLength)
         if (aniskipResult != null && aniskipResult.hasTimestamps()) {
-            Log.d(TAG, "Using AniSkip timestamps as fallback")
             timestampCache?.saveFromEpisodeTimestamps(
                 malId, animeName, episodeNumber, aniskipResult, "aniskip"
             )
@@ -179,7 +170,6 @@ class AnimeSkipService(private val context: Context? = null) {
         if (animeName.isNotEmpty()) {
             val fingerprintResult = tryAnimeThemesFallback(animeName, animeYear, episodeNumber, episodeLength, episodePath)
             if (fingerprintResult != null && fingerprintResult.hasTimestamps()) {
-                Log.d(TAG, "Using AnimeThemes timestamps as fallback")
                 timestampCache?.saveFromEpisodeTimestamps(
                     animeId, animeName, episodeNumber, fingerprintResult, "animethemes"
                 )
@@ -187,7 +177,6 @@ class AnimeSkipService(private val context: Context? = null) {
             }
         }
 
-        Log.d(TAG, "No timestamps available from any source")
         return null
     }
 

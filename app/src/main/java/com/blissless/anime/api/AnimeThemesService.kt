@@ -1,6 +1,5 @@
 package com.blissless.anime.api
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -41,7 +40,6 @@ class AnimeThemesService {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error searching AnimeThemes", e)
                 null
             }
         }
@@ -66,7 +64,6 @@ class AnimeThemesService {
                 } else null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching slug: $slug", e)
             null
         }
     }

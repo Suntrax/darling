@@ -716,7 +716,14 @@ data class TmdbTvDetails(
     val status: String? = null,
     val original_language: String? = null,
     val origin_country: List<String>? = null,
+    val genres: List<TmdbGenre> = emptyList(),
     val seasons: List<TmdbSeason> = emptyList()
+)
+
+@Serializable
+data class TmdbGenre(
+    val id: Int = 0,
+    val name: String? = null
 )
 
 @Serializable

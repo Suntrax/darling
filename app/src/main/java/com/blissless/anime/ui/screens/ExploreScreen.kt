@@ -187,16 +187,11 @@ fun ExploreScreen(
                 isLoggedIn = isLoggedIn,
                 onRelationClick = { relation ->
                     try {
-                        android.util.Log.d("ExploreScreen", "Relation clicked: ${relation.title} (id: ${relation.id})")
-                        android.util.Log.d("ExploreScreen", "Relation cover: ${relation.cover}, format: ${relation.format}")
                         scope.launch {
                             try {
                                 delay(100)
-                                android.util.Log.d("ExploreScreen", "Calling fetchDetailedAnimeData with id: ${relation.id}")
                                 val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                                android.util.Log.d("ExploreScreen", "Fetch result: detailedData=${detailedData?.title}, id=${detailedData?.id}")
                                 if (detailedData != null) {
-                                    android.util.Log.d("ExploreScreen", "Got data: ${detailedData.title}, updating current dialog")
                                     // Update the current dialog instead of opening a new one
                                     selectedAnime = ExploreAnime(
                                         id = relation.id,
@@ -212,16 +207,13 @@ fun ExploreScreen(
                                         format = detailedData.format
                                     )
                                 } else {
-                                    android.util.Log.d("ExploreScreen", "Failed to fetch detailed data for relation!")
                                     Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
-                                android.util.Log.e("ExploreScreen", "Error in scope.launch: ${e.message}", e)
                                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("ExploreScreen", "Error in onRelationClick: ${e.message}", e)
                         Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }

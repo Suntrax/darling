@@ -3,7 +3,6 @@ package com.blissless.anime.ui.screens
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.os.Build
-import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -165,7 +164,6 @@ fun PlayerScreen(
     // PRIMARY: Use Animekai timestamps if available, create initial timestamps immediately
     val animekaiTimestamps = remember(animekaiIntroStart, animekaiIntroEnd, animekaiOutroStart, animekaiOutroEnd, currentEpisode) {
         if (animekaiIntroStart != null || animekaiOutroStart != null) {
-            Log.d(PLAYER_TAG, "PRIMARY: Using Animekai timestamps: intro=[$animekaiIntroStart-$animekaiIntroEnd], outro=[$animekaiOutroStart-$animekaiOutroEnd]")
             EpisodeTimestamps(
                 episodeNumber = currentEpisode,
                 introStart = animekaiIntroStart?.toLong(),
@@ -248,7 +246,6 @@ fun PlayerScreen(
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        Log.e(PLAYER_TAG, "Playback error: ${error.message}")
                         hasError = true
                         playbackError = error.message ?: "Unknown playback error"
                         showControls = true
@@ -318,7 +315,6 @@ fun PlayerScreen(
             delay(5000)
             if (!hasTriggeredPrefetch && isPlaying && !hasError) {
                 hasTriggeredPrefetch = true
-                Log.d(PLAYER_TAG, "Triggering prefetch for adjacent episodes")
                 onPrefetchAdjacent.invoke()
             }
         }
@@ -375,13 +371,11 @@ fun PlayerScreen(
         if (epLength == null || hasFetchedTimestamps) return@LaunchedEffect
 
         if (animekaiTimestamps?.hasTimestamps() == true) {
-            Log.d(PLAYER_TAG, "PRIMARY: Animekai timestamps available, skipping fallback fetch")
             hasFetchedTimestamps = true
             return@LaunchedEffect
         }
 
         isFetchingTimestamps = true
-        Log.d(PLAYER_TAG, "FALLBACK: Fetching timestamps from AnimeSkip/AnimeThemes for: $animeName")
 
         withContext(Dispatchers.IO) {
             try {
@@ -405,10 +399,8 @@ fun PlayerScreen(
 
                 if (timestamps != null && timestamps.hasTimestamps()) {
                     episodeTimestamps = timestamps
-                    Log.d(PLAYER_TAG, "FALLBACK: Got timestamps: OP=${timestamps.introStart}-${timestamps.introEnd}")
                 }
             } catch (e: Exception) {
-                Log.e(PLAYER_TAG, "Error fetching fallback timestamps", e)
             }
         }
 
@@ -498,7 +490,6 @@ fun PlayerScreen(
     } else null
 
     fun handleServerChange(serverName: String, category: String) {
-        Log.d(PLAYER_TAG, "Changing server to: $serverName ($category)")
         hasError = false
         playbackError = null
         isChangingServer = true
@@ -509,7 +500,6 @@ fun PlayerScreen(
     }
 
     fun handleQualityChange(qualityUrl: String, qualityName: String) {
-        Log.d(PLAYER_TAG, "Changing quality to: $qualityName")
         savedPositionForQuality = exoPlayer.currentPosition
         pendingQualityChange = qualityName
         selectedQuality = qualityName
@@ -517,7 +507,6 @@ fun PlayerScreen(
     }
 
     fun handlePlaybackError() {
-        Log.d(PLAYER_TAG, "Playback error - invalidating cache and notifying parent")
         onInvalidateStreamCache?.invoke()
         onPlaybackError?.invoke()
     }

@@ -310,13 +310,10 @@ fun RichEpisodeScreen(
 
     LaunchedEffect(anime.id) {
         isLoadingEpisodes = true
-        android.util.Log.d("EpisodeSelection", "Fetching TMDB for: ${anime.title}, format: ${anime.format}, year: ${anime.year}")
         try {
             val result = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
-            android.util.Log.d("EpisodeSelection", "Got ${result.size} episodes")
             if (result.isNotEmpty()) tmdbEpisodes = result
         } catch (e: Exception) {
-            android.util.Log.e("EpisodeSelection", "Error fetching TMDB episodes", e)
         } finally {
             isLoadingEpisodes = false
         }

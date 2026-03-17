@@ -2,7 +2,6 @@ package com.blissless.anime
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -393,7 +392,6 @@ class MainViewModel : ViewModel() {
         category: String,
         animeId: Int
     ): AniwatchStreamResult? = withContext(Dispatchers.IO) {
-        Log.d(TAG, "getStreamForServer: server=$serverName category=$category")
 
         // Use the new method that actually resolves the specific server
         val animekaiResult = AnimekaiScraper.getStreamForSpecificServer(animeName, episodeNumber, serverName, category)
@@ -402,7 +400,6 @@ class MainViewModel : ViewModel() {
             // Cache with the actual category returned
             val actualKey = "${animeId}_${episodeNumber}_${it.category}"
             cacheManager.cacheStream(actualKey, aniwatchResult)
-            Log.d(TAG, "Cached Animekai stream for $actualKey with server ${it.serverName}")
             aniwatchResult
         }
     }
@@ -415,7 +412,6 @@ class MainViewModel : ViewModel() {
     suspend fun getEpisodeInfo(name: String, ep: Int, id: Int, latest: Int): EpisodeStreams? {
         // Check if episode is released
         if (latest > 0 && ep > latest) {
-            Log.d(TAG, "Episode $ep not yet released (latest: $latest), skipping fetch")
             return null
         }
 
@@ -424,7 +420,6 @@ class MainViewModel : ViewModel() {
 
         // Check cache first
         cacheManager.getCachedEpisodeInfo(epKey)?.let { cached ->
-            Log.d(TAG, "Returning cached episode info for $epKey")
             return cached
         }
 
@@ -435,7 +430,6 @@ class MainViewModel : ViewModel() {
         // Cache the result
         result?.let {
             cacheManager.cacheEpisodeInfo(epKey, it)
-            Log.d(TAG, "Cached episode info for $epKey: subServers=${it.subServers.size}, dubServers=${it.dubServers.size}")
         }
 
         return result
@@ -468,18 +462,15 @@ class MainViewModel : ViewModel() {
     ): StreamFetchResult = withContext(Dispatchers.IO) {
         // Check if episode is released
         if (latestAiredEpisode > 0 && episodeNumber > latestAiredEpisode) {
-            Log.d(TAG, "Episode $episodeNumber not yet released (latest: $latestAiredEpisode), skipping fetch")
             return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
         }
 
-        Log.d(TAG, "Fetching stream for $animeName ep $episodeNumber ($preferredCategory)")
 
         // Construct the cache key - include category so sub/dub are cached separately
         val key = "${animeId}_${episodeNumber}_$preferredCategory"
 
         // Check CacheManager first (Persistent Cache)
         cacheManager.getCachedStream(key)?.let { cachedStream ->
-            Log.d(TAG, "Stream found in CacheManager for $key with category ${cachedStream.category}")
             return@withContext StreamFetchResult(cachedStream, false, preferredCategory, cachedStream.category)
         }
 
@@ -489,12 +480,10 @@ class MainViewModel : ViewModel() {
             val result = AnimekaiScraper.toAniwatchStreamResult(animekaiResult)
             val categoryKey = "${animeId}_${episodeNumber}_${animekaiResult.category}"
             cacheManager.cacheStream(categoryKey, result)
-            Log.d(TAG, "Saved Animekai stream to CacheManager for $categoryKey with category ${animekaiResult.category}")
             return@withContext StreamFetchResult(result, result.category != preferredCategory, preferredCategory, result.category)
         }
 
         // Fallback to Hianime if Animekai fails completely
-        Log.d(TAG, "Animekai failed, falling back to Hianime")
         val hianimeResult = repository.tryAllServersWithFallback(animeName, episodeNumber, animeId, latestAiredEpisode, preferredCategory)
         if (hianimeResult.stream != null) {
             val hianimeKey = "${animeId}_${episodeNumber}_${hianimeResult.actualCategory}"
@@ -591,7 +580,6 @@ class MainViewModel : ViewModel() {
         if (cacheManager.hasStream("${anime.id}_${nextEp}_$category")) return
         val scrapingName = getScrapingName(anime)
         viewModelScope.launch(Dispatchers.IO) {
-            Log.d(TAG, "Prefetching stream for $scrapingName ep $nextEp ($category)")
             tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
         }
     }
@@ -617,7 +605,6 @@ class MainViewModel : ViewModel() {
                 if (currentEpisode > 1) {
                     val prevKey = "${animeId}_${currentEpisode - 1}_$prefetchCategory"
                     if (!cacheManager.hasStream(prevKey)) {
-                        Log.d(TAG, "Prefetching previous episode stream: $animeName ep ${currentEpisode - 1} ($prefetchCategory)")
                         tryAllScrapersWithFallback(animeName, currentEpisode - 1, animeId, latestAired, prefetchCategory)
                     }
                 }
@@ -629,7 +616,6 @@ class MainViewModel : ViewModel() {
                 if (isValidNext) {
                     val nextKey = "${animeId}_${nextEp}_$prefetchCategory"
                     if (!cacheManager.hasStream(nextKey)) {
-                        Log.d(TAG, "Prefetching next episode stream: $animeName ep $nextEp ($prefetchCategory)")
                         tryAllScrapersWithFallback(animeName, nextEp, animeId, latestAired, prefetchCategory)
                     }
                 }
@@ -657,7 +643,6 @@ class MainViewModel : ViewModel() {
         if (watchingList.isEmpty()) return
 
         viewModelScope.launch(Dispatchers.IO) {
-            Log.d(TAG, "Prefetching streams for ${watchingList.size} currently watching anime (both sub and dub)")
             watchingList.forEach { anime ->
                 val nextEp = anime.progress + 1
                 val latest = anime.latestEpisode ?: anime.totalEpisodes
@@ -674,7 +659,6 @@ class MainViewModel : ViewModel() {
                 listOf("sub", "dub").forEach { category ->
                     val cacheKey = "${anime.id}_${nextEp}_$category"
                     if (!cacheManager.hasStream(cacheKey)) {
-                        Log.d(TAG, "Prefetching: $scrapingName ep $nextEp ($category)")
                         tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
                     }
                 }

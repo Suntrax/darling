@@ -1,6 +1,5 @@
 package com.blissless.anime.api
 
-import android.util.Log
 import com.blissless.anime.BuildConfig
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.ServerInfo
@@ -91,7 +90,6 @@ object AnimekaiScraper {
             try {
                 return block()
             } catch (e: Exception) {
-                Log.w(TAG, "Retry attempt ${attempt + 1} failed", e)
                 attempt++
                 if (attempt >= retries) return null
                 delay(500L * attempt)
@@ -113,7 +111,6 @@ object AnimekaiScraper {
             val data = JSONObject(response.body.string())
             data.optString("result").takeIf { it.isNotEmpty() }
         } catch (e: Exception) {
-            Log.e(TAG, "Encode error", e)
             null
         }
     }
@@ -139,7 +136,6 @@ object AnimekaiScraper {
                 else -> null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Decode Kai error", e)
             null
         }
     }
@@ -168,7 +164,6 @@ object AnimekaiScraper {
                 else -> null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Decode Mega error", e)
             null
         }
     }
@@ -292,7 +287,6 @@ object AnimekaiScraper {
 
         // Exact match = perfect score
         if (normalizedSearch == normalizedResult) {
-            Log.d(TAG, "  EXACT MATCH: '$resultTitle' = 1000")
             return 1000
         }
 
@@ -304,22 +298,18 @@ object AnimekaiScraper {
         val searchArcKeywords = getArcKeywords(searchTitle)
         val resultArcKeywords = getArcKeywords(resultTitle)
 
-        Log.d(TAG, "Scoring: search='$searchTitle' (season=$searchSeason, arcs=$searchArcKeywords) vs result='$resultTitle' (season=$resultSeason, arcs=$resultArcKeywords)")
 
         // CRITICAL: If search has specific arc/season and result doesn't match, HEAVY penalty
         if (searchSeason != null) {
             if (resultSeason == null) {
                 // Result has no season info, searching for specific season - BIG penalty
                 score -= 400
-                Log.d(TAG, "  -400: Search has season $searchSeason, result has no season info")
             } else if (searchSeason != resultSeason) {
                 // Season mismatch - HEAVY penalty
                 score -= 500
-                Log.d(TAG, "  -500: Season mismatch (search=$searchSeason, result=$resultSeason)")
             } else {
                 // Season matches - GOOD bonus
                 score += 300
-                Log.d(TAG, "  +300: Season match ($searchSeason)")
             }
         }
 
@@ -329,12 +319,10 @@ object AnimekaiScraper {
 
         if (matchingArcKeywords.isNotEmpty()) {
             score += matchingArcKeywords.size * 150
-            Log.d(TAG, "  +${matchingArcKeywords.size * 150}: Matching arc keywords: $matchingArcKeywords")
         }
 
         if (missingArcKeywords.isNotEmpty()) {
             score -= missingArcKeywords.size * 200
-            Log.d(TAG, "  -${missingArcKeywords.size * 200}: Missing arc keywords: $missingArcKeywords")
         }
 
         // Word overlap scoring
@@ -351,20 +339,17 @@ object AnimekaiScraper {
         if (matchingWords > 0) {
             val wordScore = matchingWords * 15
             score += wordScore
-            Log.d(TAG, "  +$wordScore: $matchingWords matching words")
         }
 
         // Substring match
         if (normalizedResult.contains(normalizedSearch) || normalizedSearch.contains(normalizedResult)) {
             score += 25
-            Log.d(TAG, "  +25: Substring match")
         }
 
         // Prefer result that is closer in length (more specific match)
         val lengthDiff = kotlin.math.abs(normalizedSearch.length - normalizedResult.length)
         score -= lengthDiff / 10
 
-        Log.d(TAG, "  FINAL SCORE: $score for '$resultTitle'")
         return score
     }
 
@@ -377,12 +362,10 @@ object AnimekaiScraper {
 
         val duration = end - start
         if (duration < MIN_INTRO_DURATION || duration > MAX_INTRO_DURATION) {
-            Log.d(TAG, "Intro duration invalid: ${duration}s")
             return false
         }
 
         if (episodeLength != null && start > episodeLength * 0.3) {
-            Log.d(TAG, "Intro starts too late: ${start}s in ${episodeLength}s episode")
             return false
         }
 
@@ -398,12 +381,10 @@ object AnimekaiScraper {
 
         val duration = end - start
         if (duration < MIN_OUTRO_DURATION || duration > MAX_OUTRO_DURATION) {
-            Log.d(TAG, "Outro duration invalid: ${duration}s")
             return false
         }
 
         if (episodeLength != null && start < episodeLength * 0.6) {
-            Log.d(TAG, "Outro starts too early: ${start}s in ${episodeLength}s episode")
             return false
         }
 
@@ -423,7 +404,6 @@ object AnimekaiScraper {
     suspend fun searchAnime(keyword: String): List<Map<String, String>>? = withContext(Dispatchers.IO) {
         retry {
             val url = "$SEARCH_URL?keyword=${URLEncoder.encode(keyword, "UTF-8")}"
-            Log.d(TAG, "Searching: $keyword")
 
             val request = Request.Builder()
                 .url(url)
@@ -457,7 +437,6 @@ object AnimekaiScraper {
             }
 
             if (results.isEmpty()) return@retry null
-            Log.d(TAG, "Search returned ${results.size} results")
             results
         }
     }
@@ -485,7 +464,6 @@ object AnimekaiScraper {
                 json.optString("anime_id").takeIf { it.isNotEmpty() }
             } else null
         } catch (e: Exception) {
-            Log.e(TAG, "Get anime ID error", e)
             null
         }
     }
@@ -517,14 +495,12 @@ object AnimekaiScraper {
                 episodes.add(mapOf("number" to num, "token" to epToken))
             }
 
-            Log.d(TAG, "Found ${episodes.size} episodes")
             episodes
         }
     }
 
     suspend fun getServers(epToken: String): Map<String, List<AnimekaiServerInfo>>? = withContext(Dispatchers.IO) {
         retry {
-            Log.d(TAG, "Getting servers for token: $epToken")
 
             val token = encode(epToken) ?: return@retry null
             val url = "$SERVERS_URL?token=$epToken&_=$token"
@@ -599,7 +575,6 @@ object AnimekaiScraper {
                 }
             }
 
-            Log.d(TAG, "SUB servers: ${subServers.size}, DUB servers: ${dubServers.size}")
 
             if (subServers.isEmpty() && dubServers.isEmpty()) return@retry null
 
@@ -641,10 +616,8 @@ object AnimekaiScraper {
             }
 
             qualities.sortByDescending { it.width }
-            Log.d(TAG, "Found ${qualities.size} quality options")
             qualities
         } catch (e: Exception) {
-            Log.e(TAG, "Get quality streams error", e)
             emptyList()
         }
     }
@@ -652,12 +625,10 @@ object AnimekaiScraper {
     private suspend fun resolveStreamWithTimestamps(linkId: String, serverName: String = "", episodeLength: Int? = null): StreamResolveResult? = withContext(Dispatchers.IO) {
         var lastError: String? = null
         retry {
-            Log.d(TAG, "Resolving stream for server: $serverName, linkId: $linkId")
 
             val token = encode(linkId)
             if (token == null) {
                 lastError = "Failed to encode linkId"
-                Log.e(TAG, "resolveStreamWithTimestamps: $lastError")
                 return@retry null
             }
 
@@ -673,7 +644,6 @@ object AnimekaiScraper {
 
             if (!response.isSuccessful) {
                 lastError = "Source request failed: ${response.code}"
-                Log.e(TAG, "resolveStreamWithTimestamps: $lastError")
                 return@retry null
             }
 
@@ -681,21 +651,18 @@ object AnimekaiScraper {
             val encrypted = JSONObject(responseBody).optString("result")
             if (encrypted.isEmpty()) {
                 lastError = "No result in source response"
-                Log.e(TAG, "resolveStreamWithTimestamps: $lastError")
                 return@retry null
             }
 
             val embed = decodeKai(encrypted)
             if (embed == null) {
                 lastError = "Failed to decode embed"
-                Log.e(TAG, "resolveStreamWithTimestamps: $lastError")
                 return@retry null
             }
 
             val embedUrl = embed.optString("url")
             if (embedUrl.isEmpty()) {
                 lastError = "No embed URL in decoded response"
-                Log.e(TAG, "resolveStreamWithTimestamps: $lastError")
                 return@retry null
             }
 
@@ -716,8 +683,6 @@ object AnimekaiScraper {
             val outroEnd = if (isValidOutro(rawOutroStart, rawOutroEnd, episodeLength)) rawOutroEnd else null
 
             if (rawIntroStart != null || rawOutroStart != null) {
-                Log.d(TAG, "Skip timestamps: raw intro=[$rawIntroStart-$rawIntroEnd], raw outro=[$rawOutroStart-$rawOutroEnd]")
-                Log.d(TAG, "After validation: intro=[$introStart-$introEnd], outro=[$outroStart-$outroEnd]")
             }
 
             // Extract embed origin
@@ -752,7 +717,6 @@ object AnimekaiScraper {
             val masterUrl = sources.getJSONObject(0).optString("file")
             if (masterUrl.isEmpty()) return@retry null
 
-            Log.d(TAG, "Master URL: ${masterUrl.take(60)}...")
 
             val streamHeaders = mapOf(
                 "User-Agent" to HEADERS["User-Agent"]!!,
@@ -776,16 +740,13 @@ object AnimekaiScraper {
     }
 
     suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int): AnimekaiEpisodeStreams? = withContext(Dispatchers.IO) {
-        Log.d(TAG, "=== getEpisodeInfo: '$animeName' ep $episodeNumber ===")
 
         if (cachedEpisodeInfo != null && cachedAnimeName == animeName && cachedEpisodeNumber == episodeNumber) {
-            Log.d(TAG, "Using cached episode info")
             return@withContext cachedEpisodeInfo
         }
 
         val searchResults = searchAnime(animeName)
         if (searchResults.isNullOrEmpty()) {
-            Log.e(TAG, "No search results for: $animeName")
             return@withContext null
         }
 
@@ -803,19 +764,15 @@ object AnimekaiScraper {
             ScoredResult(title, slug, score)
         }.sortedByDescending { it.score }
 
-        Log.d(TAG, "=== SCORED RESULTS ===")
         scoredResults.take(5).forEachIndexed { index, sr ->
-            Log.d(TAG, "  ${index + 1}. [${sr.score}] ${sr.title}")
         }
 
         // Pick the best match
         val bestMatch = scoredResults.firstOrNull()
         if (bestMatch == null) {
-            Log.e(TAG, "No valid matches found")
             return@withContext null
         }
 
-        Log.d(TAG, "=== SELECTED: '${bestMatch.title}' (score: ${bestMatch.score}) ===")
         val slug = bestMatch.slug
 
         val animeId = getAnimeId(slug) ?: return@withContext null
@@ -833,7 +790,6 @@ object AnimekaiScraper {
         }
 
         if (epToken == null) {
-            Log.e(TAG, "Episode $episodeNumber not found")
             return@withContext null
         }
 
@@ -863,11 +819,9 @@ object AnimekaiScraper {
         episodeNumber: Int,
         preferredCategory: String = "sub"
     ): AnimekaiStreamResult? = withContext(Dispatchers.IO) {
-        Log.d(TAG, "getStreamWithFallback: '$animeName' ep $episodeNumber pref=$preferredCategory")
 
         val episodeInfo = getEpisodeInfo(animeName, episodeNumber)
         if (episodeInfo == null) {
-            Log.e(TAG, "Could not get episode info")
             return@withContext null
         }
 
@@ -875,16 +829,12 @@ object AnimekaiScraper {
         val fallbackServers = if (preferredCategory == "dub") episodeInfo.subServers else episodeInfo.dubServers
         val fallbackCategory = if (preferredCategory == "dub") "sub" else "dub"
 
-        Log.d(TAG, "Preferred servers (${preferredCategory}): ${preferredServers.size}")
-        Log.d(TAG, "Fallback servers ($fallbackCategory): ${fallbackServers.size}")
 
         // Try ALL preferred servers
         for ((index, server) in preferredServers.withIndex()) {
-            Log.d(TAG, "Trying ${preferredCategory.uppercase()} server ${index + 1}/${preferredServers.size}: ${server.name}")
 
             val result = resolveStreamWithTimestamps(server.url, server.name)
             if (result != null && result.url != null) {
-                Log.d(TAG, "SUCCESS with ${preferredCategory.uppercase()} server: ${server.name}")
                 return@withContext AnimekaiStreamResult(
                     url = result.url!!,
                     headers = HEADERS + ("Referer" to result.embedOrigin),
@@ -901,11 +851,9 @@ object AnimekaiScraper {
 
         // Try ALL fallback servers
         for ((index, server) in fallbackServers.withIndex()) {
-            Log.d(TAG, "Trying $fallbackCategory server ${index + 1}/${fallbackServers.size}: ${server.name}")
 
             val result = resolveStreamWithTimestamps(server.url, server.name)
             if (result != null && result.url != null) {
-                Log.d(TAG, "SUCCESS with $fallbackCategory server: ${server.name} (fallback)")
                 return@withContext AnimekaiStreamResult(
                     url = result.url!!,
                     headers = HEADERS + ("Referer" to result.embedOrigin),
@@ -920,7 +868,6 @@ object AnimekaiScraper {
             }
         }
 
-        Log.e(TAG, "ALL SERVERS FAILED")
         null
     }
 
@@ -942,12 +889,10 @@ object AnimekaiScraper {
         serverName: String,
         category: String
     ): AnimekaiStreamResult? = withContext(Dispatchers.IO) {
-        Log.d(TAG, "getStreamForSpecificServer: server=$serverName category=$category")
 
         // Get episode info to find the specific server
         val episodeInfo = getEpisodeInfo(animeName, episodeNumber)
         if (episodeInfo == null) {
-            Log.e(TAG, "Could not get episode info for specific server")
             return@withContext null
         }
 
@@ -956,12 +901,10 @@ object AnimekaiScraper {
         val server = servers.find { it.name == serverName }
 
         if (server == null) {
-            Log.e(TAG, "Server not found: $serverName in $category servers")
             // Try fallback category
             val fallbackServers = if (category == "dub") episodeInfo.subServers else episodeInfo.dubServers
             val fallbackServer = fallbackServers.find { it.name == serverName }
             if (fallbackServer != null) {
-                Log.d(TAG, "Found server in fallback category")
                 val result = resolveStreamWithTimestamps(fallbackServer.url, fallbackServer.name)
                 if (result != null && result.url != null) {
                     val actualCategory = if (category == "dub") "sub" else "dub"
@@ -981,10 +924,8 @@ object AnimekaiScraper {
             return@withContext null
         }
 
-        Log.d(TAG, "Found server: ${server.name}, resolving stream...")
         val result = resolveStreamWithTimestamps(server.url, server.name)
         if (result != null && result.url != null) {
-            Log.d(TAG, "SUCCESS with specific server: ${server.name}")
             return@withContext AnimekaiStreamResult(
                 url = result.url!!,
                 headers = HEADERS + ("Referer" to result.embedOrigin),
@@ -998,7 +939,6 @@ object AnimekaiScraper {
             )
         }
 
-        Log.e(TAG, "Failed to resolve stream for server: $serverName")
         null
     }
 

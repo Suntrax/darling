@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
-import android.util.Log
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.AniwatchStreamResult
@@ -60,7 +59,6 @@ class MainActivity : ComponentActivity() {
         val hasToken = prefs.getString(TOKEN_KEY, null) != null
         val savedToken = prefs.getString(TOKEN_KEY, null)
 
-        Log.d("MainActivity", "Has saved token: $hasToken")
 
         mainViewModel.init(applicationContext, hasToken)
 
@@ -98,7 +96,6 @@ class MainActivity : ComponentActivity() {
                                 val params = window.attributes
                                 params.preferredDisplayModeId = mode.modeId
                                 window.attributes = params
-                                Log.d("MainActivity", "Set preferred display mode to ${mode.refreshRate}Hz")
                             }
                         }
                     }
@@ -125,9 +122,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleAuthCallback(intent: Intent?) {
         intent?.data?.let { uri ->
-            Log.d("MainActivity", "Received intent with URI: $uri")
             if (uri.scheme == "animescraper" && uri.host == "success") {
-                Log.d("MainActivity", "Detected OAuth callback")
                 mainViewModel.handleAuthRedirect(intent)
             }
         }
@@ -324,7 +319,6 @@ fun MainScreen(
         val cachedStream = viewModel.getCachedStreamImmediate(anime.id, episode, preferredCategory)
 
         if (cachedStream != null) {
-            Log.d("MainActivity", "Cache HIT for ${anime.title} ep $episode ($preferredCategory) - playing instantly")
             currentVideoUrl = cachedStream.url
             currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
             currentSubtitleUrl = cachedStream.subtitleUrl
@@ -366,7 +360,6 @@ fun MainScreen(
             return
         }
 
-        Log.d("MainActivity", "Cache MISS for ${anime.title} ep $episode ($preferredCategory) - fetching...")
         isLoadingStream = true
         scope.launch {
             val latestAired = anime.latestEpisode ?: anime.totalEpisodes
@@ -377,7 +370,6 @@ fun MainScreen(
             val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), episode, anime.id, latestAired)
 
             if (result.stream != null) {
-                Log.d("MainActivity", "Stream URL found: ${result.stream.url.take(50)}...")
                 currentVideoUrl = result.stream.url
                 currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
                 currentSubtitleUrl = result.stream.subtitleUrl
@@ -410,7 +402,6 @@ fun MainScreen(
                     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                 }
             } else {
-                Log.e("MainActivity", "Failed to get stream for ${anime.title} ep $episode")
                 streamError = "Could not find stream for ${anime.title} episode $episode"
             }
 
@@ -419,7 +410,6 @@ fun MainScreen(
     }
 
     val onPlayEpisode: (AnimeMedia, Int) -> Unit = { anime, episode ->
-        Log.d("MainActivity", "onPlayEpisode: ${anime.title} ep $episode")
         loadAndPlayEpisode(anime, episode)
     }
 
@@ -437,7 +427,6 @@ fun MainScreen(
                 val cachedStream = viewModel.getCachedStreamImmediate(anime.id, prevEp, preferredCategory)
 
                 if (cachedStream != null) {
-                    Log.d("MainActivity", "Prev ep cache HIT - playing instantly")
                     savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
                     currentVideoUrl = cachedStream.url
                     currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
@@ -543,7 +532,6 @@ fun MainScreen(
                 val cachedStream = viewModel.getCachedStreamImmediate(anime.id, nextEp, preferredCategory)
 
                 if (cachedStream != null) {
-                    Log.d("MainActivity", "Next ep cache HIT - playing instantly")
                     savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
                     currentVideoUrl = cachedStream.url
                     currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
@@ -648,7 +636,6 @@ fun MainScreen(
             val cachedEpInfo = prefetchedEpisodeInfo[epInfoKey] ?: currentEpisodeInfo
 
             if (cachedEpInfo == null) {
-                Log.e("MainActivity", "No episode info available for server switch")
                 Toast.makeText(context, "No server info available", Toast.LENGTH_SHORT).show()
                 return@let
             }
@@ -662,7 +649,6 @@ fun MainScreen(
                 val fallbackServers = if (category == "sub") cachedEpInfo.dubServers else cachedEpInfo.subServers
                 val fallbackExists = fallbackServers.any { it.name == serverName }
                 if (!fallbackExists) {
-                    Log.e("MainActivity", "Server not found: $serverName")
                     Toast.makeText(context, "Server not found: $serverName", Toast.LENGTH_SHORT).show()
                     return@let
                 }
@@ -671,7 +657,6 @@ fun MainScreen(
             val cachedStream = viewModel.getCachedStreamImmediate(anime.id, currentEpisode, category)
 
             if (cachedStream != null && cachedStream.serverName == serverName) {
-                Log.d("MainActivity", "Server cache HIT - switching instantly")
                 currentVideoUrl = cachedStream.url
                 currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
                 currentSubtitleUrl = cachedStream.subtitleUrl
@@ -707,7 +692,6 @@ fun MainScreen(
                     anime.id
                 )
                 if (result != null) {
-                    Log.d("MainActivity", "Server switch successful: ${result.serverName}")
                     currentVideoUrl = result.url
                     currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
                     currentSubtitleUrl = result.subtitleUrl
@@ -730,7 +714,6 @@ fun MainScreen(
                     actualCategory = result.category
                     isFallbackStream = result.category != category
                 } else {
-                    Log.e("MainActivity", "Failed to switch to server: $serverName")
                     Toast.makeText(context, "Failed to load $serverName", Toast.LENGTH_SHORT).show()
                 }
                 isLoadingStream = false
@@ -740,14 +723,12 @@ fun MainScreen(
     }
 
     fun changeQuality(qualityUrl: String, qualityName: String) {
-        Log.d("MainActivity", "Changing quality to: $qualityName")
         currentVideoUrl = qualityUrl
         currentQuality = qualityName
     }
 
     fun invalidateCurrentStreamCache() {
         currentAnime?.let { anime ->
-            Log.d("MainActivity", "Invalidating stream cache for ${anime.title} ep $currentEpisode ($currentCategory)")
             viewModel.invalidateStreamCache(anime.id, currentEpisode, currentCategory)
         }
     }
@@ -763,7 +744,6 @@ fun MainScreen(
                 val nextIndex = (currentServerIndex + 1) % servers.size
                 val nextServer = servers[nextIndex]
 
-                Log.d("MainActivity", "Playback error, trying next server: ${nextServer.name}")
                 changeServer(nextServer.name, currentCategory)
             }
         }
@@ -884,13 +864,10 @@ fun MainScreen(
                 onLoginClick = { viewModel.loginWithAniList() },
                 onRelationClick = { relation ->
                     try {
-                        Log.d("MainActivity", "Relation clicked: ${relation.title} (id: ${relation.id}), cover: ${relation.cover}")
                         scope.launch {
                             try {
                                 delay(100)
-                                Log.d("MainActivity", "Fetching detailed data for: ${relation.id}")
                                 val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                                Log.d("MainActivity", "Fetched data: title=${detailedData?.title}, cover=${detailedData?.cover}")
                                 if (detailedData != null) {
                                     selectedExploreAnime = ExploreAnime(
                                         id = relation.id,
@@ -905,20 +882,15 @@ fun MainScreen(
                                         year = detailedData.year,
                                         format = detailedData.format
                                     )
-                                    Log.d("MainActivity", "Setting selectedExploreAnime to: ${selectedExploreAnime?.title}, cover: ${selectedExploreAnime?.cover}")
                                     showExploreDialog = true
-                                    Log.d("MainActivity", "showExploreDialog set to true")
                                 } else {
-                                    Log.d("MainActivity", "Failed to fetch detailed data for relation!")
                                     Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
-                                Log.e("MainActivity", "Error in scope.launch: ${e.message}", e)
                                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e("MainActivity", "Error in onRelationClick: ${e.message}", e)
                         Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -926,7 +898,6 @@ fun MainScreen(
         }
     }
 
-    Log.d("MainActivity", "Render: showExploreDialog=$showExploreDialog, selectedExploreAnime=${selectedExploreAnime?.title}")
 
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
