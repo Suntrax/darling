@@ -695,17 +695,73 @@ class AnimeRepository(
         animeTitle: String,
         animeId: Int,
         animeYear: Int? = null,
+        animeFormat: String? = null,
         latestAiredEpisode: Int = Int.MAX_VALUE
     ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "TMDB: [START] fetchTmdbEpisodes for '$animeTitle' ($animeId)")
+            // Detect format from title if not provided
+            val detectedFormat = animeFormat ?: detectFormatFromTitle(animeTitle)
+            Log.d(TAG, "TMDB: [START] fetchTmdbEpisodes for '$animeTitle' ($animeId), format: $detectedFormat")
             val baseTitle = extractBaseTitle(animeTitle)
-            var searchResults = searchTmdb(baseTitle)
-            if (searchResults.isEmpty()) searchResults = searchTmdb(animeTitle)
+            var searchResults = searchTmdb(baseTitle, detectedFormat, animeYear)
+            if (searchResults.isEmpty()) searchResults = searchTmdb(animeTitle, detectedFormat, animeYear)
+            // Also try searching with year if available
+            if (searchResults.isEmpty() && animeYear != null) {
+                searchResults = searchTmdb("$animeTitle ${animeYear}", detectedFormat)
+            }
             if (searchResults.isEmpty()) return@withContext emptyList()
 
             val bestMatch = findBestMatch(searchResults, animeTitle, animeYear) ?: return@withContext emptyList()
+            
+            // Check if this is a movie (has title field) vs TV show (has name field)
+            val isMovieSearch = bestMatch.title != null
+            
+            if (isMovieSearch) {
+                // For movies, return a single "episode" - just fetch basic info
+                Log.d(TAG, "TMDB: This is a movie, returning single episode")
+                return@withContext listOf(TmdbEpisode(
+                    episode = 1,
+                    title = bestMatch.title ?: "Movie",
+                    description = bestMatch.overview ?: "",
+                    image = bestMatch.poster_path?.let { "https://image.tmdb.org/t/p/w500$it" }
+                ))
+            }
+            
+            // Continue with TV show logic
             val tvDetails = fetchTvDetails(bestMatch.id) ?: return@withContext emptyList()
+            
+            Log.d(TAG, "TMDB: TV Details - name: ${tvDetails.name}, seasons: ${tvDetails.seasons.map { it.season_number to it.name }}, total episodes: ${tvDetails.number_of_episodes}")
+            
+            // Check if this looks like anime vs live action for Chinese titles
+            val isChineseTitle = animeTitle.toCharArray().any { it.code in 0x4E00..0x9FFF || it.code in 0x3400..0x4DBF }
+            val totalEpisodes = tvDetails.number_of_episodes ?: 0
+            
+            // If it's a Chinese title with very few episodes (like 12), try to find one with more episodes
+            if (isChineseTitle && totalEpisodes in 1..24 && searchResults.size > 1) {
+                Log.d(TAG, "TMDB: Few episodes (${totalEpisodes}), checking for better match...")
+                // Find result with highest ID (likely animation, higher ID = newer)
+                val betterMatch = searchResults
+                    .filter { it.id != bestMatch.id }
+                    .maxByOrNull { it.id }
+                if (betterMatch != null) {
+                    val altTvDetails = fetchTvDetails(betterMatch.id)
+                    if (altTvDetails != null && (altTvDetails.number_of_episodes ?: 0) > totalEpisodes) {
+                        Log.d(TAG, "TMDB: Found better match ID ${betterMatch.id} with ${altTvDetails.number_of_episodes} episodes, using it!")
+                        // Use offset 0 since we already picked the correct entry (Season 1)
+                        val betterSortedSeasons = altTvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }
+                        val betterMaxEps = altTvDetails.number_of_episodes ?: 0
+                        val betterAllSeasonDetails = coroutineScope {
+                            betterSortedSeasons.map { season ->
+                                async { fetchSeason(altTvDetails.id, season.season_number) }
+                            }.awaitAll().filterNotNull()
+                        }
+                        
+                        val result = buildEpisodesFromPool(betterAllSeasonDetails, 0, latestAiredEpisode, betterMaxEps)
+                        Log.d(TAG, "TMDB: Returning ${result.size} episodes from better match (offset=0)")
+                        return@withContext result
+                    }
+                }
+            }
 
             // Fetch all seasons in parallel to speed up and prevent timeouts
             val sortedSeasons = tvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }
@@ -715,7 +771,7 @@ class AnimeRepository(
                 }.awaitAll().filterNotNull()
             }
 
-            val (episodeOffset, maxEpisodes) = calculateEpisodeOffset(tvDetails, allSeasonDetails, animeTitle, animeId)
+            val (episodeOffset, maxEpisodes) = calculateEpisodeOffset(tvDetails, allSeasonDetails, animeTitle, animeId, bestMatch.name, searchResults.size)
 
             val result = buildEpisodesFromPool(allSeasonDetails, episodeOffset, latestAiredEpisode, maxEpisodes)
             Log.d(TAG, "TMDB: Returning ${result.size} episodes after offset logic")
@@ -726,23 +782,100 @@ class AnimeRepository(
         }
     }
 
-    private fun searchTmdb(title: String): List<TmdbSearchResult> {
+    private fun searchTmdb(title: String, format: String? = null, year: Int? = null): List<TmdbSearchResult> {
         return try {
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
-            val url = URL("https://api.themoviedb.org/3/search/tv?query=$encodedTitle")
-            val connection = (url.openConnection() as HttpsURLConnection).apply {
-                readTimeout = 15000 // Increased to 15s
-                connectTimeout = 15000
-                requestMethod = "GET"
-                setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
-                setRequestProperty("accept", "application/json")
+            // Detect movie based on format or title patterns
+            val isMovie = format == "MOVIE" || format == "OVA" || format == "ONA" || format == "SPECIAL" ||
+                          title.contains("Movie", ignoreCase = true) ||
+                          title.contains("OVA", ignoreCase = true) ||
+                          title.contains("ONA", ignoreCase = true) ||
+                          title.contains("Special", ignoreCase = true) ||
+                          title.contains("Film", ignoreCase = true)
+            
+            val results = mutableListOf<TmdbSearchResult>()
+            
+            if (isMovie) {
+                // Use search/movie endpoint for movies
+                Log.d(TAG, "TMDB: Searching movie endpoint for: $title")
+                val movieUrl = URL("https://api.themoviedb.org/3/search/movie?query=$encodedTitle")
+                val movieConnection = (movieUrl.openConnection() as HttpsURLConnection).apply {
+                    readTimeout = 15000
+                    connectTimeout = 15000
+                    requestMethod = "GET"
+                    setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+                    setRequestProperty("accept", "application/json")
+                }
+                if (movieConnection.responseCode == 200) {
+                    val response = movieConnection.inputStream.bufferedReader().readText()
+                    val searchResponse = json.decodeFromString<TmdbSearchResponse>(response)
+                    results.addAll(searchResponse.results)
+                    Log.d(TAG, "TMDB: Movie search got ${searchResponse.total_results} results, parsed ${searchResponse.results.size}")
+                    searchResponse.results.take(3).forEach { 
+                        Log.d(TAG, "TMDB: Movie result: '${it.title}', id: ${it.id}") 
+                    }
+                } else {
+                    Log.d(TAG, "TMDB: Movie search failed with code: ${movieConnection.responseCode}")
+                }
+                movieConnection.disconnect()
+                
+                // If no movie results, try TV endpoint as fallback
+                if (results.isEmpty()) {
+                    Log.d(TAG, "TMDB: No movie results, trying TV endpoint")
+                    val tvUrl = URL("https://api.themoviedb.org/3/search/tv?query=$encodedTitle")
+                    val tvConnection = (tvUrl.openConnection() as HttpsURLConnection).apply {
+                        readTimeout = 15000
+                        connectTimeout = 15000
+                        requestMethod = "GET"
+                        setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+                        setRequestProperty("accept", "application/json")
+                    }
+                    if (tvConnection.responseCode == 200) {
+                        val response = tvConnection.inputStream.bufferedReader().readText()
+                        results.addAll(json.decodeFromString<TmdbSearchResponse>(response).results)
+                    }
+                    tvConnection.disconnect()
+                }
+            } else {
+                // Use search/tv endpoint for TV series - this searches by title properly
+                val tvUrl = URL("https://api.themoviedb.org/3/search/tv?query=$encodedTitle")
+                val tvConnection = (tvUrl.openConnection() as HttpsURLConnection).apply {
+                    readTimeout = 15000
+                    connectTimeout = 15000
+                    requestMethod = "GET"
+                    setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+                    setRequestProperty("accept", "application/json")
+                }
+                if (tvConnection.responseCode == 200) {
+                    val response = tvConnection.inputStream.bufferedReader().readText()
+                    results.addAll(json.decodeFromString<TmdbSearchResponse>(response).results)
+                }
+                tvConnection.disconnect()
+                
+                // If no TV results, try movie endpoint as fallback
+                if (results.isEmpty()) {
+                    val movieUrl = URL("https://api.themoviedb.org/3/search/movie?query=$encodedTitle")
+                    val movieConnection = (movieUrl.openConnection() as HttpsURLConnection).apply {
+                        readTimeout = 15000
+                        connectTimeout = 15000
+                        requestMethod = "GET"
+                        setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
+                        setRequestProperty("accept", "application/json")
+                    }
+                    if (movieConnection.responseCode == 200) {
+                        val response = movieConnection.inputStream.bufferedReader().readText()
+                        results.addAll(json.decodeFromString<TmdbSearchResponse>(response).results)
+                    }
+                    movieConnection.disconnect()
+                }
             }
-
-            if (connection.responseCode == 200) {
-                val response = connection.inputStream.bufferedReader().readText()
-                json.decodeFromString<TmdbSearchResponse>(response).results
-            } else emptyList()
-        } catch (e: Exception) { emptyList() }
+            
+            Log.d(TAG, "TMDB: searchTmdb for '$title' (isMovie=$isMovie) got ${results.size} results")
+            results
+        } catch (e: Exception) { 
+            Log.e(TAG, "TMDB search error", e)
+            emptyList() 
+        }
     }
 
     private fun fetchTvDetails(tmdbId: Int): TmdbTvDetails? {
@@ -821,9 +954,25 @@ class AnimeRepository(
         tvDetails: TmdbTvDetails,
         allSeasonDetails: List<TmdbSeasonDetails>,
         animeTitle: String,
-        animeId: Int
+        animeId: Int,
+        tmdbName: String?,
+        tmdbResultsCount: Int = 1
     ): Pair<Int, Int> {
         Log.d(TAG, "TMDB: Calculating offset for $animeTitle")
+        
+        // If TMDB name exactly matches the original title, skip Aniwatch fallback and use offset 0
+        val normalizedOriginal = normalizeTitle(animeTitle)
+        val normalizedTmdbName = normalizeTitle(tmdbName ?: "")
+        if (normalizedTmdbName == normalizedOriginal) {
+            Log.d(TAG, "TMDB: Exact name match found, skipping Aniwatch fallback")
+            return Pair(0, tvDetails.number_of_episodes ?: 0)
+        }
+        
+        // If there were multiple TMDB results, assume the best match (highest ID) is correct
+        if (tmdbResultsCount > 1) {
+            Log.d(TAG, "TMDB: Multiple TMDB results found, using best match with offset 0")
+            return Pair(0, tvDetails.number_of_episodes ?: 0)
+        }
 
         // 1. Recursive AniList search (Most reliable for multi-season shows)
         val recursiveOffset = calculateRecursiveOffset(animeId)
@@ -971,22 +1120,104 @@ class AnimeRepository(
 
     private fun findBestMatch(results: List<TmdbSearchResult>, originalTitle: String, year: Int?): TmdbSearchResult? {
         val normalizedOriginal = normalizeTitle(originalTitle)
+        
+        // Log ALL results for debugging
+        Log.d(TAG, "TMDB: findBestMatch for '$originalTitle' (year: $year), got ${results.size} results")
+        results.forEach { result ->
+            Log.d(TAG, "TMDB: Result: '${result.name ?: result.title}', id: ${result.id}, year: ${result.first_air_date?.take(4)}, lang: ${result.original_language}")
+        }
+        
+        // Check if original title might be Chinese (contains CJK characters)
+        val isChineseTitle = originalTitle.toCharArray().any { it.code in 0x4E00..0x9FFF || it.code in 0x3400..0x4DBF }
+        
+        // For Chinese titles with multiple results, prefer the highest ID (animation typically has higher ID)
+        if (isChineseTitle && results.size > 1) {
+            val highestIdResult = results.maxByOrNull { it.id }
+            Log.d(TAG, "TMDB: Chinese title - picking highest ID: ${highestIdResult?.id}")
+            return highestIdResult
+        }
+        
         return results.maxByOrNull { result ->
-            val name = result.name ?: result.original_name ?: ""
+            // Use name (for TV) or title (for movies)
+            val name = result.name ?: result.title ?: result.original_name ?: ""
             val normalizedName = normalizeTitle(name)
             var score = 0
-            if (normalizedName == normalizedOriginal) score += 100
-            if (normalizedName.contains(normalizedOriginal) || normalizedOriginal.contains(normalizedName)) score += 50
+            
+            // Skip results with null names (invalid)
+            if (name.isEmpty()) {
+                score -= 1000
+                return@maxByOrNull score
+            }
+            
+            // Skip if name is too short
+            if (name.length < 3) {
+                score -= 100
+                return@maxByOrNull score
+            }
+            
+            // Skip news shows and other non-anime content
+            val lowerName = name.lowercase()
+            if (lowerName.contains("tagesschau") || 
+                lowerName.contains(" news") || 
+                lowerName.contains("daily show") ||
+                lowerName.contains("tonight show") ||
+                lowerName.contains("late night") ||
+                lowerName == "family guy" ||
+                lowerName == "the simpsons" ||
+                lowerName == "american dad") {
+                score -= 500
+                return@maxByOrNull score
+            }
+            
+            // Exact match - highest priority
+            if (normalizedName == normalizedOriginal) score += 500
+            
+            // When names are equal after normalization, prefer higher ID
+            if (normalizedName == normalizedOriginal) {
+                score += result.id / 1000
+            }
+            
+            // Check for partial match - if the original title is contained in the result or vice versa
+            if (normalizedName.length > 2 && normalizedOriginal.length > 2) {
+                if (normalizedName.contains(normalizedOriginal)) score += 200
+                else if (normalizedOriginal.contains(normalizedName)) score += 150
+            }
+            
+            // For Chinese titles, strongly prefer Chinese language AND higher ID (animation usually has higher ID than live action)
+            if (isChineseTitle) {
+                if (result.original_language == "zh") score += 200
+                else if (result.original_language == "ja") score -= 50
+                
+                // Higher ID tends to be the more recent/animation version
+                score += (result.id / 10000).toInt()
+            } else {
+                // For non-Chinese, prefer Japanese
+                if (result.original_language == "ja") score += 100
+            }
+            
+            // Prefer year match (but don't penalize too much if no year provided)
             if (year != null) {
                 val resultYear = result.first_air_date?.take(4)?.toIntOrNull()
-                if (resultYear == year) score += 30
+                if (resultYear == year) score += 50
             }
-            if (result.original_language == "ja") score += 20
+            
             score
         }
     }
 
     private fun normalizeTitle(title: String): String = title.lowercase().replace(Regex("[^a-z0-9\\s]"), "").replace(Regex("\\s+"), " ").trim()
+
+    private fun detectFormatFromTitle(title: String): String? {
+        val lowerTitle = title.lowercase()
+        return when {
+            lowerTitle.contains("movie") || lowerTitle.contains("film") -> "MOVIE"
+            lowerTitle.contains("ova") -> "OVA"
+            lowerTitle.contains("ona") -> "ONA"
+            lowerTitle.contains("special") -> "SPECIAL"
+            lowerTitle.contains("season") -> "TV"
+            else -> null
+        }
+    }
 
     private fun extractBaseTitle(title: String): String {
         var baseTitle = title

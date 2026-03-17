@@ -306,7 +306,8 @@ private fun FavoritesTab(
                                 latestEpisode = animeFromList?.latestEpisode,
                                 averageScore = animeFromList?.averageScore ?: fav.averageScore,
                                 genres = animeFromList?.genres ?: emptyList(),
-                                year = animeFromList?.year ?: fav.year
+                                year = animeFromList?.year ?: fav.year,
+                                format = animeFromList?.format
                             )
                             onAnimeClick(exploreAnime)
                         },
@@ -392,7 +393,8 @@ private fun FavoritesTab(
                                         latestEpisode = anime.latestEpisode,
                                         averageScore = anime.averageScore,
                                         genres = anime.genres,
-                                        year = anime.year
+                                        year = anime.year,
+                                        format = anime.format
                                     )
                                     onAnimeClick(exploreAnime)
                                 },

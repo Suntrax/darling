@@ -747,6 +747,6 @@ class MainViewModel : ViewModel() {
         _isLoadingHome.value = false
     }
 
-    suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, latest)
+    suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
     fun addExploreAnimeToList(anime: ExploreAnime, status: String) = updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
 }

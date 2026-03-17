@@ -101,6 +101,7 @@ fun PlayerScreen(
     animekaiOutroStart: Int? = null,
     animekaiOutroEnd: Int? = null,
     onSavePosition: ((Long) -> Unit)? = null,
+    onPositionSaved: ((Long) -> Unit)? = null,
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
     onNextEpisode: (() -> Unit)? = null,
@@ -334,7 +335,7 @@ fun PlayerScreen(
     fun seekBy(milliseconds: Long, isForward: Boolean) {
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
-        exoPlayer.play()
+        // Don't autoplay when user is manually skipping
         val seconds = abs(milliseconds / 1000)
         skipIndicatorText = if (milliseconds > 0) "+${seconds}s" else "-${seconds}s"
         skipIsForward = isForward
@@ -501,6 +502,8 @@ fun PlayerScreen(
         hasError = false
         playbackError = null
         isChangingServer = true
+        onSavePosition?.invoke(exoPlayer.currentPosition)
+        onPositionSaved?.invoke(exoPlayer.currentPosition)
         exoPlayer.stop()
         onServerChange?.invoke(serverName, category)
     }
@@ -643,7 +646,7 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = showControls || hasError,
+            visible = showControls || hasError || showSkipIndicator,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()

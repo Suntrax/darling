@@ -108,7 +108,10 @@ fun DetailedAnimeScreen(
 
     // Track anime changes for transition animation
     LaunchedEffect(anime.id) {
-        if (previousAnimeId != anime.id && previousAnimeId != 0) {
+        // Reset loading state when anime changes
+        isLoadingDetails = true
+        
+        if (previousAnimeId != 0 && previousAnimeId != anime.id) {
             // This is a navigation (relation click or back), trigger transition animation
             isTransitioning = true
             kotlinx.coroutines.delay(150)
@@ -116,10 +119,24 @@ fun DetailedAnimeScreen(
         }
         previousAnimeId = anime.id
         
-        isLoadingDetails = true
-        detailedData = viewModel.fetchDetailedAnimeData(anime.id)
-        isLoadingDetails = false
-        relations = detailedData?.relations ?: anime.relations
+        try {
+            android.util.Log.d("DetailedAnimeScreen", "Fetching details for anime.id=${anime.id}")
+            detailedData = viewModel.fetchDetailedAnimeData(anime.id)
+            android.util.Log.d("DetailedAnimeScreen", "Fetch complete, data=${detailedData?.title}")
+            relations = detailedData?.relations ?: anime.relations
+        } catch (e: Exception) {
+            android.util.Log.e("DetailedAnimeScreen", "Error fetching details for ${anime.id}", e)
+        } finally {
+            isLoadingDetails = false
+            android.util.Log.d("DetailedAnimeScreen", "Loading set to false")
+        }
+    }
+    
+    // Ensure loading is reset when composable leaves composition
+    DisposableEffect(Unit) {
+        onDispose {
+            isLoadingDetails = false
+        }
     }
 
     val displayData = detailedData ?: anime

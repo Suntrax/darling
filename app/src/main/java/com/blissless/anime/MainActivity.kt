@@ -902,7 +902,8 @@ fun MainScreen(
                                         latestEpisode = detailedData.latestEpisode,
                                         averageScore = detailedData.averageScore,
                                         genres = detailedData.genres,
-                                        year = detailedData.year
+                                        year = detailedData.year,
+                                        format = detailedData.format
                                     )
                                     Log.d("MainActivity", "Setting selectedExploreAnime to: ${selectedExploreAnime?.title}, cover: ${selectedExploreAnime?.cover}")
                                     showExploreDialog = true
@@ -958,6 +959,9 @@ fun MainScreen(
                 animekaiOutroEnd = animekaiOutroEnd,
                 onSavePosition = { position ->
                     viewModel.savePlaybackPosition(anime.id, currentEpisode, position)
+                },
+                onPositionSaved = { position ->
+                    savedPlaybackPosition = position
                 },
                 onProgressUpdate = { percentage ->
                     val trackingPercent = viewModel.trackingPercentage.value

@@ -129,9 +129,9 @@ fun ExploreScreen(
                         averageScore = anime.averageScore,
                         genres = anime.genres,
                         listStatus = "",
-                        listEntryId = 0
+                        listEntryId = 0,
+                        year = anime.year
                     )
-                    viewModel.addExploreAnimeToList(anime, "CURRENT")
                     onPlayEpisode(animeMedia, episode)
                     showDialog = false
                 },
@@ -172,7 +172,6 @@ fun ExploreScreen(
                         listStatus = "",
                         listEntryId = 0
                     )
-                    viewModel.addExploreAnimeToList(anime, "CURRENT")
                     onPlayEpisode(animeMedia, episode)
                     showDialog = false
                 },
@@ -209,7 +208,8 @@ fun ExploreScreen(
                                         latestEpisode = detailedData.latestEpisode,
                                         averageScore = detailedData.averageScore,
                                         genres = detailedData.genres,
-                                        year = detailedData.year
+                                        year = detailedData.year,
+                                        format = detailedData.format
                                     )
                                 } else {
                                     android.util.Log.d("ExploreScreen", "Failed to fetch detailed data for relation!")
@@ -398,8 +398,13 @@ fun ExploreScreen(
         }
     }
 
-    // Stop refreshing when loading completes
-    LaunchedEffect(isLoading) {
+    // Stop refreshing when loading completes or after timeout
+    LaunchedEffect(isLoading, isRefreshing) {
+        if (isRefreshing) {
+            // Use a timeout to ensure refreshing stops even if loading state gets stuck
+            kotlinx.coroutines.delay(15000)
+            isRefreshing = false
+        }
         if (!isLoading && isRefreshing) {
             isRefreshing = false
         }

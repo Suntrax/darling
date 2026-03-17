@@ -686,7 +686,8 @@ fun ScheduleScreen(
                                 latestEpisode = anime.airingEpisode,
                                 averageScore = anime.averageScore,
                                 genres = anime.genres,
-                                year = anime.year
+                                year = anime.year,
+                                format = null
                             )
                             onShowAnimeDialog(exploreAnime, null)
                         }

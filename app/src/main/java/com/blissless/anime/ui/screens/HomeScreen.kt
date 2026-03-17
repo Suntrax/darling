@@ -426,7 +426,7 @@ fun HomeScreen(
             firstAnime = selectedAnime
         }
         
-        val exploreAnime = ExploreAnime(id = selectedAnime!!.id, title = selectedAnime!!.title, cover = selectedAnime!!.cover, banner = selectedAnime!!.banner, episodes = selectedAnime!!.totalEpisodes, latestEpisode = selectedAnime!!.latestEpisode, averageScore = selectedAnime!!.averageScore, genres = selectedAnime!!.genres, year = selectedAnime!!.year)
+        val exploreAnime = ExploreAnime(id = selectedAnime!!.id, title = selectedAnime!!.title, cover = selectedAnime!!.cover, banner = selectedAnime!!.banner, episodes = selectedAnime!!.totalEpisodes, latestEpisode = selectedAnime!!.latestEpisode, averageScore = selectedAnime!!.averageScore, genres = selectedAnime!!.genres, year = selectedAnime!!.year, format = selectedAnime!!.format)
         val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
         if (simplifyAnimeDetails) {
             HomeAnimeInfoDialog(
@@ -519,5 +519,15 @@ fun HomeScreen(
         )
     }
 
-    LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }
+    // Stop refreshing when loading completes or after timeout
+    LaunchedEffect(isLoading, isRefreshing) {
+        if (isRefreshing) {
+            // Use a timeout to ensure refreshing stops even if loading state gets stuck
+            kotlinx.coroutines.delay(15000)
+            isRefreshing = false
+        }
+        if (!isLoading && isRefreshing) {
+            isRefreshing = false
+        }
+    }
 }

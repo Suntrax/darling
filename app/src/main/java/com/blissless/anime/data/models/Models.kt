@@ -18,7 +18,8 @@ data class ExploreAnime(
     val averageScore: Int?,
     val genres: List<String>,
     val year: Int? = null,
-    val malId: Int? = null
+    val malId: Int? = null,
+    val format: String? = null
 )
 
 @Serializable
@@ -37,7 +38,8 @@ data class AnimeMedia(
     val listStatus: String = "",
     val listEntryId: Int? = null,
     val year: Int? = null,
-    val malId: Int? = null
+    val malId: Int? = null,
+    val format: String? = null
 )
 
 @Serializable
