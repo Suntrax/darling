@@ -642,7 +642,7 @@ private fun CategoryChip(
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = when {
                     !enabled -> if (isOled) Color.White.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    isSelected && disableMaterialColors -> Color.Black
+                    isSelected -> Color.Black
                     else -> Color.Unspecified
                 }
             )
@@ -651,7 +651,7 @@ private fun CategoryChip(
             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
             selectedContainerColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
             labelColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-            selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White
+            selectedLabelColor = Color.Black
         ),
         modifier = if (!enabled) Modifier.alpha(0.5f) else Modifier
     )

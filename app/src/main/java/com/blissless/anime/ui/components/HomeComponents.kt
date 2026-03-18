@@ -154,7 +154,7 @@ fun HomeAnimeCard(
                 else -> "${anime.progress}"
             }
         }
-        "COMPLETED" -> { if (total > 0) "$total eps" else "${anime.progress} eps" }
+        "COMPLETED" -> { if (total > 0) "$total ${if (total == 1) "ep" else "eps"}" else "${anime.progress} ${if (anime.progress == 1) "ep" else "eps"}" }
         else -> {
             when {
                 total > 0 -> "$released / $total"

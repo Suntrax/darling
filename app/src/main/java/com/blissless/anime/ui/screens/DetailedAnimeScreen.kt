@@ -266,13 +266,13 @@ fun DetailedAnimeScreen(
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .padding(top = 40.dp, end = 8.dp)
+                    .padding(top = 16.dp, end = 16.dp)
                     .align(Alignment.TopEnd)
-                    .size(32.dp)
+                    .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
             Box(
@@ -612,7 +612,7 @@ fun DetailedAnimeScreen(
                                                     color = Color.Black.copy(alpha = 0.7f)
                                                 ) {
                                                     Text(
-                                                        "${eps} eps",
+                                                        "$eps ${if (eps == 1) "ep" else "eps"}",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = Color.White,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

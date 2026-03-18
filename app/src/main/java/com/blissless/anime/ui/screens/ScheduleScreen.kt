@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -110,6 +112,9 @@ fun ScheduleScreen(
 
     // Track if we're programmatically scrolling (to prevent scroll feedback loop)
     var isProgrammaticScroll by remember { mutableStateOf(false) }
+
+    // Lock input during programmatic scroll to prevent spam
+    var isInputLocked by remember { mutableStateOf(false) }
 
     // For By Day mode, track selected day
     var selectedDay by remember { mutableIntStateOf(currentDayOfWeek) }
@@ -347,30 +352,37 @@ fun ScheduleScreen(
     }
 
     // Track visible day based on scroll position (only for All Upcoming mode)
+    // Only update when scrolling actually stops to prevent visual jitter
+    val scrollJob = remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, listStateAllUpcoming.firstVisibleItemScrollOffset, viewMode) {
         if (viewMode == 0 && !isProgrammaticScroll) {
-            val firstVisibleIndex = listStateAllUpcoming.firstVisibleItemIndex
+            // Cancel previous job if still running
+            scrollJob.value?.cancel()
+            
+            // Wait for scroll to settle
+            scrollJob.value = scope.launch {
+                kotlinx.coroutines.delay(200)
+                val firstVisibleIndex = listStateAllUpcoming.firstVisibleItemIndex
 
-            if (firstVisibleIndex < allUpcomingTimelineItems.size) {
-                // Find the day header for the first visible item
-                var currentDay = currentDayOfWeek
-                for (i in 0..firstVisibleIndex) {
-                    if (allUpcomingTimelineItems.getOrNull(i) is TimelineItem.DayHeader) {
-                        currentDay = (allUpcomingTimelineItems[i] as TimelineItem.DayHeader).dayIndex
+                if (firstVisibleIndex < allUpcomingTimelineItems.size) {
+                    var currentDay = currentDayOfWeek
+                    for (i in 0..firstVisibleIndex) {
+                        if (allUpcomingTimelineItems.getOrNull(i) is TimelineItem.DayHeader) {
+                            currentDay = (allUpcomingTimelineItems[i] as TimelineItem.DayHeader).dayIndex
+                        }
                     }
-                }
-                if (visibleDayByScroll != currentDay) {
                     visibleDayByScroll = currentDay
                 }
             }
         }
     }
 
-    // Reset programmatic scroll flag
+    // Reset programmatic scroll flag and unlock input (after animation completes)
     LaunchedEffect(isProgrammaticScroll) {
         if (isProgrammaticScroll) {
-            kotlinx.coroutines.delay(300)
+            kotlinx.coroutines.delay(550) // Slightly longer than animation duration
             isProgrammaticScroll = false
+            isInputLocked = false
         }
     }
 
@@ -381,6 +393,7 @@ fun ScheduleScreen(
             val listState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
             if (targetIndex >= 0) {
                 isProgrammaticScroll = true
+                isInputLocked = true
                 listState.animateScrollToItem(targetIndex, scrollOffset = -100)
             }
         }
@@ -491,6 +504,7 @@ fun ScheduleScreen(
                     // Scroll to NOW indicator when switching to All Upcoming mode
                     if (nowIndicatorIndexAll >= 0) {
                         isProgrammaticScroll = true
+                        isInputLocked = true
                         scope.launch {
                             listStateAllUpcoming.animateScrollToItem(nowIndicatorIndexAll, scrollOffset = -100)
                         }
@@ -499,12 +513,12 @@ fun ScheduleScreen(
                 label = { 
                     Text(
                         "All Upcoming",
-                        color = if (viewMode == 0 && disableMaterialColors) Color.Black else Color.Unspecified
+                        color = if (viewMode == 0) Color.Black else Color.Unspecified
                     ) 
                 },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
+                    selectedLabelColor = Color.Black,
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
             )
@@ -516,6 +530,7 @@ fun ScheduleScreen(
                     // Scroll to NOW indicator when switching to By Day mode
                     if (nowIndicatorIndexByDay >= 0) {
                         isProgrammaticScroll = true
+                        isInputLocked = true
                         scope.launch {
                             listStateByDay.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
                         }
@@ -524,12 +539,12 @@ fun ScheduleScreen(
                 label = { 
                     Text(
                         "By Day",
-                        color = if (viewMode == 1 && disableMaterialColors) Color.Black else Color.Unspecified
+                        color = if (viewMode == 1) Color.Black else Color.Unspecified
                     ) 
                 },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
+                    selectedLabelColor = Color.Black,
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
             )
@@ -552,7 +567,9 @@ fun ScheduleScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = {
+                            if (isInputLocked) return@FilterChip
                             isProgrammaticScroll = true
+                            isInputLocked = true
                             visibleDayByScroll = dayIndex
 
                             // If clicking on Today, scroll to NOW indicator, else scroll to day header
@@ -575,17 +592,13 @@ fun ScheduleScreen(
                                     text = DayAbbreviations[dayIndex],
                                     fontSize = 12.sp,
                                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected && disableMaterialColors) Color.Black else Color.Unspecified
+                                    color = if (isSelected) Color.Black else Color.Unspecified
                                 )
                                 if (dayAnimeCount > 0) {
                                     Text(
                                         text = "$dayAnimeCount",
                                         fontSize = 10.sp,
-                                        color = if (isSelected) {
-                                            if (disableMaterialColors) Color.Black else Color.White
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        }
+                                        color = if (isSelected) Color.Black else Color.Unspecified
                                     )
                                 }
                             }
@@ -593,10 +606,9 @@ fun ScheduleScreen(
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
+                            selectedLabelColor = Color.Black,
                             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = if (isToday) MaterialTheme.colorScheme.primary
-                            else if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            labelColor = Color.Unspecified
                         ),
                         border = if (isToday && !isSelected) {
                             androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
@@ -626,15 +638,12 @@ fun ScheduleScreen(
                         onClick = {
                             val wasDifferentDay = selectedDay != dayIndex
                             selectedDay = dayIndex
-                            // Scroll to top for other days, NOW indicator for today
+                            // Instant scroll for By Day mode
                             if (isToday && nowIndicatorIndexByDay >= 0) {
-                                isProgrammaticScroll = true
                                 scope.launch {
                                     listStateByDay.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
                                 }
                             } else if (wasDifferentDay) {
-                                // Scroll to top of list for other days when changing day
-                                isProgrammaticScroll = true
                                 scope.launch {
                                     listStateByDay.animateScrollToItem(0)
                                 }
@@ -649,17 +658,13 @@ fun ScheduleScreen(
                                     text = DayAbbreviations[dayIndex],
                                     fontSize = 12.sp,
                                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected && disableMaterialColors) Color.Black else Color.Unspecified
+                                    color = if (isSelected) Color.Black else Color.Unspecified
                                 )
                                 if (dayAnimeCount > 0) {
                                     Text(
                                         text = "$dayAnimeCount",
                                         fontSize = 10.sp,
-                                        color = if (isSelected) {
-                                            if (disableMaterialColors) Color.Black else Color.White
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        }
+                                        color = if (isSelected) Color.Black else Color.Unspecified
                                     )
                                 }
                             }
@@ -667,10 +672,9 @@ fun ScheduleScreen(
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White,
+                            selectedLabelColor = Color.Black,
                             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = if (isToday) MaterialTheme.colorScheme.primary
-                            else if (isOled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            labelColor = Color.Unspecified
                         ),
                         border = if (isToday && !isSelected) {
                             androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)

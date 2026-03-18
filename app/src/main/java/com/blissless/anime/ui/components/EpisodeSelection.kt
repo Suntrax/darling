@@ -375,13 +375,13 @@ fun RichEpisodeScreen(
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .padding(top = 40.dp, end = 8.dp)
+                    .padding(top = 16.dp, end = 16.dp)
                     .align(Alignment.TopEnd)
-                    .size(32.dp)
+                    .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
             }
             Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).width(40.dp).height(4.dp).background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f))
             if (isLoadingEpisodes) { CircularProgressIndicator(modifier = Modifier.align(Alignment.TopCenter).padding(top = 70.dp).zIndex(10f), color = MaterialTheme.colorScheme.primary) }

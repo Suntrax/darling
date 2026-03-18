@@ -714,9 +714,10 @@ fun PlayerScreen(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (qualityOptions.isNotEmpty() && onQualityChange != null) {
-                            Box {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
+                        // Quality selector - always takes same space
+                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                            if (qualityOptions.isNotEmpty() && onQualityChange != null) {
                                 IconButton(
                                     onClick = { showQualityMenu = true },
                                     modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
@@ -761,8 +762,9 @@ fun PlayerScreen(
                             }
                         }
 
-                        if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
-                            Box {
+                        // Server selector - always takes same space
+                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                            if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
                                 IconButton(
                                     onClick = { showServerMenu = true },
                                     modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
@@ -806,11 +808,14 @@ fun PlayerScreen(
                             }
                         }
 
-                        IconButton(
-                            onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
-                            modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                        ) {
-                            Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
+                        // Resize button - always takes same space
+                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                            IconButton(
+                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
+                                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                            ) {
+                                Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
+                            }
                         }
                     }
                 }

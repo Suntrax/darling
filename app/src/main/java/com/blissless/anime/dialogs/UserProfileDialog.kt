@@ -563,7 +563,7 @@ private fun FavoriteAnimeItem(
                 )
                 anime.year?.let { year ->
                     Text(
-                        "$year - ${anime.totalEpisodes} eps",
+                        "$year - ${anime.totalEpisodes} ${if (anime.totalEpisodes == 1) "ep" else "eps"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -953,7 +953,7 @@ private fun RateAnimeItem(
                 )
                 anime.year?.let { year ->
                     Text(
-                        "$year - ${anime.totalEpisodes} eps",
+                        "$year - ${anime.totalEpisodes} ${if (anime.totalEpisodes == 1) "ep" else "eps"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )
