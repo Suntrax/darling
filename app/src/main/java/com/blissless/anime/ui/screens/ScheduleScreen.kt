@@ -826,7 +826,7 @@ fun ScheduleScreen(
                         year = selectedAnime!!.year,
                         malId = selectedAnime!!.malId
                     )
-                    viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                    // Don't auto-add to list - only add when threshold is reached
                     onPlayEpisode(animeMedia, episode)
                     showAnimeDialog = false
                     selectedAnime = null
@@ -910,7 +910,7 @@ fun ScheduleScreen(
                         year = selectedAnime!!.year,
                         malId = selectedAnime!!.malId
                     )
-                    viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                    // Don't auto-add to list - only add when threshold is reached
                     onPlayEpisode(animeMedia, episode)
                     showAnimeDialog = false
                     selectedAnime = null

@@ -318,7 +318,7 @@ fun SearchOverlay(
                         listStatus = "",
                         listEntryId = 0
                     )
-                    viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                    // Don't auto-add to list - only add when threshold is reached
                     onPlayEpisode(animeMedia, episode)
                     showDetailDialog = false
                 },

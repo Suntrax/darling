@@ -715,6 +715,52 @@ fun PlayerScreen(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
+                        // Server selector - always takes same space
+                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                            if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
+                                IconButton(
+                                    onClick = { showServerMenu = true },
+                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                ) {
+                                    Icon(Icons.Default.Settings, "Server Selection", tint = Color.White)
+                                }
+
+                                DropdownMenu(
+                                    expanded = showServerMenu,
+                                    onDismissRequest = { showServerMenu = false },
+                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
+                                ) {
+                                    if (subServers.isNotEmpty()) {
+                                        Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                        subServers.forEach { server ->
+                                            ServerMenuItem(
+                                                serverName = server.name,
+                                                isSelected = server.name == currentServerName && currentCategory == "sub",
+                                                onClick = {
+                                                    showServerMenu = false
+                                                    handleServerChange(server.name, "sub")
+                                                }
+                                            )
+                                        }
+                                    }
+                                    if (dubServers.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                        dubServers.forEach { server ->
+                                            ServerMenuItem(
+                                                serverName = server.name,
+                                                isSelected = server.name == currentServerName && currentCategory == "dub",
+                                                onClick = {
+                                                    showServerMenu = false
+                                                    handleServerChange(server.name, "dub")
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Quality selector - always takes same space
                         Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
                             if (qualityOptions.isNotEmpty() && onQualityChange != null) {
@@ -757,52 +803,6 @@ fun PlayerScreen(
                                                 showQualityMenu = false
                                             }
                                         )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Server selector - always takes same space
-                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                            if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
-                                IconButton(
-                                    onClick = { showServerMenu = true },
-                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                                ) {
-                                    Icon(Icons.Default.Settings, "Server Selection", tint = Color.White)
-                                }
-
-                                DropdownMenu(
-                                    expanded = showServerMenu,
-                                    onDismissRequest = { showServerMenu = false },
-                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
-                                ) {
-                                    if (subServers.isNotEmpty()) {
-                                        Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                                        subServers.forEach { server ->
-                                            ServerMenuItem(
-                                                serverName = server.name,
-                                                isSelected = server.name == currentServerName && currentCategory == "sub",
-                                                onClick = {
-                                                    showServerMenu = false
-                                                    handleServerChange(server.name, "sub")
-                                                }
-                                            )
-                                        }
-                                    }
-                                    if (dubServers.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                                        dubServers.forEach { server ->
-                                            ServerMenuItem(
-                                                serverName = server.name,
-                                                isSelected = server.name == currentServerName && currentCategory == "dub",
-                                                onClick = {
-                                                    showServerMenu = false
-                                                    handleServerChange(server.name, "dub")
-                                                }
-                                            )
-                                        }
                                     }
                                 }
                             }
