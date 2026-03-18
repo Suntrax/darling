@@ -116,6 +116,9 @@ fun ScheduleScreen(
     // Lock input during programmatic scroll to prevent spam
     var isInputLocked by remember { mutableStateOf(false) }
 
+    // Track if user has manually interacted with day selectors
+    var hasUserInteracted by remember { mutableStateOf(false) }
+
     // For By Day mode, track selected day
     var selectedDay by remember { mutableIntStateOf(currentDayOfWeek) }
 
@@ -386,9 +389,9 @@ fun ScheduleScreen(
         }
     }
 
-    // Automatically scroll to NOW indicator when screen becomes visible or data loads
+    // Automatically scroll to NOW indicator only on first visit
     LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay) {
-        if (isVisible) {
+        if (isVisible && !hasUserInteracted) {
             val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
             val listState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
             if (targetIndex >= 0) {
@@ -500,6 +503,7 @@ fun ScheduleScreen(
             FilterChip(
                 selected = viewMode == 0,
                 onClick = {
+                    hasUserInteracted = true
                     viewMode = 0
                     // Scroll to NOW indicator when switching to All Upcoming mode
                     if (nowIndicatorIndexAll >= 0) {
@@ -525,6 +529,7 @@ fun ScheduleScreen(
             FilterChip(
                 selected = viewMode == 1,
                 onClick = {
+                    hasUserInteracted = true
                     viewMode = 1
                     selectedDay = currentDayOfWeek
                     // Scroll to NOW indicator when switching to By Day mode
@@ -568,6 +573,7 @@ fun ScheduleScreen(
                         selected = isSelected,
                         onClick = {
                             if (isInputLocked) return@FilterChip
+                            hasUserInteracted = true
                             isProgrammaticScroll = true
                             isInputLocked = true
                             visibleDayByScroll = dayIndex
@@ -636,6 +642,7 @@ fun ScheduleScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = {
+                            hasUserInteracted = true
                             val wasDifferentDay = selectedDay != dayIndex
                             selectedDay = dayIndex
                             // Instant scroll for By Day mode
