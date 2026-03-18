@@ -290,7 +290,7 @@ private fun StatusBadge(status: String) {
 }
 
 @Composable
-private fun StatusButtonsGrid(
+fun StatusButtonsGrid(
     selectedStatus: String,
     markedForRemoval: Boolean,
     showAnimation: Boolean,

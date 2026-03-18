@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Explore
@@ -24,6 +25,7 @@ import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.CachedStream
+import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.ui.screens.DetailedAnimeScreen
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.screens.ExploreScreen
@@ -40,6 +42,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import android.widget.Toast
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.OverlayState
 
 class MainActivity : ComponentActivity() {
 
@@ -238,29 +241,10 @@ fun MainScreen(
 
     var savedPlaybackPosition by remember { mutableLongStateOf(0L) }
 
-    var selectedExploreAnime by remember { mutableStateOf<ExploreAnime?>(null) }
-    var showExploreDialog by remember { mutableStateOf(false) }
+    var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     
-    // Track the first anime opened (for back navigation)
-    var firstOpenedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+    var scheduleDialogOpen by remember { mutableStateOf(false) }
     
-    // Helper to close all anime pages and reset
-    fun closeAllAnimePages() {
-        showExploreDialog = false
-        selectedExploreAnime = null
-        firstOpenedAnime = null
-    }
-    
-    // Helper to go back to first anime
-    fun goBackToFirstAnime(): Boolean {
-        return if (firstOpenedAnime != null && selectedExploreAnime?.id != firstOpenedAnime?.id) {
-            selectedExploreAnime = firstOpenedAnime
-            true
-        } else {
-            false
-        }
-    }
-
     // Animekai timestamps (PRIMARY source)
     var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
     var animekaiIntroEnd by remember { mutableStateOf<Int?>(null) }
@@ -278,12 +262,10 @@ fun MainScreen(
     }
 
     val onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { anime, previousAnime ->
-        // Set first anime if this is the first one being opened
-        if (firstOpenedAnime == null) {
-            firstOpenedAnime = previousAnime ?: anime
-        }
-        selectedExploreAnime = anime
-        showExploreDialog = true
+        val currentDialog = overlayState as? OverlayState.ExploreAnimeDialog
+        val firstAnime = currentDialog?.firstAnime ?: previousAnime ?: anime
+        val isFirstOpen = currentDialog == null
+        overlayState = OverlayState.ExploreAnimeDialog(anime = anime, firstAnime = firstAnime, isFirstOpen = isFirstOpen)
     }
     
     // Wrapper for callbacks that expect single parameter
@@ -293,7 +275,14 @@ fun MainScreen(
 
     // Callback to clear the first anime (when closing from ExploreScreen inline dialog)
     val onClearAnimeStack: () -> Unit = {
-        firstOpenedAnime = null
+        val current = overlayState as? OverlayState.ExploreAnimeDialog
+        if (current != null) {
+            if (!current.isFirstOpen && current.firstAnime != null && current.anime.id != current.firstAnime.id) {
+                overlayState = OverlayState.ExploreAnimeDialog(anime = current.firstAnime, firstAnime = current.firstAnime, isFirstOpen = false)
+            } else {
+                overlayState = OverlayState.None
+            }
+        }
     }
 
     // Helper to get English title for scraping (Animekai works better with English titles)
@@ -749,116 +738,56 @@ fun MainScreen(
         }
     }
 
-    if (showExploreDialog && selectedExploreAnime != null) {
+    val exploreDialog = overlayState as? OverlayState.ExploreAnimeDialog
+    if (exploreDialog != null) {
         if (simplifyAnimeDetails) {
-            val isAnimeFavorite = localFavorites.containsKey(selectedExploreAnime!!.id)
+            val isAnimeFavorite = localFavorites.containsKey(exploreDialog.anime.id)
             ExploreAnimeDialog(
-                anime = selectedExploreAnime!!,
+                anime = exploreDialog.anime,
                 viewModel = viewModel,
                 isOled = isOled,
-                currentStatus = animeStatusMap[selectedExploreAnime!!.id],
+                currentStatus = animeStatusMap[exploreDialog.anime.id],
                 isFavorite = isAnimeFavorite,
                 canAddFavorite = canAddFavorite || isAnimeFavorite,
                 onToggleFavorite = {
-                    viewModel.toggleLocalFavorite(selectedExploreAnime!!)
+                    viewModel.toggleLocalFavorite(exploreDialog.anime)
                 },
                 onDismiss = {
-                    // Check if there's a first anime to go back to
-                    if (goBackToFirstAnime()) {
-                        // Go back to first anime - don't close
-                    } else {
-                        // This is the first anime, actually close the dialog
-                        closeAllAnimePages()
-                    }
+                    overlayState = OverlayState.None
                 },
                 onAddToPlanning = {
-                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "PLANNING")
+                    viewModel.addExploreAnimeToList(exploreDialog.anime, "PLANNING")
                 },
                 onAddToDropped = {
-                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "DROPPED")
+                    viewModel.addExploreAnimeToList(exploreDialog.anime, "DROPPED")
                 },
                 onAddToOnHold = {
-                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "PAUSED")
+                    viewModel.addExploreAnimeToList(exploreDialog.anime, "PAUSED")
                 },
                 onRemoveFromList = {
-                    viewModel.removeAnimeFromList(selectedExploreAnime!!.id)
+                    viewModel.removeAnimeFromList(exploreDialog.anime.id)
                 },
                 onStartWatching = { episode ->
                     val animeMedia = AnimeMedia(
-                        id = selectedExploreAnime!!.id,
-                        title = selectedExploreAnime!!.title,
-                        titleEnglish = selectedExploreAnime!!.titleEnglish,
-                        cover = selectedExploreAnime!!.cover,
-                        banner = selectedExploreAnime!!.banner,
+                        id = exploreDialog.anime.id,
+                        title = exploreDialog.anime.title,
+                        titleEnglish = exploreDialog.anime.titleEnglish,
+                        cover = exploreDialog.anime.cover,
+                        banner = exploreDialog.anime.banner,
                         progress = 0,
-                        totalEpisodes = selectedExploreAnime!!.episodes,
-                        latestEpisode = selectedExploreAnime!!.latestEpisode,
+                        totalEpisodes = exploreDialog.anime.episodes,
+                        latestEpisode = exploreDialog.anime.latestEpisode,
                         status = "",
-                        averageScore = selectedExploreAnime!!.averageScore,
-                        genres = selectedExploreAnime!!.genres,
+                        averageScore = exploreDialog.anime.averageScore,
+                        genres = exploreDialog.anime.genres,
                         listStatus = "",
                         listEntryId = 0,
-                        year = selectedExploreAnime!!.year,
-                        malId = selectedExploreAnime!!.malId
+                        year = exploreDialog.anime.year,
+                        malId = exploreDialog.anime.malId
                     )
-                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "CURRENT")
+                    viewModel.addExploreAnimeToList(exploreDialog.anime, "CURRENT")
                     onPlayEpisode(animeMedia, episode)
-                    showExploreDialog = false
-                },
-                isLoggedIn = isLoggedIn,
-                onLoginClick = { viewModel.loginWithAniList() }
-            )
-        } else {
-            val isAnimeFavorite = localFavorites.containsKey(selectedExploreAnime!!.id)
-            DetailedAnimeScreen(
-                anime = selectedExploreAnime!!.toDetailedAnimeData(),
-                viewModel = viewModel,
-                isOled = isOled,
-                currentStatus = animeStatusMap[selectedExploreAnime!!.id],
-                isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavorite || isAnimeFavorite,
-                onDismiss = {
-                    // Check if there's a first anime to go back to
-                    if (goBackToFirstAnime()) {
-                        // Go back to first anime - don't close
-                    } else {
-                        // This is the first anime, actually close the dialog
-                        closeAllAnimePages()
-                    }
-                },
-                onSwipeToClose = { closeAllAnimePages() },
-                onPlayEpisode = { episode ->
-                    val animeMedia = AnimeMedia(
-                        id = selectedExploreAnime!!.id,
-                        title = selectedExploreAnime!!.title,
-                        titleEnglish = selectedExploreAnime!!.titleEnglish,
-                        cover = selectedExploreAnime!!.cover,
-                        banner = selectedExploreAnime!!.banner,
-                        progress = 0,
-                        totalEpisodes = selectedExploreAnime!!.episodes,
-                        latestEpisode = selectedExploreAnime!!.latestEpisode,
-                        status = "",
-                        averageScore = selectedExploreAnime!!.averageScore,
-                        genres = selectedExploreAnime!!.genres,
-                        listStatus = "",
-                        listEntryId = 0,
-                        year = selectedExploreAnime!!.year,
-                        malId = selectedExploreAnime!!.malId
-                    )
-                    viewModel.addExploreAnimeToList(selectedExploreAnime!!, "CURRENT")
-                    onPlayEpisode(animeMedia, episode)
-                    showExploreDialog = false
-                },
-                onUpdateStatus = { status ->
-                    if (status != null) {
-                        viewModel.addExploreAnimeToList(selectedExploreAnime!!, status)
-                    }
-                },
-                onRemove = {
-                    viewModel.removeAnimeFromList(selectedExploreAnime!!.id)
-                },
-                onToggleFavorite = { _ ->
-                    viewModel.toggleLocalFavorite(selectedExploreAnime!!)
+                    overlayState = OverlayState.None
                 },
                 isLoggedIn = isLoggedIn,
                 onLoginClick = { viewModel.loginWithAniList() },
@@ -869,7 +798,7 @@ fun MainScreen(
                                 delay(100)
                                 val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                                 if (detailedData != null) {
-                                    selectedExploreAnime = ExploreAnime(
+                                    val newAnime = ExploreAnime(
                                         id = relation.id,
                                         title = detailedData.title,
                                         titleEnglish = detailedData.titleEnglish,
@@ -882,7 +811,90 @@ fun MainScreen(
                                         year = detailedData.year,
                                         format = detailedData.format
                                     )
-                                    showExploreDialog = true
+                                    val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
+                                    overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = firstAnime, isFirstOpen = false)
+                                } else {
+                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        } else {
+            val isAnimeFavorite = localFavorites.containsKey(exploreDialog.anime.id)
+            DetailedAnimeScreen(
+                anime = exploreDialog.anime.toDetailedAnimeData(),
+                viewModel = viewModel,
+                isOled = isOled,
+                currentStatus = animeStatusMap[exploreDialog.anime.id],
+                isFavorite = isAnimeFavorite,
+                canAddFavorite = canAddFavorite || isAnimeFavorite,
+                onDismiss = {
+                    overlayState = OverlayState.None
+                },
+                onSwipeToClose = { overlayState = OverlayState.None },
+                onPlayEpisode = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = exploreDialog.anime.id,
+                        title = exploreDialog.anime.title,
+                        titleEnglish = exploreDialog.anime.titleEnglish,
+                        cover = exploreDialog.anime.cover,
+                        banner = exploreDialog.anime.banner,
+                        progress = 0,
+                        totalEpisodes = exploreDialog.anime.episodes,
+                        latestEpisode = exploreDialog.anime.latestEpisode,
+                        status = "",
+                        averageScore = exploreDialog.anime.averageScore,
+                        genres = exploreDialog.anime.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = exploreDialog.anime.year,
+                        malId = exploreDialog.anime.malId
+                    )
+                    viewModel.addExploreAnimeToList(exploreDialog.anime, "CURRENT")
+                    onPlayEpisode(animeMedia, episode)
+                    overlayState = OverlayState.None
+                },
+                onUpdateStatus = { status ->
+                    if (status != null) {
+                        viewModel.addExploreAnimeToList(exploreDialog.anime, status)
+                    }
+                },
+                onRemove = {
+                    viewModel.removeAnimeFromList(exploreDialog.anime.id)
+                },
+                onToggleFavorite = { _ ->
+                    viewModel.toggleLocalFavorite(exploreDialog.anime)
+                },
+                isLoggedIn = isLoggedIn,
+                onLoginClick = { viewModel.loginWithAniList() },
+                onRelationClick = { relation ->
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100)
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (detailedData != null) {
+                                    val newAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                    val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
+                                    overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = firstAnime, isFirstOpen = false)
                                 } else {
                                     Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
                                 }
@@ -907,6 +919,7 @@ fun MainScreen(
                 subtitleUrl = currentSubtitleUrl,
                 currentEpisode = currentEpisode,
                 totalEpisodes = totalEpisodes,
+                latestAiredEpisode = anime.latestEpisode,
                 animeName = anime.title,
                 animeId = anime.id,
                 malId = anime.malId ?: 0,
@@ -941,7 +954,8 @@ fun MainScreen(
                     }
                 },
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
-                onNextEpisode = if (totalEpisodes == 0 || currentEpisode < totalEpisodes) onNextEpisode else null,
+                onNextEpisode = if (currentEpisode < (anime.latestEpisode ?: totalEpisodes)) onNextEpisode else null,
+                isLatestEpisode = currentEpisode >= (anime.latestEpisode ?: totalEpisodes) && (anime.latestEpisode ?: 0) > 0,
                 onServerChange = { server, category -> changeServer(server, category) },
                 onQualityChange = { qualityUrl, qualityName -> changeQuality(qualityUrl, qualityName) },
                 onPlaybackError = { onPlaybackError() },
@@ -957,8 +971,18 @@ fun MainScreen(
         }
 
         androidx.activity.compose.BackHandler {
-            showPlayer = false
-            currentVideoUrl = null
+            when {
+                scheduleDialogOpen -> {
+                    scheduleDialogOpen = false
+                }
+                overlayState !is OverlayState.None -> {
+                    onClearAnimeStack()
+                }
+                else -> {
+                    showPlayer = false
+                    currentVideoUrl = null
+                }
+            }
         }
     } else {
         Scaffold(
@@ -1017,8 +1041,12 @@ fun MainScreen(
                             isOled = isOled,
                             isVisible = isScheduleVisible,
                             disableMaterialColors = disableMaterialColors,
+                            simplifyAnimeDetails = simplifyAnimeDetails,
+                            isLoggedIn = isLoggedIn,
                             onPlayEpisode = onPlayEpisode,
-                            onShowAnimeDialog = onShowAnimeDialog
+                            onShowAnimeDialog = onShowAnimeDialog,
+                            onClearAnimeStack = onClearAnimeStack,
+                            onAnimeDialogOpen = { isOpen -> scheduleDialogOpen = isOpen }
                         )
                         1 -> ExploreScreen(
                             viewModel = viewModel,
@@ -1072,7 +1100,10 @@ fun MainScreen(
 
                 if (isLoadingStream) {
                     Box(
-                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .pointerInput(Unit) { },
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -149,7 +149,7 @@ fun HomeAnimeCard(
         "CURRENT" -> {
             when {
                 isFinished -> "${anime.progress} / $total"
-                total > 0 -> "${anime.progress} / $released / $total"
+                released < total -> "${anime.progress} / $released / $total"
                 released > 0 -> "${anime.progress} / $released"
                 else -> "${anime.progress}"
             }

@@ -115,24 +115,56 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Column(modifier = Modifier.fillMaxSize().background(if (isOled) Color.Black else MaterialTheme.colorScheme.background).padding(horizontal = 16.dp)) {
-                // Header - Corrected vertical padding
+                // Header - profile area in rounded card, search button separate
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(bottom = 16.dp)
-                        .clickable(enabled = isLoggedIn) { showUserProfileDialog = true },
+                        .padding(vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isLoggedIn && userAvatar != null) { AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(), contentDescription = "User Avatar", contentScale = ContentScale.Crop, modifier = Modifier.size(42.dp).clip(CircleShape)); Spacer(modifier = Modifier.width(12.dp)) }
-                    else if (isLoggedIn) { Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(42.dp)); Spacer(modifier = Modifier.width(12.dp)) }
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .offset(x = (-4).dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.Transparent
+                        ),
+                        onClick = { if (isLoggedIn) showUserProfileDialog = true },
+                        enabled = isLoggedIn
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isLoggedIn && userAvatar != null) { 
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(), 
+                                    contentDescription = "User Avatar", 
+                                    contentScale = ContentScale.Crop, 
+                                    modifier = Modifier.size(40.dp).clip(CircleShape)
+                                ); 
+                                Spacer(modifier = Modifier.width(12.dp)) 
+                            }
+                            else if (isLoggedIn) { 
+                                Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(40.dp)); 
+                                Spacer(modifier = Modifier.width(12.dp)) 
+                            }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(if (isLoggedIn) (userName ?: "My Anime") else "My Anime", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                        if (isLoggedIn) { Text("Tap to view profile", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(if (isLoggedIn) (userName ?: "My Anime") else "My Anime", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                if (isLoggedIn) { Text("Tap to view profile", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    if (isLoggedIn) { IconButton(onClick = { showSearchOverlay = true }) { Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground) } }
+                    if (isLoggedIn) { 
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(onClick = { showSearchOverlay = true }) { 
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground) 
+                        } 
+                    }
                 }
 
                 if (!isLoggedIn) {

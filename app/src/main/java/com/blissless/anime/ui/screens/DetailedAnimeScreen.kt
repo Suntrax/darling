@@ -4,7 +4,10 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -262,10 +265,14 @@ fun DetailedAnimeScreen(
 
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.padding(top = 40.dp, end = 8.dp).align(Alignment.TopEnd)
-                    .background(Color.Black.copy(alpha = 0.6f), CircleShape).zIndex(10f)
+                modifier = Modifier
+                    .padding(top = 40.dp, end = 8.dp)
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .zIndex(10f)
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
             }
 
             Box(
@@ -566,20 +573,69 @@ fun DetailedAnimeScreen(
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(filteredRelations) { relation ->
                                     Column(
-                                        modifier = Modifier.width(100.dp).clickable { 
-                                            onRelationClick(relation) 
-                                        }
-                                    ) {
-                                        Card(
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.height(140.dp)
-                                        ) {
-                                            AsyncImage(
-                                                model = relation.cover,
-                                                contentDescription = relation.title,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
+                                        modifier = Modifier
+                                            .width(90.dp)
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(12.dp)
                                             )
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { 
+                                                onRelationClick(relation) 
+                                            }
+                                            .padding(4.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(140.dp)
+                                        ) {
+                                            Card(
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.fillMaxSize()
+                                            ) {
+                                                AsyncImage(
+                                                    model = relation.cover,
+                                                    contentDescription = relation.title,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                            // Episodes badge - top left
+                                            relation.episodes?.let { eps ->
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .padding(4.dp)
+                                                        .align(Alignment.TopStart),
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = Color.Black.copy(alpha = 0.7f)
+                                                ) {
+                                                    Text(
+                                                        "${eps} eps",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color.White,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                            // Rating badge - top right
+                                            relation.averageScore?.let { score ->
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .padding(4.dp)
+                                                        .align(Alignment.TopEnd),
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = Color.Black.copy(alpha = 0.7f)
+                                                ) {
+                                                    Text(
+                                                        "★ ${score / 10}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFFFFD700),
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
@@ -589,15 +645,6 @@ fun DetailedAnimeScreen(
                                             overflow = TextOverflow.Ellipsis,
                                             color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
                                         )
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            relation.averageScore?.let { score ->
-                                                Text("★ ${score / 10}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFD700))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                            }
-                                            relation.episodes?.let { eps ->
-                                                Text("${eps} eps", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
-                                        }
                                         relation.format?.let { format ->
                                             val formatDisplay = when (format) {
                                                 "TV" -> "TV"
@@ -635,7 +682,7 @@ fun DetailedAnimeScreen(
 private fun StatusChip(label: String, icon: ImageVector, color: Color, selected: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected, onClick = onClick,
-        label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text(label, fontSize = 12.sp) } },
+        label = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) { Icon(icon, null, Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)); Text(label, fontSize = 12.sp); Spacer(Modifier.width(3.dp)) } },
         colors = FilterChipDefaults.filterChipColors(selectedContainerColor = color.copy(alpha = 0.2f), selectedLabelColor = color),
         border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) color else Color.Gray.copy(alpha = 0.3f))
     )

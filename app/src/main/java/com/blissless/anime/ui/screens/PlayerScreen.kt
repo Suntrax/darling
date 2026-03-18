@@ -74,6 +74,7 @@ fun PlayerScreen(
     subtitleUrl: String? = null,
     currentEpisode: Int = 1,
     totalEpisodes: Int = 0,
+    latestAiredEpisode: Int? = null,
     animeName: String = "",
     animeId: Int = 0,
     malId: Int = 0,
@@ -94,6 +95,7 @@ fun PlayerScreen(
     savedPosition: Long = 0L,
     qualityOptions: List<QualityOption> = emptyList(),
     currentQuality: String = "Auto",
+    isLatestEpisode: Boolean = false,
     // PRIMARY: Animekai skip timestamps (in seconds)
     animekaiIntroStart: Int? = null,
     animekaiIntroEnd: Int? = null,
@@ -264,7 +266,11 @@ fun PlayerScreen(
                         }
                         if (playbackState == Player.STATE_ENDED) {
                             if (autoPlayNextEpisode && onNextEpisode != null) {
-                                onNextEpisode.invoke()
+                                if (isLatestEpisode) {
+                                    Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onNextEpisode.invoke()
+                                }
                             }
                         }
                     }
@@ -432,7 +438,11 @@ fun PlayerScreen(
             val isInCredits = posSeconds >= ts.creditsStart
             if (isInCredits) {
                 if (autoSkipEnding && !hasSkippedOutro) {
-                    onNextEpisode.invoke()
+                    if (isLatestEpisode) {
+                        Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onNextEpisode.invoke()
+                    }
                     hasSkippedOutro = true
                 }
                 showSkipEndingButton = !autoSkipEnding
@@ -627,7 +637,7 @@ fun PlayerScreen(
         ) {
             SkipIconButton(
                 icon = Icons.Default.SkipNext,
-                label = "Next\nEpisode",
+                label = if (isLatestEpisode) "Skip\nEnding" else "Next\nEpisode",
                 backgroundColor = Color.Black.copy(alpha = 0.6f),
                 iconTint = Color.White,
                 onClick = { onNextEpisode?.invoke() }

@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -371,7 +372,17 @@ fun RichEpisodeScreen(
                 }
             }
 
-            IconButton(onClick = onDismiss, modifier = Modifier.padding(top = 40.dp, end = 8.dp).align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.6f), CircleShape).zIndex(10f)) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(28.dp)) }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .padding(top = 40.dp, end = 8.dp)
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .zIndex(10f)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+            }
             Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).width(40.dp).height(4.dp).background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f))
             if (isLoadingEpisodes) { CircularProgressIndicator(modifier = Modifier.align(Alignment.TopCenter).padding(top = 70.dp).zIndex(10f), color = MaterialTheme.colorScheme.primary) }
 
@@ -425,7 +436,7 @@ fun RichEpisodeScreen(
                                 if (hasAired) {
                                     onEpisodeSelect(episodeNum)
                                 } else {
-                                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                                 }
                             })
                         }
@@ -448,7 +459,7 @@ fun RichEpisodeScreen(
                                     if (hasAired) {
                                         onEpisodeSelect(episodeNum)
                                     } else {
-                                        Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )

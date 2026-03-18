@@ -66,14 +66,6 @@ fun UserProfileDialog(
         }
     }
 
-    // Refetch activity when avatar is clicked
-    var avatarClickCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(avatarClickCount) {
-        if (avatarClickCount > 0 && userId != null) {
-            viewModel.fetchUserActivity()
-        }
-    }
-
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -94,15 +86,11 @@ fun UserProfileDialog(
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Avatar - click to refresh activity
+                    // Avatar
                     Box(
                         modifier = Modifier
                             .size(50.dp)
                             .clip(CircleShape)
-                            .clickable {
-                                avatarClickCount++
-                                Toast.makeText(context, "Refreshing history...", Toast.LENGTH_SHORT).show()
-                            }
                     ) {
                         if (userAvatar != null) {
                             AsyncImage(
@@ -110,20 +98,11 @@ fun UserProfileDialog(
                                     .data(userAvatar)
                                     .crossfade(true)
                                     .build(),
-                                contentDescription = "Avatar (tap to refresh)",
+                                contentDescription = "User Avatar",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
-                        // Refresh indicator overlay
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.3f),
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(24.dp)
-                        )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
@@ -656,8 +635,8 @@ private fun ActivityItem(
     activity: UserActivity,
     isOled: Boolean
 ) {
-    // Use 24h format
-    val timeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
+    // Use English locale for date formatting
+    val timeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.ENGLISH)
     val timeString = remember(activity.createdAt) {
         timeFormat.format(Date(activity.createdAt * 1000L))
     }

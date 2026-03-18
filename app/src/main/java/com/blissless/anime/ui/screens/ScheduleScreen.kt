@@ -1,6 +1,7 @@
 package com.blissless.anime.ui.screens
 
 import android.annotation.SuppressLint
+import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,7 +33,12 @@ import coil.compose.AsyncImage
 import com.blissless.anime.data.models.AiringScheduleAnime
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.data.models.toDetailedAnimeData
+import com.blissless.anime.dialogs.ExploreAnimeDialog
+import com.blissless.anime.data.models.DetailedAnimeData
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -65,8 +72,12 @@ fun ScheduleScreen(
     isOled: Boolean = false,
     isVisible: Boolean = false,
     disableMaterialColors: Boolean = false,
+    simplifyAnimeDetails: Boolean = true,
+    isLoggedIn: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
-    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> }
+    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
+    onClearAnimeStack: () -> Unit = {},
+    onAnimeDialogOpen: (Boolean) -> Unit = {}
 ) {
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
@@ -102,6 +113,45 @@ fun ScheduleScreen(
 
     // For By Day mode, track selected day
     var selectedDay by remember { mutableIntStateOf(currentDayOfWeek) }
+
+    // Inline anime dialog state (like ExploreScreen)
+    var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+    var showAnimeDialog by remember { mutableStateOf(false) }
+    var firstOpenedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+
+    val context = LocalContext.current
+
+    // Get anime status and favorites from viewModel
+    val localFavorites by viewModel.localFavorites.collectAsState()
+    val currentlyWatching by viewModel.currentlyWatching.collectAsState()
+    val planningToWatch by viewModel.planningToWatch.collectAsState()
+    val completed by viewModel.completed.collectAsState()
+    val onHold by viewModel.onHold.collectAsState()
+    val dropped by viewModel.dropped.collectAsState()
+    
+    val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        val map = mutableMapOf<Int, String>()
+        currentlyWatching.forEach { map[it.id] = "CURRENT" }
+        planningToWatch.forEach { map[it.id] = "PLANNING" }
+        completed.forEach { map[it.id] = "COMPLETED" }
+        onHold.forEach { map[it.id] = "PAUSED" }
+        dropped.forEach { map[it.id] = "DROPPED" }
+        map
+    }
+    
+    val canAddFavorite = remember(localFavorites) { viewModel.canAddFavorite() }
+    
+    // Callback to clear anime stack (back navigation)
+    val onClearAnimeStackHandler: () -> Unit = {
+        val current = firstOpenedAnime
+        if (selectedAnime != null && selectedAnime != firstOpenedAnime) {
+            selectedAnime = firstOpenedAnime
+        } else {
+            showAnimeDialog = false
+            selectedAnime = null
+            firstOpenedAnime = null
+        }
+    }
 
     // Stop refreshing when loading completes
     LaunchedEffect(isLoading) {
@@ -518,7 +568,8 @@ fun ScheduleScreen(
                         },
                         label = {
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = DayAbbreviations[dayIndex],
@@ -591,7 +642,8 @@ fun ScheduleScreen(
                         },
                         label = {
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = DayAbbreviations[dayIndex],
@@ -677,23 +729,216 @@ fun ScheduleScreen(
                         isOled = isOled,
                         listState = currentListState,
                         onAnimeClick = { anime ->
+                            val latestAiredEpisode = if (anime.airingEpisode > 1) {
+                                minOf(anime.airingEpisode - 1, anime.episodes.coerceAtLeast(1))
+                            } else {
+                                anime.airingEpisode
+                            }
                             val exploreAnime = ExploreAnime(
                                 id = anime.id,
                                 title = anime.title,
                                 cover = anime.cover,
                                 banner = null,
                                 episodes = anime.episodes,
-                                latestEpisode = anime.airingEpisode,
+                                latestEpisode = latestAiredEpisode,
                                 averageScore = anime.averageScore,
                                 genres = anime.genres,
                                 year = anime.year,
                                 format = null
                             )
-                            onShowAnimeDialog(exploreAnime, null)
+                            firstOpenedAnime = exploreAnime
+                            selectedAnime = exploreAnime
+                            showAnimeDialog = true
+                            onAnimeDialogOpen(true)
                         }
                     )
                 }
             }
+        }
+    }
+
+    // Inline anime dialog (like ExploreScreen)
+    if (showAnimeDialog && selectedAnime != null) {
+        if (simplifyAnimeDetails) {
+            val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
+            ExploreAnimeDialog(
+                anime = selectedAnime!!,
+                viewModel = viewModel,
+                isOled = isOled,
+                currentStatus = animeStatusMap[selectedAnime!!.id],
+                isFavorite = isAnimeFavorite,
+                canAddFavorite = canAddFavorite || isAnimeFavorite,
+                isLoggedIn = isLoggedIn,
+                onToggleFavorite = {
+                    viewModel.toggleLocalFavorite(selectedAnime!!)
+                },
+                onDismiss = {
+                    showAnimeDialog = false
+                    selectedAnime = null
+                    firstOpenedAnime = null
+                    onAnimeDialogOpen(false)
+                },
+                onAddToPlanning = {
+                    viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING")
+                },
+                onAddToDropped = {
+                    viewModel.addExploreAnimeToList(selectedAnime!!, "DROPPED")
+                },
+                onAddToOnHold = {
+                    viewModel.addExploreAnimeToList(selectedAnime!!, "PAUSED")
+                },
+                onRemoveFromList = {
+                    viewModel.removeAnimeFromList(selectedAnime!!.id)
+                },
+                onStartWatching = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = selectedAnime!!.id,
+                        title = selectedAnime!!.title,
+                        titleEnglish = selectedAnime!!.titleEnglish,
+                        cover = selectedAnime!!.cover,
+                        banner = selectedAnime!!.banner,
+                        progress = 0,
+                        totalEpisodes = selectedAnime!!.episodes,
+                        latestEpisode = selectedAnime!!.latestEpisode,
+                        status = "",
+                        averageScore = selectedAnime!!.averageScore,
+                        genres = selectedAnime!!.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = selectedAnime!!.year,
+                        malId = selectedAnime!!.malId
+                    )
+                    viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                    onPlayEpisode(animeMedia, episode)
+                    showAnimeDialog = false
+                    selectedAnime = null
+                    firstOpenedAnime = null
+                    onAnimeDialogOpen(false)
+                },
+                onRelationClick = { relation ->
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100)
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (detailedData != null) {
+                                    selectedAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                } else {
+                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        } else {
+            // Detailed anime dialog
+            DetailedAnimeScreen(
+                anime = selectedAnime!!.toDetailedAnimeData(),
+                viewModel = viewModel,
+                isOled = isOled,
+                currentStatus = animeStatusMap[selectedAnime!!.id],
+                isFavorite = localFavorites.containsKey(selectedAnime!!.id),
+                canAddFavorite = canAddFavorite || localFavorites.containsKey(selectedAnime!!.id),
+                isLoggedIn = isLoggedIn,
+                onToggleFavorite = { _ -> viewModel.toggleLocalFavorite(selectedAnime!!) },
+                onDismiss = {
+                    if (firstOpenedAnime != null && selectedAnime!!.id != firstOpenedAnime!!.id) {
+                        selectedAnime = firstOpenedAnime
+                    } else {
+                        showAnimeDialog = false
+                        selectedAnime = null
+                        firstOpenedAnime = null
+                        onAnimeDialogOpen(false)
+                    }
+                },
+                onSwipeToClose = {
+                    showAnimeDialog = false
+                    selectedAnime = null
+                    firstOpenedAnime = null
+                    onAnimeDialogOpen(false)
+                },
+                onPlayEpisode = { episode ->
+                    val animeMedia = AnimeMedia(
+                        id = selectedAnime!!.id,
+                        title = selectedAnime!!.title,
+                        titleEnglish = selectedAnime!!.titleEnglish,
+                        cover = selectedAnime!!.cover,
+                        banner = selectedAnime!!.banner,
+                        progress = 0,
+                        totalEpisodes = selectedAnime!!.episodes,
+                        latestEpisode = selectedAnime!!.latestEpisode,
+                        status = "",
+                        averageScore = selectedAnime!!.averageScore,
+                        genres = selectedAnime!!.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = selectedAnime!!.year,
+                        malId = selectedAnime!!.malId
+                    )
+                    viewModel.addExploreAnimeToList(selectedAnime!!, "CURRENT")
+                    onPlayEpisode(animeMedia, episode)
+                    showAnimeDialog = false
+                    selectedAnime = null
+                    firstOpenedAnime = null
+                    onAnimeDialogOpen(false)
+                },
+                onUpdateStatus = { status ->
+                    if (status != null) {
+                        viewModel.addExploreAnimeToList(selectedAnime!!, status)
+                    }
+                },
+                onRemove = {
+                    viewModel.removeAnimeFromList(selectedAnime!!.id)
+                },
+                onRelationClick = { relation ->
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100)
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (detailedData != null) {
+                                    selectedAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                } else {
+                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
         }
     }
 }
@@ -787,7 +1032,7 @@ private fun DayHeaderItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 58.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
+            .padding(start = 58.dp, end = 8.dp, top = 24.dp, bottom = 12.dp),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isToday)
@@ -815,13 +1060,13 @@ private fun DayHeaderItem(
                 Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                 ) {
                     Text(
                         text = "TODAY",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
@@ -849,13 +1094,14 @@ private fun TimelineAnimeItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp),
+            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp),
         verticalAlignment = Alignment.Top
     ) {
         // Time marker column
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.width(50.dp)
+            modifier = Modifier.width(50.dp),
+            verticalArrangement = Arrangement.Top
         ) {
             Text(
                 text = timeString,
@@ -866,7 +1112,7 @@ private fun TimelineAnimeItem(
 
             Box(
                 modifier = Modifier
-                    .padding(vertical = 4.dp)
+                    .padding(top = 4.dp)
                     .size(12.dp)
                     .background(lineColor, CircleShape)
             )
@@ -883,8 +1129,7 @@ private fun TimelineAnimeItem(
 
         Card(
             modifier = Modifier
-                .weight(1f)
-                .padding(bottom = 8.dp),
+                .weight(1f),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
