@@ -173,10 +173,17 @@ fun ScheduleScreen(
         viewModel.fetchAiringSchedule()
     }
 
-    // Auto-refresh every 1 minute
+    // Reset pull-to-refresh when loading completes
+    LaunchedEffect(isLoading) {
+        if (!isLoading && isRefreshing) {
+            isRefreshing = false
+        }
+    }
+
+    // Auto-refresh every 5 minutes (respects cooldown internally)
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(60000) // 1 minute
+            kotlinx.coroutines.delay(5 * 60000) // 5 minutes
             currentTime = System.currentTimeMillis() / 1000
             viewModel.fetchAiringSchedule()
         }
@@ -699,7 +706,7 @@ fun ScheduleScreen(
             onRefresh = {
                 isRefreshing = true
                 currentTime = System.currentTimeMillis() / 1000
-                viewModel.fetchAiringSchedule()
+                viewModel.fetchAiringSchedule(force = true)
             },
             modifier = Modifier.fillMaxSize()
         ) {

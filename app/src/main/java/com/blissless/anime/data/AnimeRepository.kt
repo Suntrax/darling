@@ -43,9 +43,13 @@ class AnimeRepository(
         config = GraphQLConfig(
             maxConcurrentRequests = 5,
             minRequestIntervalMs = 100L,
-            cacheDurationMs = 5 * 60 * 1000L // 5 minutes
+            cacheDurationMs = 5 * 60 * 1000L, // 5 minutes for public data
+            userDataCacheDurationMs = 60 * 60 * 1000L // 1 hour for user data
         )
     )
+
+    // Use longer cache for authenticated requests
+    private val authCacheDuration get() = graphQLClient.getConfig().userDataCacheDurationMs
 
     // ============================================
     // GraphQL Requests (Optimized via GraphQLClient)
@@ -61,6 +65,7 @@ class AnimeRepository(
             authToken = token,
             clientIds = CLIENT_IDS,
             useCache = true,
+            cacheDurationMs = authCacheDuration, // Use longer cache for user data
             parser = { it } // Return raw string for existing parsing logic
         )
 

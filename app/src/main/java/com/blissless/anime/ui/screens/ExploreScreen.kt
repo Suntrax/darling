@@ -243,6 +243,13 @@ fun ExploreScreen(
     val scrollState = rememberScrollState()
     var isRefreshing by remember { mutableStateOf(false) }
 
+    // Reset pull-to-refresh when loading completes
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            isRefreshing = false
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {

@@ -35,14 +35,15 @@ data class GraphQLError(
  * Configuration for the GraphQL client
  */
 data class GraphQLConfig(
-    val maxConcurrentRequests: Int = 5, // Increased concurrency
-    val minRequestIntervalMs: Long = 100L, // Reduced interval for faster sequential requests
+    val maxConcurrentRequests: Int = 5,
+    val minRequestIntervalMs: Long = 100L,
     val defaultTimeout: Int = 30000,
     val maxRetries: Int = 3,
     val baseRetryDelayMs: Long = 1000L,
     val maxRetryDelayMs: Long = 30000L,
-    val cacheDurationMs: Long = 5 * 60 * 1000L, // 5 minutes
-    val maxCacheSize: Int = 200 // Increased cache size
+    val cacheDurationMs: Long = 5 * 60 * 1000L, // 5 minutes for public data
+    val userDataCacheDurationMs: Long = 60 * 60 * 1000L, // 1 hour for user/authenticated data
+    val maxCacheSize: Int = 200
 )
 
 /**
@@ -99,6 +100,8 @@ class GraphQLClient(
     init {
         startQueueProcessor()
     }
+
+    fun getConfig() = config
 
     /**
      * Start the request queue processor
@@ -378,10 +381,10 @@ class GraphQLClient(
     /**
      * Get cached response if valid
      */
-    private fun getCachedResponse(cacheKey: String): String? {
+    private fun getCachedResponse(cacheKey: String, cacheDurationMs: Long = config.cacheDurationMs): String? {
         val entry = responseCache[cacheKey] ?: return null
         val now = System.currentTimeMillis()
-        if (now - entry.timestamp < config.cacheDurationMs) {
+        if (now - entry.timestamp < cacheDurationMs) {
             return entry.response
         }
         responseCache.remove(cacheKey)
@@ -417,13 +420,15 @@ class GraphQLClient(
         authToken: String? = null,
         clientIds: List<String>,
         useCache: Boolean = true,
+        cacheDurationMs: Long? = null, // Override cache duration
         parser: (String) -> T?
     ): GraphQLResult<T> = suspendCancellableCoroutine { continuation ->
         val cacheKey = generateCacheKey(query, variables)
+        val effectiveCacheDuration = cacheDurationMs ?: if (requiresAuth) config.userDataCacheDurationMs else config.cacheDurationMs
 
         // Check cache first if enabled
         if (useCache) {
-            getCachedResponse(cacheKey)?.let { cached ->
+            getCachedResponse(cacheKey, effectiveCacheDuration)?.let { cached ->
                 val parsed = parser(cached)
                 if (parsed != null) {
                     continuation.resume(

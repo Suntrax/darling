@@ -26,12 +26,22 @@ class MainViewModel : ViewModel() {
     companion object {
         private const val TAG = "MainViewModel"
         private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
+        private const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
     }
 
     private lateinit var userPreferences: UserPreferences
     private lateinit var cacheManager: CacheManager
     private lateinit var repository: AnimeRepository
     private lateinit var context: Context
+
+    // Track last refresh time to prevent rapid re-fetches (persisted to survive app restarts)
+    private var lastHomeRefreshTime: Long
+        get() = userPreferences.getLastHomeRefreshTime()
+        set(value) = userPreferences.setLastHomeRefreshTime(value)
+
+    private var lastExploreRefreshTime: Long
+        get() = userPreferences.getLastExploreRefreshTime()
+        set(value) = userPreferences.setLastExploreRefreshTime(value)
 
     // UI State
     private val _userId = MutableStateFlow<Int?>(null)
@@ -156,12 +166,26 @@ class MainViewModel : ViewModel() {
 
     private suspend fun loadHomeDataWithCache() {
         cacheManager.loadHomeDataFromCache()?.let { updateHomeState(it) }
+        
+        val now = System.currentTimeMillis()
+        if (now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            // Skip API fetch, use cached data
+            _isLoadingHome.value = false
+            refreshReleasingAnimeProgress()
+            prefetchContinueWatchingStreams()
+            return
+        }
+        
         _isLoadingHome.value = true
-        fetchUser()
-        fetchLists()
+        val userSuccess = fetchUser()
+        val listsSuccess = fetchLists()
         _isLoadingHome.value = false
+        
+        if (userSuccess && listsSuccess) {
+            lastHomeRefreshTime = System.currentTimeMillis()
+        }
+        
         refreshReleasingAnimeProgress()
-        // Prefetch streams for currently watching anime (next episode to watch)
         prefetchContinueWatchingStreams()
     }
 
@@ -178,7 +202,7 @@ class MainViewModel : ViewModel() {
 
     private suspend fun loadExploreDataWithCache() {
         cacheManager.loadExploreDataFromCache()?.let { updateExploreState(it) }
-        fetchExploreData()
+        fetchExploreData() // Uses cooldown internally
     }
 
     private fun updateExploreState(data: ExploreCacheData) {
@@ -201,17 +225,19 @@ class MainViewModel : ViewModel() {
     }
 
     // API calls
-    suspend fun fetchUser() {
-        repository.fetchUser()?.let {
+    suspend fun fetchUser(): Boolean {
+        val result = repository.fetchUser()?.let {
             _userId.value = it.data.Viewer.id
             _userName.value = it.data.Viewer.name
             _userAvatar.value = it.data.Viewer.avatar?.medium
-        }
+            true
+        } ?: false
+        return result
     }
 
-    suspend fun fetchLists() {
-        val userId = _userId.value ?: return
-        val response = repository.fetchMediaLists(userId) ?: return
+    suspend fun fetchLists(): Boolean {
+        val userId = _userId.value ?: return false
+        val response = repository.fetchMediaLists(userId) ?: return false
 
         val grouped = response.data.MediaListCollection.lists.flatMap { list ->
             list.entries.map { entry ->
@@ -242,12 +268,20 @@ class MainViewModel : ViewModel() {
         _onHold.value = grouped["PAUSED"] ?: emptyList()
         _dropped.value = grouped["DROPPED"] ?: emptyList()
         saveHomeDataToCache()
+        return true
     }
 
-    fun fetchExploreData() {
+    fun fetchExploreData(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        
+        // Skip if recently refreshed (unless forced)
+        if (!force && now - lastExploreRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            return
+        }
+        
         viewModelScope.launch {
             _isLoadingExplore.value = true
-            repository.fetchBatchedExplore()?.let { response ->
+            val success = repository.fetchBatchedExplore()?.let { response ->
                 _featuredAnime.value = response.data.featured.media.map { mapExploreMedia(it) }
                 _seasonalAnime.value = response.data.seasonal.media.map { mapExploreMedia(it) }
                 _topSeries.value = response.data.topSeries.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 70 }
@@ -258,8 +292,13 @@ class MainViewModel : ViewModel() {
                 _fantasyAnime.value = response.data.fantasy.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 60 }
                 _scifiAnime.value = response.data.scifi.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 60 }
                 saveExploreDataToCache()
-            }
+                true
+            } ?: false
             _isLoadingExplore.value = false
+            // Only save timestamp if API call succeeded
+            if (success) {
+                lastExploreRefreshTime = System.currentTimeMillis()
+            }
         }
     }
 
@@ -277,7 +316,14 @@ class MainViewModel : ViewModel() {
         malId = media.idMal
     )
 
-    fun fetchAiringSchedule() {
+    fun fetchAiringSchedule(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        
+        // Skip if recently refreshed (unless forced)
+        if (!force && now - lastExploreRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            return
+        }
+        
         viewModelScope.launch {
             _isLoadingSchedule.value = true
             val schedules = repository.fetchAiringSchedule()
@@ -306,6 +352,7 @@ class MainViewModel : ViewModel() {
             _airingAnimeList.value = airingList
             cacheManager.saveAiringScheduleCache(scheduleByDay, airingList)
             _isLoadingSchedule.value = false
+            lastExploreRefreshTime = System.currentTimeMillis()
         }
     }
 
@@ -688,13 +735,20 @@ class MainViewModel : ViewModel() {
     private fun saveHomeDataToCache() = cacheManager.saveHomeDataToCache(HomeCacheData(_currentlyWatching.value, _planningToWatch.value, _completed.value, _onHold.value, _dropped.value, _userId.value, _userName.value, _userAvatar.value))
     private fun saveExploreDataToCache() = cacheManager.saveExploreDataToCache(ExploreCacheData(_featuredAnime.value, _seasonalAnime.value, _topSeries.value, _topMovies.value, _actionAnime.value, _romanceAnime.value, _comedyAnime.value, _fantasyAnime.value, _scifiAnime.value))
 
-    fun refreshHome() {
+    fun refreshHome(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        
+        // Skip if recently refreshed (unless forced)
+        if (!force && now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            return
+        }
+        
+        lastHomeRefreshTime = now
         cacheManager.invalidateUserCache()
         viewModelScope.launch {
             _isLoadingHome.value = true
             fetchLists()
             _isLoadingHome.value = false
-            // Prefetch streams for continue watching after refresh
             prefetchContinueWatchingStreams()
         }
     }

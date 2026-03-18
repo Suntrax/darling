@@ -37,6 +37,8 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LOCAL_FAVORITES_V2 = "local_favorites_v2"
         private const val KEY_LOCAL_FAVORITES = "local_favorites"
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
+        private const val KEY_LAST_HOME_REFRESH = "last_home_refresh_time"
+        private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -375,4 +377,15 @@ class UserPreferences(private val context: Context) {
     }
 
     fun getSharedPreferences(): SharedPreferences = sharedPreferences
+
+    // Refresh timestamp management
+    fun getLastHomeRefreshTime(): Long = sharedPreferences.getLong(KEY_LAST_HOME_REFRESH, 0L)
+    fun setLastHomeRefreshTime(time: Long) {
+        sharedPreferences.edit { putLong(KEY_LAST_HOME_REFRESH, time) }
+    }
+
+    fun getLastExploreRefreshTime(): Long = sharedPreferences.getLong(KEY_LAST_EXPLORE_REFRESH, 0L)
+    fun setLastExploreRefreshTime(time: Long) {
+        sharedPreferences.edit { putLong(KEY_LAST_EXPLORE_REFRESH, time) }
+    }
 }
