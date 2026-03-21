@@ -8,16 +8,17 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +46,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.blissless.anime.data.models.AnimeRelation
+import com.blissless.anime.data.models.TagData
 import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
@@ -61,7 +63,6 @@ fun DetailedAnimeScreen(
     currentStatus: String? = null,
     isLoggedIn: Boolean = false,
     isFavorite: Boolean = false,
-    canAddFavorite: Boolean = true,
     onDismiss: () -> Unit,
     onSwipeToClose: () -> Unit = {},
     onPlayEpisode: (Int) -> Unit = {},
@@ -78,10 +79,11 @@ fun DetailedAnimeScreen(
     var isLoadingDetails by remember { mutableStateOf(true) }
     var relations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
 
-    // Animation states for entry and transitions
     var isVisible by remember { mutableStateOf(false) }
     var previousAnimeId by remember { mutableIntStateOf(anime.id) }
     var isTransitioning by remember { mutableStateOf(false) }
+    var isStatusRateLimited by remember { mutableStateOf(false) }
+    var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
     
     val scale by animateFloatAsState(
         targetValue = when {
@@ -109,13 +111,10 @@ fun DetailedAnimeScreen(
         isVisible = true
     }
 
-    // Track anime changes for transition animation
     LaunchedEffect(anime.id) {
-        // Reset loading state when anime changes
         isLoadingDetails = true
         
         if (previousAnimeId != 0 && previousAnimeId != anime.id) {
-            // This is a navigation (relation click or back), trigger transition animation
             isTransitioning = true
             kotlinx.coroutines.delay(150)
             isTransitioning = false
@@ -131,7 +130,6 @@ fun DetailedAnimeScreen(
         }
     }
     
-    // Ensure loading is reset when composable leaves composition
     DisposableEffect(Unit) {
         onDispose {
             isLoadingDetails = false
@@ -209,11 +207,11 @@ fun DetailedAnimeScreen(
 
                 if (currentOffset == 0f) return Velocity.Zero
 
-                val shouldDismiss = currentOffset > dismissThreshold || available.y > 2000f
+                val shouldDismiss = currentOffset > dismissThreshold || available.y > 500f
 
                 if (shouldDismiss) {
                     scope.launch {
-                        offsetY.animateTo(screenHeightPx, tween(250, easing = FastOutSlowInEasing))
+                        offsetY.animateTo(screenHeightPx, tween(180, easing = FastOutSlowInEasing))
                         onSwipeToClose()
                     }
                 } else {
@@ -385,47 +383,54 @@ fun DetailedAnimeScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                        )
                     ) {
-                        if (isLoggedIn) {
-                            Button(
-                                onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Start Watching", fontWeight = FontWeight.Medium)
-                            }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (isLoggedIn) {
+                                Button(
+                                    onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Start Watching", fontWeight = FontWeight.Medium)
+                                }
 
-                            OutlinedButton(
-                                onClick = {
-                                    if (!isFavorite && !canAddFavorite) {
-                                        Toast.makeText(context, "Maximum 10 favorites! Remove one first.", Toast.LENGTH_SHORT).show()
-                                    } else {
+                                OutlinedButton(
+                                    onClick = {
                                         onToggleFavorite(displayData)
                                         Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isFavorite) Color(0xFFFFD700) else MaterialTheme.colorScheme.primary),
-                                enabled = isFavorite || canAddFavorite
-                            ) {
-                                Icon(
-                                    if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star, null, Modifier.size(18.dp),
-                                    tint = if (isFavorite) Color(0xFFFFD700) else MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        } else {
-                            Button(
-                                onClick = onLoginClick,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Text("Log in to AniList first", fontWeight = FontWeight.Medium)
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFFF1744).copy(alpha = 0.15f), contentColor = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(
+                                        if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, null, Modifier.size(18.dp),
+                                        tint = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else {
+                                Button(
+                                    onClick = onLoginClick,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text("Log in to AniList first", fontWeight = FontWeight.Medium)
+                                }
                             }
                         }
                     }
@@ -433,64 +438,138 @@ fun DetailedAnimeScreen(
 
                 if (isLoggedIn) {
                     item {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            Text("Add to List", style = MaterialTheme.typography.labelLarge,
-                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF121212).copy(alpha = 0.9f) else Color(0xFF1A1A1A).copy(alpha = 0.85f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.PlaylistAdd,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Add to List", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                     StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), currentStatus == "CURRENT") {
-                                        if (currentStatus == "CURRENT") {
-                                            onRemove()
-                                            Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show()
+                                        if (isStatusRateLimited) {
+                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            onUpdateStatus("CURRENT")
-                                            Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
+                                            isStatusRateLimited = true
+                                            kotlinx.coroutines.GlobalScope.launch {
+                                                kotlinx.coroutines.delay(3000)
+                                                isStatusRateLimited = false
+                                            }
+                                            if (currentStatus == "CURRENT") {
+                                                onRemove()
+                                                Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                onUpdateStatus("CURRENT")
+                                                Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
-                                }
-                                item {
                                     StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), currentStatus == "PLANNING") {
-                                        if (currentStatus == "PLANNING") {
-                                            onRemove()
-                                            Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show()
+                                        if (isStatusRateLimited) {
+                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            onUpdateStatus("PLANNING")
-                                            Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                                            isStatusRateLimited = true
+                                            kotlinx.coroutines.GlobalScope.launch {
+                                                kotlinx.coroutines.delay(3000)
+                                                isStatusRateLimited = false
+                                            }
+                                            if (currentStatus == "PLANNING") {
+                                                onRemove()
+                                                Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                onUpdateStatus("PLANNING")
+                                                Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
-                                }
-                                item {
                                     StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), currentStatus == "COMPLETED") {
-                                        if (currentStatus == "COMPLETED") {
-                                            onRemove()
-                                            Toast.makeText(context, "Removed from Completed", Toast.LENGTH_SHORT).show()
+                                        if (isStatusRateLimited) {
+                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            onUpdateStatus("COMPLETED")
-                                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
+                                            isStatusRateLimited = true
+                                            kotlinx.coroutines.GlobalScope.launch {
+                                                kotlinx.coroutines.delay(3000)
+                                                isStatusRateLimited = false
+                                            }
+                                            if (currentStatus == "COMPLETED") {
+                                                onRemove()
+                                                Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                onUpdateStatus("COMPLETED")
+                                                Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
-                                }
-                                item {
                                     StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), currentStatus == "PAUSED") {
-                                        if (currentStatus == "PAUSED") {
-                                            onRemove()
-                                            Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show()
+                                        if (isStatusRateLimited) {
+                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            onUpdateStatus("PAUSED")
-                                            Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
+                                            isStatusRateLimited = true
+                                            kotlinx.coroutines.GlobalScope.launch {
+                                                kotlinx.coroutines.delay(3000)
+                                                isStatusRateLimited = false
+                                            }
+                                            if (currentStatus == "PAUSED") {
+                                                onRemove()
+                                                Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                onUpdateStatus("PAUSED")
+                                                Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
-                                }
-                                item {
                                     StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), currentStatus == "DROPPED") {
-                                        if (currentStatus == "DROPPED") {
-                                            onRemove()
-                                            Toast.makeText(context, "Removed from Dropped", Toast.LENGTH_SHORT).show()
+                                        if (isStatusRateLimited) {
+                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            onUpdateStatus("DROPPED")
-                                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
+                                            isStatusRateLimited = true
+                                            kotlinx.coroutines.GlobalScope.launch {
+                                                kotlinx.coroutines.delay(3000)
+                                                isStatusRateLimited = false
+                                            }
+                                            if (currentStatus == "DROPPED") {
+                                                onRemove()
+                                                Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                onUpdateStatus("DROPPED")
+                                                Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                    StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false) {
+                                        if (isStatusRateLimited) {
+                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            isStatusRateLimited = true
+                                            kotlinx.coroutines.GlobalScope.launch {
+                                                kotlinx.coroutines.delay(3000)
+                                                isStatusRateLimited = false
+                                            }
+                                            if (currentStatus != null) {
+                                                onRemove()
+                                                Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Anime not in list", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
                                 }
@@ -501,34 +580,167 @@ fun DetailedAnimeScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
-                    InfoSection(isOled) {
-                        InfoGrid(listOfNotNull(
-                            if (displayData.episodes > 0) "Episodes" to "${displayData.episodes}" else null,
-                            displayData.duration?.let { "Duration" to "$it min per ep" },
-                            if (displayData.format != null) "Format" to formatDisplay else null,
-                            if (displayData.status != null) "Status" to statusDisplay else null,
-                            if (displayData.season != null && displayData.year != null) "Season" to "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}" else null,
-                            displayData.source?.let { "Source" to it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() } },
-                            if (displayData.studios.isNotEmpty()) "Studio" to displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name } else null,
-                            displayData.popularity?.let { "Popularity" to "#$it" },
-                            displayData.favourites?.let { "Favorites" to formatNumber(it) },
-                            displayData.countryOfOrigin?.let { "Country" to it }
-                        ), isOled)
+                    // Redesigned Information Section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Main stats row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                val episodeText = when {
+                                    displayData.episodes > 0 -> "${displayData.episodes} eps"
+                                    displayData.latestEpisode != null && displayData.latestEpisode > 0 -> "Ep ${displayData.latestEpisode}"
+                                    else -> null
+                                }
+                                episodeText?.let { text ->
+                                    InfoStat("Episodes", text, Icons.Default.PlayCircle, MaterialTheme.colorScheme.primary)
+                                }
+                                displayData.duration?.let {
+                                    InfoStat("Duration", "$it min", Icons.Default.Timer, MaterialTheme.colorScheme.primary)
+                                }
+                                displayData.averageScore?.let { score ->
+                                    InfoStat("Score", String.format(Locale.US, "%.1f", score / 10.0), Icons.Default.Star, Color(0xFFFFD700))
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.08f) else Color.Gray.copy(alpha = 0.15f))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Details grid
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                displayData.format?.let { formatDisplay }
+                                    .takeIf { displayData.format != null }?.let {
+                                        InfoRow("Format", formatDisplay, isOled)
+                                    }
+                                if (displayData.season != null && displayData.year != null) {
+                                    InfoRow("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", isOled)
+                                }
+                                if (displayData.status != null) {
+                                    InfoRow("Status", statusDisplay, isOled)
+                                }
+                                displayData.source?.let {
+                                    InfoRow("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, isOled)
+                                }
+                                if (displayData.studios.isNotEmpty()) {
+                                    val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
+                                    if (studio.isNotEmpty()) InfoRow("Studio", studio, isOled)
+                                }
+                                displayData.countryOfOrigin?.let {
+                                    InfoRow("Country", it, isOled)
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (displayData.genres.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            Text("Genres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(displayData.genres) { genre ->
-                                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
-                                        Text(genre, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Category,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Genres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    displayData.genres.forEach { genre ->
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                                        ) {
+                                            Text(
+                                                genre,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (displayData.tags.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Label,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Tags", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    displayData.tags.filter { !it.isMediaSpoiler }.take(15).forEach { tag ->
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                                            modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable {
+                                                selectedTagForDescription = tag
+                                            }
+                                        ) {
+                                            Text(
+                                                tag.name,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.secondary,
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -539,19 +751,46 @@ fun DetailedAnimeScreen(
                 if (!displayData.description.isNullOrEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            Text("Synopsis", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val cleanDescription = displayData.description.replace("<br>", "\n").replace("<br/>", "\n")
-                                .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
-                            Text(cleanDescription, style = MaterialTheme.typography.bodyMedium,
-                                color = if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = if (showFullDescription) Int.MAX_VALUE else 5, overflow = TextOverflow.Ellipsis)
-                            if (cleanDescription.length > 300) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                TextButton(onClick = { showFullDescription = !showFullDescription }) {
-                                    Text(if (showFullDescription) "Show Less" else "Read More")
+                        // Redesigned Synopsis Section
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Description,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Synopsis", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                val cleanDescription = displayData.description.replace("<br>", "\n").replace("<br/>", "\n")
+                                    .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
+                                Text(cleanDescription, style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = if (showFullDescription) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis,
+                                    lineHeight = 22.sp)
+                                if (cleanDescription.length > 250) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    TextButton(
+                                        onClick = { showFullDescription = !showFullDescription },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            if (showFullDescription) "Show Less" else "Read More",
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -565,104 +804,108 @@ fun DetailedAnimeScreen(
                 if (filteredRelations.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            Text("Relations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(filteredRelations) { relation ->
-                                    Column(
-                                        modifier = Modifier
-                                            .width(90.dp)
-                                            .border(
-                                                width = 1.dp,
-                                                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                                shape = RoundedCornerShape(12.dp)
-                                            )
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable { 
-                                                onRelationClick(relation) 
-                                            }
-                                            .padding(4.dp)
-                                    ) {
-                                        Box(
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0E0E0E).copy(alpha = 0.95f) else Color(0xFF151515).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Link,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Relations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(filteredRelations) { relation ->
+                                        Column(
                                             modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(140.dp)
+                                                .width(110.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    onRelationClick(relation)
+                                                }
+                                                .padding(4.dp)
                                         ) {
-                                            Card(
-                                                shape = RoundedCornerShape(8.dp),
-                                                modifier = Modifier.fillMaxSize()
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(3f / 4f)
                                             ) {
-                                                AsyncImage(
-                                                    model = relation.cover,
-                                                    contentDescription = relation.title,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize()
+                                                Card(
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                ) {
+                                                    AsyncImage(
+                                                        model = relation.cover,
+                                                        contentDescription = relation.title,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+                                                // Episode badge
+                                                val episodeText = when {
+                                                    relation.episodes != null && relation.episodes > 0 -> "${relation.episodes} ${if (relation.episodes == 1) "ep" else "eps"}"
+                                                    relation.latestEpisode != null && relation.latestEpisode > 0 -> "Ep ${relation.latestEpisode}"
+                                                    else -> null
+                                                }
+                                                episodeText?.let { text ->
+                                                    Surface(
+                                                        modifier = Modifier
+                                                            .padding(6.dp)
+                                                            .align(Alignment.BottomStart),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = Color.Black.copy(alpha = 0.8f)
+                                                    ) {
+                                                        Text(
+                                                            text,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color.White,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                relation.title,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                                            )
+                                            relation.format?.let { format ->
+                                                val formatDisplay = when (format) {
+                                                    "TV" -> "TV"
+                                                    "TV_SHORT" -> "TV Short"
+                                                    "MOVIE" -> "Movie"
+                                                    "SPECIAL" -> "Special"
+                                                    "OVA" -> "OVA"
+                                                    "ONA" -> "ONA"
+                                                    "MANGA" -> "Manga"
+                                                    "NOVEL" -> "Novel"
+                                                    "ONE_SHOT" -> "One Shot"
+                                                    "MUSIC" -> "Music"
+                                                    else -> format
+                                                }
+                                                Text(
+                                                    formatDisplay,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                                                 )
                                             }
-                                            // Episodes badge - top left
-                                            relation.episodes?.let { eps ->
-                                                Surface(
-                                                    modifier = Modifier
-                                                        .padding(4.dp)
-                                                        .align(Alignment.TopStart),
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = Color.Black.copy(alpha = 0.7f)
-                                                ) {
-                                                    Text(
-                                                        "$eps ${if (eps == 1) "ep" else "eps"}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = Color.White,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                            // Rating badge - top right
-                                            relation.averageScore?.let { score ->
-                                                Surface(
-                                                    modifier = Modifier
-                                                        .padding(4.dp)
-                                                        .align(Alignment.TopEnd),
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = Color.Black.copy(alpha = 0.7f)
-                                                ) {
-                                                    Text(
-                                                        "★ ${score / 10}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = Color(0xFFFFD700),
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            relation.title,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
-                                        )
-                                        relation.format?.let { format ->
-                                            val formatDisplay = when (format) {
-                                                "TV" -> "TV"
-                                                "TV_SHORT" -> "TV Short"
-                                                "MOVIE" -> "Movie"
-                                                "SPECIAL" -> "Special"
-                                                "OVA" -> "OVA"
-                                                "ONA" -> "ONA"
-                                                "MANGA" -> "Manga"
-                                                "NOVEL" -> "Novel"
-                                                "ONE_SHOT" -> "One Shot"
-                                                "MUSIC" -> "Music"
-                                                else -> format
-                                            }
-                                            Text(
-                                                formatDisplay,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                            )
                                         }
                                     }
                                 }
@@ -672,6 +915,59 @@ fun DetailedAnimeScreen(
                 }
 
                 item { Spacer(modifier = Modifier.height(80.dp)) }
+            }
+        }
+    }
+
+    if (selectedTagForDescription != null) {
+        val tag: TagData = selectedTagForDescription!!
+        ModalBottomSheet(
+            onDismissRequest = { selectedTagForDescription = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 40.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Label,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        tag.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                tag.rank?.let { rank ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Rank: $rank%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(16.dp))
+                val description = tag.description ?: "No description available."
+                val cleanDescription = description.replace("<br>", "\n").replace("<br/>", "\n")
+                    .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
+                    .replace("&quot;", "\"").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                Text(
+                    cleanDescription,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 24.sp
+                )
             }
         }
     }
@@ -713,6 +1009,34 @@ private fun InfoGrid(items: List<Pair<String, String>>, isOled: Boolean) {
                 if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable
+private fun InfoStat(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            shape = CircleShape,
+            color = color.copy(alpha = 0.15f),
+            modifier = Modifier.size(48.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String, isOled: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall,
+            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium,
+            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
     }
 }
 

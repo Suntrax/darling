@@ -22,7 +22,6 @@ import com.blissless.anime.ui.components.SectionTitle
 import android.widget.Toast
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.toDetailedAnimeData
-import com.blissless.anime.data.models.StoredFavorite
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -34,7 +33,7 @@ fun ExploreScreen(
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
     simplifyAnimeDetails: Boolean = true,
-    localFavorites: Map<Int, StoredFavorite> = emptyMap(),
+    favoriteIds: Set<Int> = emptySet(),
     onToggleFavorite: (ExploreAnime) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     currentlyWatching: List<AnimeMedia> = emptyList(),
@@ -78,9 +77,6 @@ fun ExploreScreen(
     // Scope for coroutines - must be at composition level
     val scope = rememberCoroutineScope()
 
-    // Calculate canAddFavorite locally based on max 10 favorites limit
-    val canAddFavoriteLocal = localFavorites.size < 10
-
     // Show appropriate dialog based on simplifyAnimeDetails setting
     if (showDialog && selectedAnime != null) {
         // Set first anime on first open
@@ -89,7 +85,7 @@ fun ExploreScreen(
         }
         
         val anime = selectedAnime!!
-        val isAnimeFavorite = localFavorites.containsKey(anime.id)
+        val isAnimeFavorite = favoriteIds.contains(anime.id)
         val animeStatus = animeStatusMap[anime.id]
 
         if (simplifyAnimeDetails) {
@@ -100,7 +96,6 @@ fun ExploreScreen(
                 isOled = isOled,
                 currentStatus = animeStatus,
                 isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
                 onToggleFavorite = { onToggleFavorite(anime) },
                 onDismiss = { 
                     // Go back to first anime if we've navigated, otherwise close
@@ -145,7 +140,6 @@ fun ExploreScreen(
                 isOled = isOled,
                 currentStatus = animeStatus,
                 isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
                 onDismiss = { 
                     // Go back to first anime if we've navigated, otherwise close
                     if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {

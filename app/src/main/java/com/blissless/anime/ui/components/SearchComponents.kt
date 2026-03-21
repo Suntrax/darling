@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -39,13 +40,13 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.ui.screens.DetailedAnimeScreen
-import com.blissless.anime.data.models.toDetailedAnimeData
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
-import com.blissless.anime.data.models.StoredFavorite
 
 @Composable
 fun SearchOverlay(
@@ -57,7 +58,7 @@ fun SearchOverlay(
     completed: List<AnimeMedia>,
     onHold: List<AnimeMedia>,
     dropped: List<AnimeMedia>,
-    localFavorites: Map<Int, StoredFavorite>,
+    favoriteIds: Set<Int>,
     onToggleFavorite: (AnimeMedia) -> Unit,
     onClose: () -> Unit,
     onPlayEpisode: (AnimeMedia, Int) -> Unit
@@ -67,10 +68,20 @@ fun SearchOverlay(
     var isSearching by remember { mutableStateOf(false) }
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
+    var firstAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDetailDialog by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
+
+    // Update firstAnime when anime is selected
+    LaunchedEffect(selectedAnime) {
+        if (selectedAnime != null && firstAnime == null) {
+            firstAnime = selectedAnime
+        }
+    }
 
     // Auto-focus and open keyboard when search is opened
     LaunchedEffect(Unit) {
@@ -231,6 +242,7 @@ fun SearchOverlay(
                             onClick = {
                                 keyboardController?.hide() // Hide keyboard on selection
                                 selectedAnime = anime
+                                firstAnime = anime // Set first anime on selection
                                 showDetailDialog = true
                             }
                         )
@@ -242,99 +254,74 @@ fun SearchOverlay(
 
     // Detail Dialog
     if (showDetailDialog && selectedAnime != null) {
-        val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
-        if (simplifyAnimeDetails) {
-            // Simple dialog
-            SearchAnimeDetailDialog(
-                anime = selectedAnime!!,
-                isOled = isOled,
-                currentStatus = savedAnimeMap[selectedAnime!!.id],
-                onDismiss = { showDetailDialog = false },
-                onPlayEpisode = { episode ->
-                    val animeMedia = AnimeMedia(
-                        id = selectedAnime!!.id,
-                        title = selectedAnime!!.title,
-                        cover = selectedAnime!!.cover,
-                        banner = selectedAnime!!.banner,
-                        progress = 0,
-                        totalEpisodes = selectedAnime!!.episodes,
-                        latestEpisode = selectedAnime!!.latestEpisode,
-                        status = "",
-                        averageScore = selectedAnime!!.averageScore,
-                        genres = selectedAnime!!.genres,
-                        listStatus = "",
-                        listEntryId = 0
-                    )
-                    onPlayEpisode(animeMedia, episode)
-                    showDetailDialog = false
-                },
-                onUpdateStatus = { status ->
-                    viewModel.addExploreAnimeToList(selectedAnime!!, status)
-                },
-                onRemove = {
-                    viewModel.removeAnimeFromList(selectedAnime!!.id)
+        val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
+        val currentStatus = savedAnimeMap[selectedAnime!!.id]
+        
+        ExploreAnimeDialog(
+            anime = selectedAnime!!,
+            viewModel = viewModel,
+            isOled = isOled,
+            currentStatus = currentStatus,
+            isFavorite = isAnimeFavorite,
+            onToggleFavorite = {
+                if (!viewModel.toggleAniListFavorite(selectedAnime!!.id)) {
+                    Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
                 }
-            )
-        } else {
-            // Rich detailed dialog
-            DetailedAnimeScreen(
-                anime = selectedAnime!!.toDetailedAnimeData(),
-                viewModel = viewModel,
-                isOled = isOled,
-                currentStatus = savedAnimeMap[selectedAnime!!.id],
-                isFavorite = isAnimeFavorite,
-                onToggleFavorite = { _ ->
-                    // Convert ExploreAnime to AnimeMedia for the callback
-                    val animeMedia = AnimeMedia(
-                        id = selectedAnime!!.id,
-                        title = selectedAnime!!.title,
-                        cover = selectedAnime!!.cover,
-                        banner = selectedAnime!!.banner,
-                        progress = 0,
-                        totalEpisodes = selectedAnime!!.episodes,
-                        latestEpisode = selectedAnime!!.latestEpisode,
-                        status = "",
-                        averageScore = selectedAnime!!.averageScore,
-                        genres = selectedAnime!!.genres,
-                        listStatus = "",
-                        listEntryId = 0,
-                        year = selectedAnime!!.year
-                    )
-                    onToggleFavorite(animeMedia)
-                },
-                onDismiss = { showDetailDialog = false },
-                onPlayEpisode = { episode ->
-                    val animeMedia = AnimeMedia(
-                        id = selectedAnime!!.id,
-                        title = selectedAnime!!.title,
-                        cover = selectedAnime!!.cover,
-                        banner = selectedAnime!!.banner,
-                        progress = 0,
-                        totalEpisodes = selectedAnime!!.episodes,
-                        latestEpisode = selectedAnime!!.latestEpisode,
-                        status = "",
-                        averageScore = selectedAnime!!.averageScore,
-                        genres = selectedAnime!!.genres,
-                        listStatus = "",
-                        listEntryId = 0
-                    )
-                    // Don't auto-add to list - only add when threshold is reached
-                    onPlayEpisode(animeMedia, episode)
-                    showDetailDialog = false
-                },
-                onUpdateStatus = { status ->
-                    if (status != null) {
-                        viewModel.addExploreAnimeToList(selectedAnime!!, status)
+            },
+            onDismiss = { showDetailDialog = false },
+            onAddToPlanning = { viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING") },
+            onAddToDropped = { viewModel.addExploreAnimeToList(selectedAnime!!, "DROPPED") },
+            onAddToOnHold = { viewModel.addExploreAnimeToList(selectedAnime!!, "PAUSED") },
+            onRemoveFromList = { viewModel.removeAnimeFromList(selectedAnime!!.id) },
+            onStartWatching = { episode ->
+                val animeMedia = AnimeMedia(
+                    id = selectedAnime!!.id,
+                    title = selectedAnime!!.title,
+                    cover = selectedAnime!!.cover,
+                    banner = selectedAnime!!.banner,
+                    progress = 0,
+                    totalEpisodes = selectedAnime!!.episodes,
+                    latestEpisode = selectedAnime!!.latestEpisode,
+                    status = "",
+                    averageScore = selectedAnime!!.averageScore,
+                    genres = selectedAnime!!.genres,
+                    listStatus = "",
+                    listEntryId = 0
+                )
+                onPlayEpisode(animeMedia, episode)
+                showDetailDialog = false
+            },
+            isLoggedIn = true,
+            onRelationClick = { relation ->
+                scope.launch {
+                    try {
+                        delay(100)
+                        val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                        if (detailedData != null) {
+                            selectedAnime = ExploreAnime(
+                                id = relation.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                        } else {
+                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
-                },
-                onRemove = {
-                    viewModel.removeAnimeFromList(selectedAnime!!.id)
-                    showDetailDialog = false
-                },
-                isLoggedIn = true
-            )
-        }
+                }
+            }
+        )
     }
+
 }
 
 @Composable
@@ -430,11 +417,12 @@ private fun SearchResultItem(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
 
-                    Text(
-                        "Episodes: ${anime.episodes.takeIf { it > 0 } ?: "?"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
+                    when {
+                        anime.episodes > 0 -> Text("Episodes: ${anime.episodes}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Episodes: ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Episodes: 1", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        else -> Text("Episodes: ?", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    }
                 }
 
                 if (anime.genres.isNotEmpty()) {
@@ -571,11 +559,12 @@ fun SearchAnimeDetailDialog(
                                 Spacer(modifier = Modifier.width(12.dp))
                             }
 
-                            Text(
-                                "${anime.episodes.takeIf { it > 0 } ?: "?"} eps",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
+                            when {
+                                anime.episodes > 0 -> Text("${anime.episodes} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Ep ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Ep 1", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                else -> Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))

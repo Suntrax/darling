@@ -1,9 +1,13 @@
 package com.blissless.anime.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -12,6 +16,9 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,7 +41,6 @@ fun SettingsScreen(
     isOled: Boolean,
     isLoggedIn: Boolean,
     showStatusColors: Boolean = true,
-    forceHighRefreshRate: Boolean = false,
     hideNavbarText: Boolean = false,
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
@@ -107,16 +113,6 @@ fun SettingsScreen(
                 description = "Show colored status bars on anime cards",
                 checked = showStatusColors,
                 onCheckedChange = { viewModel.setShowStatusColors(it) },
-                isOled = isOled
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsToggle(
-                title = "High Refresh Rate",
-                description = "Force 120Hz for smoother scrolling",
-                checked = forceHighRefreshRate,
-                onCheckedChange = { viewModel.setForceHighRefreshRate(it) },
                 isOled = isOled
             )
 
@@ -471,45 +467,66 @@ private fun SettingsSection(
     title: String,
     icon: ImageVector,
     isOled: Boolean,
+    initiallyExpanded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
         ),
-        shape = MaterialTheme.shapes.large
+        shape = MaterialTheme.shapes.medium
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { expanded = !expanded }
+                    .padding(8.dp)
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(20.dp)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(bottom = 12.dp),
-                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-            )
-
-            content()
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = tween(200)) + fadeIn(animationSpec = tween(200)),
+                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(200))
+            ) {
+                Column {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = if (isOled) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    )
+                    content()
+                }
+            }
         }
     }
 }

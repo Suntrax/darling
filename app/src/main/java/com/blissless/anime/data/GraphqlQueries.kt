@@ -555,6 +555,7 @@ object GraphqlQueries {
                             episodes
                             averageScore
                             format
+                            nextAiringEpisode { episode }
                         }
                     }
                 }

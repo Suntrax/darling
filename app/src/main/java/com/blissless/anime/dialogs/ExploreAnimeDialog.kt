@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,7 +27,7 @@ import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.ui.components.HomeStatusColors
-import com.blissless.anime.dialogs.StatusButtonsGrid
+import com.blissless.anime.ui.components.StatusButton
 import java.util.Locale
 
 @Composable
@@ -37,7 +37,6 @@ fun ExploreAnimeDialog(
     isOled: Boolean = false,
     currentStatus: String?,
     isFavorite: Boolean = false,
-    canAddFavorite: Boolean = true,
     onToggleFavorite: () -> Unit = {},
     onDismiss: () -> Unit,
     onAddToPlanning: () -> Unit,
@@ -93,7 +92,12 @@ fun ExploreAnimeDialog(
                                 Text("★ ${String.format(Locale.US, "%.1f", score)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.width(12.dp))
                             }
-                            Text("${anime.episodes.takeIf { it > 0 } ?: "?"} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                            when {
+                                anime.episodes > 0 -> Text("${anime.episodes} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Ep ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Ep 1", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                else -> Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         if (anime.genres.isNotEmpty()) { Text(anime.genres.take(3).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f), maxLines = 2, overflow = TextOverflow.Ellipsis) }
@@ -102,90 +106,44 @@ fun ExploreAnimeDialog(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         val currentDisplayStatus = if (statusSubmitted) (selectedStatus.ifEmpty { currentStatus ?: "" }) else (currentStatus ?: "")
-                        if (currentDisplayStatus.isNotEmpty()) {
+                        if (currentDisplayStatus.isNotEmpty() && !markedForRemoval) {
                             ExploreStatusBadge(status = currentDisplayStatus)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
-                StatusButtonsGrid(
-                    selectedStatus = selectedStatus,
-                    markedForRemoval = markedForRemoval,
-                    showAnimation = showAnimation,
-                    scale = scale,
-                    onStatusSelected = { status ->
-                        selectedStatus = status
-                        markedForRemoval = false
-                        showAnimation = true
-                    },
-                    onRemoveToggled = {
-                        markedForRemoval = !markedForRemoval
-                        showAnimation = true
-                    }
-                )
-
-                if (hasStatusChanged && !markedForRemoval) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            when (selectedStatus) {
-                                "CURRENT" -> viewModel.addExploreAnimeToList(anime, "CURRENT")
-                                "PLANNING" -> onAddToPlanning()
-                                "COMPLETED" -> viewModel.addExploreAnimeToList(anime, "COMPLETED")
-                                "PAUSED" -> onAddToOnHold()
-                                "DROPPED" -> onAddToDropped()
-                            }
-                            Toast.makeText(context, "Status updated", Toast.LENGTH_SHORT).show()
-                            statusSubmitted = true
-                        },
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save Status", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(16.dp))
-                // Favorite or Remove Button
+                // Favorite Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (isFavorite || canAddFavorite) {
+                    if (isFavorite) {
                         Button(
                             onClick = {
-                                if (!isFavorite && !canAddFavorite) {
-                                    Toast.makeText(context, "Maximum 10 favorites!", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    onToggleFavorite()
-                                    Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
-                                }
+                                onToggleFavorite()
+                                Toast.makeText(context, "Removed from Favorites", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isFavorite) Color(0xFFFFD700).copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.15f),
-                                contentColor = if (isFavorite) Color(0xFFFFD700) else Color.White
+                                containerColor = Color(0xFFFF1744).copy(alpha = 0.3f),
+                                contentColor = Color(0xFFFF1744)
                             )
                         ) {
-                            Icon(if (isFavorite) Icons.Default.Star else Icons.Outlined.Star, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Favorite, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (isFavorite) "Favorited" else "Favorite", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                            Text("Favorited", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
                         }
                     } else {
-                        Button(
-                            onClick = { markedForRemoval = !markedForRemoval; showAnimation = true },
-                            modifier = Modifier.weight(1f).height(44.dp).scale(if (markedForRemoval && showAnimation) scale else 1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (markedForRemoval) Color.Red.copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.15f),
-                                contentColor = if (markedForRemoval) Color.Red else Color.White
-                            )
+                        OutlinedButton(
+                            onClick = {
+                                onToggleFavorite()
+                                Toast.makeText(context, "Added to Favorites", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Outlined.FavoriteBorder, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Remove", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                            Text("Favorite", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
                         }
                     }
                 }
@@ -201,17 +159,6 @@ fun ExploreAnimeDialog(
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Start Watching", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-
-                if (markedForRemoval) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show(); onRemoveFromList() },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                    ) { Text("Remove from List", fontWeight = FontWeight.Bold) }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

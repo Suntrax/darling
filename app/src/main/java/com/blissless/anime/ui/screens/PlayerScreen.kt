@@ -96,6 +96,7 @@ fun PlayerScreen(
     qualityOptions: List<QualityOption> = emptyList(),
     currentQuality: String = "Auto",
     isLatestEpisode: Boolean = false,
+    disableMaterialColors: Boolean = false,
     // PRIMARY: Animekai skip timestamps (in seconds)
     animekaiIntroStart: Int? = null,
     animekaiIntroEnd: Int? = null,
@@ -118,6 +119,7 @@ fun PlayerScreen(
     var playbackError by remember { mutableStateOf<String?>(null) }
     var hasError by remember { mutableStateOf(false) }
     var isChangingServer by remember { mutableStateOf(false) }
+    var hasPlaybackStarted by remember { mutableStateOf(false) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
@@ -138,6 +140,7 @@ fun PlayerScreen(
 
     var sliderValue by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
+    var wasPlayingBeforeScrub by remember { mutableStateOf(false) }
 
     var showSkipIndicator by remember { mutableStateOf(false) }
     var skipIndicatorText by remember { mutableStateOf("") }
@@ -245,6 +248,9 @@ fun PlayerScreen(
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(playing: Boolean) {
                         isPlaying = playing
+                        if (playing) {
+                            hasPlaybackStarted = true
+                        }
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -286,6 +292,7 @@ fun PlayerScreen(
         hasSkippedOutro = false
         hasTriggeredPrefetch = false
         isChangingServer = false
+        hasPlaybackStarted = false
 
         val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl)
@@ -302,7 +309,8 @@ fun PlayerScreen(
 
         exoPlayer.setMediaItem(mediaItemBuilder.build())
         exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+        // Only auto-play if no saved position, otherwise wait for seek
+        exoPlayer.playWhenReady = savedPosition == 0L
 
         hasTriggeredProgressUpdate = false
         currentPosition = 0L
@@ -313,6 +321,8 @@ fun PlayerScreen(
         if (exoPlayer.playbackState == Player.STATE_READY && savedPosition > 0 && !hasRestoredPosition) {
             exoPlayer.seekTo(savedPosition)
             hasRestoredPosition = true
+            // Start playback after seeking to saved position
+            exoPlayer.playWhenReady = true
         }
     }
 
@@ -526,58 +536,8 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(40.dp)
-                .align(Alignment.CenterStart)
-                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.3f)
-                .padding(start = 40.dp)
-                .align(Alignment.CenterStart)
-                .pointerInput(backwardSkipSeconds) {
-                    detectTapGestures(
-                        onTap = { if (!hasError) showControls = !showControls },
-                        onDoubleTap = { if (!hasError) seekBy(-(backwardSkipSeconds * 1000L), false) }
-                    )
-                }
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.4f)
-                .align(Alignment.Center)
-                .pointerInput(Unit) { detectTapGestures(onTap = { if (!hasError) showControls = !showControls }) }
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.3f)
-                .padding(end = 40.dp)
-                .align(Alignment.CenterEnd)
-                .pointerInput(forwardSkipSeconds) {
-                    detectTapGestures(
-                        onTap = { if (!hasError) showControls = !showControls },
-                        onDoubleTap = { if (!hasError) seekBy(forwardSkipSeconds * 1000L, true) }
-                    )
-                }
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(40.dp)
-                .align(Alignment.CenterEnd)
-                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-        )
-
+        // 1. AndroidView (Bottom Layer)
+        // Hide player surface until playback actually starts to avoid showing first frame
         AndroidView(
             factory = {
                 PlayerView(context).apply {
@@ -603,10 +563,97 @@ fun PlayerScreen(
                     useController = false
                 }
             },
-            modifier = Modifier.fillMaxSize(),
-            update = { view -> view.resizeMode = resizeModes[resizeModeIndex].first }
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(if (hasPlaybackStarted) 1f else 0f),
+            update = { view -> 
+                view.resizeMode = resizeModes[resizeModeIndex].first
+            }
         )
 
+        // 2. Active Gesture Zones (Middle Layer)
+        // These handle seeking and toggling controls. Defined first so they are "under" the padding zones.
+
+        // Left Seek Zone (30% width, offset by padding)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.3f)
+                .padding(start = 40.dp)
+                .align(Alignment.CenterStart)
+                .pointerInput(backwardSkipSeconds) {
+                    detectTapGestures(
+                        onTap = { if (!hasError) showControls = !showControls },
+                        onDoubleTap = { if (!hasError) seekBy(-(backwardSkipSeconds * 1000L), false) }
+                    )
+                }
+        )
+
+        // Center Toggle Zone (40% width)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.4f)
+                .align(Alignment.Center)
+                .pointerInput(Unit) { detectTapGestures(onTap = { if (!hasError) showControls = !showControls }) }
+        )
+
+        // Right Seek Zone (30% width, offset by padding)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.3f)
+                .padding(end = 40.dp)
+                .align(Alignment.CenterEnd)
+                .pointerInput(forwardSkipSeconds) {
+                    detectTapGestures(
+                        onTap = { if (!hasError) showControls = !showControls },
+                        onDoubleTap = { if (!hasError) seekBy(forwardSkipSeconds * 1000L, true) }
+                    )
+                }
+        )
+
+        // 3. Padding Zones (Top Layer over Active Zones, Under UI Controls)
+        // These consume touches to prevent UI toggling in safe areas.
+        // Defined after active zones so they take precedence in overlap areas.
+
+        // Left Padding
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(40.dp)
+                .align(Alignment.CenterStart)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+        )
+
+        // Right Padding
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(40.dp)
+                .align(Alignment.CenterEnd)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+        )
+
+        // Top Padding (Matches side padding logic)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .align(Alignment.TopCenter)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+        )
+
+        // Bottom Padding (Matches side padding logic)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .align(Alignment.BottomCenter)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+        )
+
+        // 4. UI Overlays (Top Layer)
         AnimatedVisibility(
             visible = showSkipOpeningButton,
             enter = fadeIn() + scaleIn(initialScale = 0.8f),
@@ -651,170 +698,176 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                Row(
+                // Top gradient
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.TopCenter)
                         .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .statusBarsPadding()
+                        .padding(16.dp)
                 ) {
-                    Column {
-                        if (animeName.isNotEmpty()) {
-                            Text(
-                                text = animeName,
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
-                                color = Color.White.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (isFallbackStream)
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
-                                else
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            if (animeName.isNotEmpty()) {
+                                Text(
+                                    text = animeName,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = actualCategory.uppercase(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
+                                    text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
                                     color = if (isFallbackStream)
-                                        MaterialTheme.colorScheme.secondary
+                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
                                     else
-                                        MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                            if (isFetchingTimestamps) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 1.5.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            if (isChangingServer) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 1.5.dp,
-                                    color = Color.Yellow
-                                )
-                            }
-                        }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
-                        // Server selector - always takes same space
-                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                            if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
-                                IconButton(
-                                    onClick = { showServerMenu = true },
-                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                                ) {
-                                    Icon(Icons.Default.Settings, "Server Selection", tint = Color.White)
-                                }
-
-                                DropdownMenu(
-                                    expanded = showServerMenu,
-                                    onDismissRequest = { showServerMenu = false },
-                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
-                                ) {
-                                    if (subServers.isNotEmpty()) {
-                                        Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                                        subServers.forEach { server ->
-                                            ServerMenuItem(
-                                                serverName = server.name,
-                                                isSelected = server.name == currentServerName && currentCategory == "sub",
-                                                onClick = {
-                                                    showServerMenu = false
-                                                    handleServerChange(server.name, "sub")
-                                                }
-                                            )
-                                        }
-                                    }
-                                    if (dubServers.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                                        dubServers.forEach { server ->
-                                            ServerMenuItem(
-                                                serverName = server.name,
-                                                isSelected = server.name == currentServerName && currentCategory == "dub",
-                                                onClick = {
-                                                    showServerMenu = false
-                                                    handleServerChange(server.name, "dub")
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Quality selector - always takes same space
-                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                            if (qualityOptions.isNotEmpty() && onQualityChange != null) {
-                                IconButton(
-                                    onClick = { showQualityMenu = true },
-                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                                ) {
-                                    Icon(Icons.Default.Hd, "Quality", tint = Color.White)
-                                }
-
-                                DropdownMenu(
-                                    expanded = showQualityMenu,
-                                    onDismissRequest = { showQualityMenu = false },
-                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(140.dp)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                                 ) {
                                     Text(
-                                        "QUALITY",
-                                        color = Color.Gray,
+                                        text = actualCategory.uppercase(),
                                         style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isFallbackStream)
+                                            MaterialTheme.colorScheme.secondary
+                                        else
+                                            MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
-                                    QualityMenuItem(
-                                        qualityName = "Auto",
-                                        isSelected = selectedQuality == "Auto",
-                                        onClick = {
-                                            if (selectedQuality != "Auto") {
-                                                handleQualityChange(videoUrl, "Auto")
+                                }
+                                if (isFetchingTimestamps) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 1.5.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (isChangingServer) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 1.5.dp,
+                                        color = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
+                            // Server selector
+                            Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                                if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
+                                    IconButton(
+                                        onClick = { showServerMenu = true },
+                                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                    ) {
+                                        Icon(Icons.Default.Settings, "Server Selection", tint = Color.White)
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showServerMenu,
+                                        onDismissRequest = { showServerMenu = false },
+                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
+                                    ) {
+                                        if (subServers.isNotEmpty()) {
+                                            Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                            subServers.forEach { server ->
+                                                ServerMenuItem(
+                                                    serverName = server.name,
+                                                    isSelected = server.name == currentServerName && currentCategory == "sub",
+                                                    onClick = {
+                                                        showServerMenu = false
+                                                        handleServerChange(server.name, "sub")
+                                                    }
+                                                )
                                             }
-                                            showQualityMenu = false
                                         }
-                                    )
-                                    qualityOptions.forEach { quality ->
+                                        if (dubServers.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                            dubServers.forEach { server ->
+                                                ServerMenuItem(
+                                                    serverName = server.name,
+                                                    isSelected = server.name == currentServerName && currentCategory == "dub",
+                                                    onClick = {
+                                                        showServerMenu = false
+                                                        handleServerChange(server.name, "dub")
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Quality selector
+                            Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                                if (qualityOptions.isNotEmpty() && onQualityChange != null) {
+                                    IconButton(
+                                        onClick = { showQualityMenu = true },
+                                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                    ) {
+                                        Icon(Icons.Default.Hd, "Quality", tint = Color.White)
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showQualityMenu,
+                                        onDismissRequest = { showQualityMenu = false },
+                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(140.dp)
+                                    ) {
+                                        Text(
+                                            "QUALITY",
+                                            color = Color.Gray,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
                                         QualityMenuItem(
-                                            qualityName = quality.quality,
-                                            isSelected = selectedQuality == quality.quality,
+                                            qualityName = "Auto",
+                                            isSelected = selectedQuality == "Auto",
                                             onClick = {
-                                                if (selectedQuality != quality.quality) {
-                                                    handleQualityChange(quality.url, quality.quality)
+                                                if (selectedQuality != "Auto") {
+                                                    handleQualityChange(videoUrl, "Auto")
                                                 }
                                                 showQualityMenu = false
                                             }
                                         )
+                                        qualityOptions.forEach { quality ->
+                                            QualityMenuItem(
+                                                qualityName = quality.quality,
+                                                isSelected = selectedQuality == quality.quality,
+                                                onClick = {
+                                                    if (selectedQuality != quality.quality) {
+                                                        handleQualityChange(quality.url, quality.quality)
+                                                    }
+                                                    showQualityMenu = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // Resize button - always takes same space
-                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                            IconButton(
-                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
-                                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                            ) {
-                                Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
+                            // Resize button
+                            Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                                IconButton(
+                                    onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
+                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                ) {
+                                    Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
+                                }
                             }
                         }
                     }
@@ -952,25 +1005,30 @@ fun PlayerScreen(
                     }
                 }
 
+                // Bottom gradient
                 Column(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
                         .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .navigationBarsPadding()
+                        .padding(16.dp)
                 ) {
                     Slider(
                         value = sliderValue,
                         valueRange = 0f..(if (duration > 0) duration.toFloat() else 1000f),
                         onValueChange = { newValue ->
                             isDragging = true
+                            wasPlayingBeforeScrub = isPlaying
                             sliderValue = newValue
                             currentPosition = newValue.toLong()
                         },
                         onValueChangeFinished = {
                             isDragging = false
                             exoPlayer.seekTo(sliderValue.toLong())
-                            exoPlayer.play()
+                            if (wasPlayingBeforeScrub) {
+                                exoPlayer.play()
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

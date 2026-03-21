@@ -190,7 +190,8 @@ data class DetailedAnimeData(
 data class TagData(
     val name: String,
     val rank: Int? = null,
-    val isMediaSpoiler: Boolean = false
+    val isMediaSpoiler: Boolean = false,
+    val description: String? = null
 )
 
 @Serializable
@@ -206,6 +207,7 @@ data class AnimeRelation(
     val title: String,
     val cover: String,
     val episodes: Int?,
+    val latestEpisode: Int? = null,
     val averageScore: Int?,
     val format: String?,
     val relationType: String
@@ -599,6 +601,7 @@ data class DetailedAnimeMedia(
     val popularity: Int? = null,
     val favourites: Int? = null,
     val genres: List<String>? = null,
+    val tags: List<TagData>? = null,
     val season: String? = null,
     val seasonYear: Int? = null,
     val format: String? = null,
@@ -644,6 +647,7 @@ data class AnimeRelationsMedia(
     val title: MediaTitle? = null,
     val episodes: Int? = null,
     val format: String? = null,
+    val nextAiringEpisode: NextAiringEpisode? = null,
     val relations: AnimeRelations? = null
 )
 
@@ -666,7 +670,8 @@ data class AnimeRelationNode(
     val episodes: Int? = null,
     val averageScore: Int? = null,
     val type: String? = null,
-    val format: String? = null
+    val format: String? = null,
+    val nextAiringEpisode: NextAiringEpisode? = null
 )
 
 // ============================================

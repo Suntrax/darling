@@ -26,7 +26,6 @@ class UserPreferences(private val context: Context) {
         private const val KEY_TRACKING_PERCENTAGE = "tracking_percentage"
         private const val KEY_FORWARD_SKIP_SECONDS = "forward_skip_seconds"
         private const val KEY_BACKWARD_SKIP_SECONDS = "backward_skip_seconds"
-        private const val KEY_FORCE_HIGH_REFRESH_RATE = "force_high_refresh_rate"
         private const val KEY_HIDE_NAVBAR_TEXT = "hide_navbar_text"
         private const val KEY_SIMPLIFY_EPISODE_MENU = "simplify_episode_menu"
         private const val KEY_SIMPLIFY_ANIME_DETAILS = "simplify_anime_details"
@@ -69,9 +68,6 @@ class UserPreferences(private val context: Context) {
 
     private val _backwardSkipSeconds = MutableStateFlow(10)
     val backwardSkipSeconds: StateFlow<Int> = _backwardSkipSeconds.asStateFlow()
-
-    private val _forceHighRefreshRate = MutableStateFlow(false)
-    val forceHighRefreshRate: StateFlow<Boolean> = _forceHighRefreshRate.asStateFlow()
 
     private val _hideNavbarText = MutableStateFlow(false)
     val hideNavbarText: StateFlow<Boolean> = _hideNavbarText.asStateFlow()
@@ -124,7 +120,6 @@ class UserPreferences(private val context: Context) {
         _trackingPercentage.value = sharedPreferences.getInt(KEY_TRACKING_PERCENTAGE, 85)
         _forwardSkipSeconds.value = sharedPreferences.getInt(KEY_FORWARD_SKIP_SECONDS, 10)
         _backwardSkipSeconds.value = sharedPreferences.getInt(KEY_BACKWARD_SKIP_SECONDS, 10)
-        _forceHighRefreshRate.value = sharedPreferences.getBoolean(KEY_FORCE_HIGH_REFRESH_RATE, false)
         _hideNavbarText.value = sharedPreferences.getBoolean(KEY_HIDE_NAVBAR_TEXT, false)
         _simplifyEpisodeMenu.value = sharedPreferences.getBoolean(KEY_SIMPLIFY_EPISODE_MENU, false)
         _simplifyAnimeDetails.value = sharedPreferences.getBoolean(KEY_SIMPLIFY_ANIME_DETAILS, false)
@@ -193,11 +188,6 @@ class UserPreferences(private val context: Context) {
         val validSeconds = seconds.coerceIn(5, 30)
         _backwardSkipSeconds.value = validSeconds
         sharedPreferences.edit { putInt(KEY_BACKWARD_SKIP_SECONDS, validSeconds) }
-    }
-
-    fun setForceHighRefreshRate(enabled: Boolean) {
-        _forceHighRefreshRate.value = enabled
-        sharedPreferences.edit { putBoolean(KEY_FORCE_HIGH_REFRESH_RATE, enabled) }
     }
 
     fun setHideNavbarText(enabled: Boolean) {

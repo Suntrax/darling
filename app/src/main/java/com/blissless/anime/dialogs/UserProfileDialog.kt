@@ -1,23 +1,33 @@
 package com.blissless.anime.dialogs
 
 import android.widget.Toast
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Star
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -30,7 +40,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
-import com.blissless.anime.data.models.StoredFavorite
+import com.blissless.anime.data.models.UserFavoriteAnime
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.UserActivity
 import java.text.SimpleDateFormat
@@ -48,21 +58,43 @@ fun UserProfileDialog(
     dropped: List<AnimeMedia> = emptyList()
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
     val userId by viewModel.userId.collectAsState()
-    val localFavorites by viewModel.localFavorites.collectAsState()
+    val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val userActivity by viewModel.userActivity.collectAsState()
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val completed by viewModel.completed.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Favorites", "History", "Rate")
-
-    // Fetch activity when userId becomes available
+    val tabs = listOf("Favorites", "History")
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    
+    // Reset drag offset when tab changes
+    LaunchedEffect(selectedTab) {
+        dragOffset = 0f
+    }
+    
+    // Timeout-based auto-reset for drag offset (safety net)
+    LaunchedEffect(dragOffset) {
+        if (dragOffset != 0f) {
+            kotlinx.coroutines.delay(300)
+            dragOffset = 0f
+        }
+    }
+    
     LaunchedEffect(userId) {
         if (userId != null) {
             viewModel.fetchUserActivity()
+            viewModel.fetchAniListFavorites()
+        }
+    }
+
+    val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
+    LaunchedEffect(isFavoriteRateLimited) {
+        if (isFavoriteRateLimited) {
+            Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -89,7 +121,7 @@ fun UserProfileDialog(
                     // Avatar
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                     ) {
                         if (userAvatar != null) {
@@ -125,17 +157,34 @@ fun UserProfileDialog(
                 }
 
                 // Tabs
+                val tabPositions = remember { mutableStateListOf<TabPosition>() }
+                val animatedOffset by animateDpAsState(
+                    targetValue = if (selectedTab < tabPositions.size) tabPositions[selectedTab].left else 0.dp,
+                    animationSpec = tween(durationMillis = 120),
+                    label = "tabOffset"
+                )
+                val animatedWidth by animateDpAsState(
+                    targetValue = if (selectedTab < tabPositions.size) tabPositions[selectedTab].width else 0.dp,
+                    animationSpec = tween(durationMillis = 120),
+                    label = "tabWidth"
+                )
+
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
                     contentColor = Color.White,
-                    indicator = { tabPositions ->
-                        if (selectedTab < tabPositions.size) {
+                    divider = {},
+                    indicator = { positions ->
+                        tabPositions.clear()
+                        tabPositions.addAll(positions)
+                        if (selectedTab < positions.size) {
                             Box(
                                 Modifier
-                                    .tabIndicatorOffset(tabPositions[selectedTab])
-                                    .height(3.dp)
                                     .fillMaxWidth()
+                                    .wrapContentSize(Alignment.BottomStart)
+                                    .offset(x = animatedOffset)
+                                    .width(animatedWidth)
+                                    .height(3.dp)
                                     .background(
                                         MaterialTheme.colorScheme.primary,
                                         RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)
@@ -158,35 +207,100 @@ fun UserProfileDialog(
                     }
                 }
 
-                // Content
-                Box(
+                // Content with swipe gesture and smooth animation
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    when (selectedTab) {
-                        0 -> FavoritesTab(
-                            viewModel = viewModel,
-                            localFavorites = localFavorites,
-                            isOled = isOled,
-                            currentlyWatching = currentlyWatching,
-                            completed = completed,
-                            planningToWatch = planningToWatch,
-                            onHold = onHold,
-                            dropped = dropped,
-                            onAnimeClick = { anime ->
-                                onShowAnimeDialog(anime, null)
+                    val maxWidth = constraints.maxWidth.toFloat()
+                    val progress = (dragOffset / maxWidth).coerceIn(-1f, 1f)
+                    
+                    // Animated content for smooth tab transitions
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            val direction = if (targetState > initialState) 1 else -1
+                            val targetOffset = if (targetState > initialState) maxWidth.toInt() else -maxWidth.toInt()
+                            
+                            // Fade + slide animation
+                            (slideInHorizontally(
+                                animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                initialOffsetX = { targetOffset }
+                            ) + fadeIn(animationSpec = tween(300))) togetherWith
+                            (slideOutHorizontally(
+                                animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                targetOffsetX = { -direction * targetOffset }
+                            ) + fadeOut(animationSpec = tween(300)))
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        label = "tabAnimation"
+                    ) { tab ->
+                        // Interactive drag layer on top
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(tab) {
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { dragOffset = 0f },
+                                        onDragEnd = {
+                                            val currentProgress = dragOffset / maxWidth
+                                            val threshold = 0.2f
+                                            
+                                            if (currentProgress < -threshold && tab == 0) {
+                                                selectedTab = 1
+                                            } else if (currentProgress > threshold && tab == 1) {
+                                                selectedTab = 0
+                                            }
+                                            scope.launch {
+                                                kotlinx.coroutines.delay(50)
+                                                dragOffset = 0f
+                                            }
+                                        },
+                                        onHorizontalDrag = { _, dragAmount ->
+                                            val newOffset = dragOffset + dragAmount
+                                            dragOffset = when {
+                                                tab == 1 && newOffset < 0 -> newOffset * 0.1f
+                                                tab == 0 && newOffset > 0 -> newOffset * 0.1f
+                                                else -> newOffset.coerceIn(-maxWidth, maxWidth)
+                                            }
+                                        }
+                                    )
+                                }
+                        ) {
+                            // Swipe preview effect
+                            if (kotlin.math.abs(progress) > 0.05f) {
+                                val previewAlpha = kotlin.math.abs(progress) * 0.3f
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            val direction = if (progress < 0) 1f else -1f
+                                            translationX = direction * maxWidth * (1f - kotlin.math.abs(progress)) * 0.5f
+                                            alpha = previewAlpha
+                                        }
+                                        .background(Color.Black)
+                                )
                             }
-                        )
-                        1 -> HistoryTab(
-                            activities = userActivity,
-                            isOled = isOled
-                        )
-                        2 -> RateTab(
-                            viewModel = viewModel,
-                            isOled = isOled,
-                            completedOnly = completed
-                        )
+                            
+                            // Tab content
+                            if (tab == 0) {
+                                FavoritesTab(
+                                    viewModel = viewModel,
+                                    favorites = aniListFavorites,
+                                    isOled = isOled,
+                                    currentlyWatching = currentlyWatching,
+                                    onAnimeClick = { anime ->
+                                        onShowAnimeDialog(anime, null)
+                                    }
+                                )
+                            } else {
+                                HistoryTab(
+                                    activities = userActivity,
+                                    isOled = isOled
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -197,55 +311,40 @@ fun UserProfileDialog(
 @Composable
 private fun FavoritesTab(
     viewModel: MainViewModel,
-    localFavorites: Map<Int, StoredFavorite>,
+    favorites: List<UserFavoriteAnime>,
     isOled: Boolean,
     currentlyWatching: List<AnimeMedia>,
-    completed: List<AnimeMedia>,
-    planningToWatch: List<AnimeMedia>,
-    onHold: List<AnimeMedia>,
-    dropped: List<AnimeMedia>,
     onAnimeClick: (ExploreAnime) -> Unit
 ) {
     val context = LocalContext.current
-    var showSearchDialog by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
 
-    // ALL anime from user's lists (for looking up missing data and for search)
-    val allListAnime = remember(currentlyWatching, completed, planningToWatch, onHold, dropped) {
-        currentlyWatching + completed + planningToWatch + onHold + dropped
-    }
-
-    // Create a map for quick lookup
-    val animeMap = remember(allListAnime) {
-        allListAnime.associateBy { it.id }
-    }
-
-    val filteredListAnime = remember(searchQuery, allListAnime) {
-        if (searchQuery.isEmpty()) allListAnime
-        else allListAnime.filter { it.title.contains(searchQuery, ignoreCase = true) }
+    val animeMap = remember(currentlyWatching) {
+        currentlyWatching.associateBy { it.id }
     }
 
     Column {
-        // Header with search button
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "My Favorites (${localFavorites.size}/10)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { showSearchDialog = true }) {
-                Icon(Icons.Default.Search, "Add favorites", tint = MaterialTheme.colorScheme.primary)
+            Column {
+                Text(
+                    "My Favorites",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    "${favorites.size} anime",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
-        if (localFavorites.isEmpty()) {
+        if (favorites.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
@@ -256,42 +355,33 @@ private fun FavoritesTab(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text("No favorites yet", color = Color.White.copy(alpha = 0.7f))
-                    Text("Tap the search icon to add", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                    Text("Add favorites on AniList", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         } else {
-            // Display favorites - use stored data or look up from lists
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(localFavorites.values.toList()) { fav ->
-                    // If stored data is incomplete, try to find it from user's lists
-                    val animeFromList = if (fav.title.isEmpty()) animeMap[fav.id] else null
-
-                    FavoriteItemWithFallback(
+                items(favorites) { fav ->
+                    val animeFromList = animeMap[fav.id]
+                    AniListFavoriteItem(
                         favorite = fav,
-                        animeFromList = animeFromList,
                         isOled = isOled,
                         onClick = {
-                            // Use data from list if available, otherwise use stored data
                             val exploreAnime = ExploreAnime(
                                 id = fav.id,
-                                title = when {
-                                    animeFromList != null -> animeFromList.title
-                                    fav.title.isNotEmpty() -> fav.title
-                                    else -> "Anime #${fav.id}"
-                                },
-                                cover = animeFromList?.cover ?: fav.cover,
-                                banner = animeFromList?.banner ?: fav.banner,
-                                episodes = animeFromList?.totalEpisodes ?: 0,
+                                title = fav.title.romaji ?: fav.title.english ?: "Anime",
+                                cover = fav.coverImage?.large ?: "",
+                                banner = animeFromList?.banner,
+                                episodes = animeFromList?.totalEpisodes ?: fav.episodes ?: 0,
                                 latestEpisode = animeFromList?.latestEpisode,
                                 averageScore = animeFromList?.averageScore ?: fav.averageScore,
-                                genres = animeFromList?.genres ?: emptyList(),
-                                year = animeFromList?.year ?: fav.year,
+                                genres = animeFromList?.genres ?: fav.genres ?: emptyList(),
+                                year = animeFromList?.year ?: fav.seasonYear,
                                 format = animeFromList?.format
                             )
                             onAnimeClick(exploreAnime)
                         },
-                        onToggleFavorite = {
-                            viewModel.toggleLocalFavorite(fav.id, fav.title, fav.cover, fav.banner, fav.year, fav.averageScore)
+                        onRemove = {
+                            viewModel.toggleAniListFavorite(fav.id)
                             Toast.makeText(context, "Removed from favorites", Toast.LENGTH_SHORT).show()
                         }
                     )
@@ -299,133 +389,21 @@ private fun FavoritesTab(
             }
         }
     }
-
-    // Search Dialog for adding favorites from user's lists
-    if (showSearchDialog) {
-        Dialog(onDismissRequest = { showSearchDialog = false }) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.8f),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isOled) Color.Black else Color(0xFF1A1A1A)
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Add Favorite (${localFavorites.size}/10)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { showSearchDialog = false }) {
-                            Icon(Icons.Default.Close, "Close", tint = Color.White)
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // Search field
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search your anime...", color = Color.White.copy(alpha = 0.5f)) },
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(alpha = 0.5f)) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.3f)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Text(
-                        "${filteredListAnime.size} anime in your list",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(filteredListAnime) { anime ->
-                            val isFavorite = localFavorites.containsKey(anime.id)
-                            FavoriteAnimeItem(
-                                anime = anime,
-                                isOled = isOled,
-                                isFavorite = isFavorite,
-                                onClick = {
-                                    val exploreAnime = ExploreAnime(
-                                        id = anime.id,
-                                        title = anime.title,
-                                        cover = anime.cover,
-                                        banner = anime.banner,
-                                        episodes = anime.totalEpisodes,
-                                        latestEpisode = anime.latestEpisode,
-                                        averageScore = anime.averageScore,
-                                        genres = anime.genres,
-                                        year = anime.year,
-                                        format = anime.format
-                                    )
-                                    onAnimeClick(exploreAnime)
-                                },
-                                onToggleFavorite = {
-                                    if (!isFavorite && localFavorites.size >= 10) {
-                                        Toast.makeText(context, "Maximum 10 favorites! Remove one first.", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        viewModel.toggleLocalFavorite(anime)
-                                        Toast.makeText(
-                                            context,
-                                            if (isFavorite) "Removed from favorites" else "Added to favorites",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
-private fun FavoriteItemWithFallback(
-    favorite: StoredFavorite,
-    animeFromList: AnimeMedia?,
+private fun AniListFavoriteItem(
+    favorite: UserFavoriteAnime,
     isOled: Boolean,
     onClick: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onRemove: () -> Unit
 ) {
-    // Use data from list if available, otherwise use stored data
-    val displayTitle = when {
-        animeFromList != null -> animeFromList.title
-        favorite.title.isNotEmpty() -> favorite.title
-        else -> "Anime #${favorite.id}"
-    }
-
-    val displayCover = when {
-        animeFromList != null -> animeFromList.cover
-        favorite.cover.isNotEmpty() -> favorite.cover
-        else -> null
-    }
-
-    val displayYear = animeFromList?.year ?: favorite.year
-    val displayScore = animeFromList?.averageScore ?: favorite.averageScore
-    val hasMissingData = displayTitle == "Anime #${favorite.id}" || displayCover.isNullOrEmpty()
+    val displayTitle = favorite.title.romaji ?: favorite.title.english ?: "Anime"
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -436,46 +414,20 @@ private fun FavoriteItemWithFallback(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Cover image with placeholder
             Box(
                 modifier = Modifier
                     .width(50.dp)
                     .height(70.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (hasMissingData) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                        else Color.Gray.copy(alpha = 0.3f)
-                    ),
-                contentAlignment = Alignment.Center
+                    .background(Color.Gray.copy(alpha = 0.3f))
             ) {
-                if (!displayCover.isNullOrEmpty()) {
+                if (!favorite.coverImage?.large.isNullOrEmpty()) {
                     AsyncImage(
-                        model = displayCover,
+                        model = favorite.coverImage?.large,
                         contentDescription = displayTitle,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                } else {
-                    // Placeholder icon when no cover
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            if (hasMissingData) Icons.Default.Refresh else Icons.Default.Image,
-                            contentDescription = null,
-                            tint = if (hasMissingData) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.3f),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        if (hasMissingData) {
-                            Text(
-                                "Tap to\nrefresh",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                textAlign = TextAlign.Center,
-                                fontSize = 8.sp
-                            )
-                        }
-                    }
                 }
             }
             Spacer(Modifier.width(12.dp))
@@ -484,103 +436,23 @@ private fun FavoriteItemWithFallback(
                     displayTitle,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (hasMissingData) MaterialTheme.colorScheme.primary else Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (displayYear != null) {
-                    Text(
-                        "$displayYear",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                } else if (hasMissingData) {
-                    Text(
-                        "Data needs refresh",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.5f)
-                    )
-                }
-                displayScore?.let { score ->
-                    Text(
-                        "★ ${score / 10.0}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFFFD700)
-                    )
-                }
-            }
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = "Remove from favorites",
-                    tint = Color(0xFFFFD700),
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FavoriteAnimeItem(
-    anime: AnimeMedia,
-    isOled: Boolean,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onToggleFavorite: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = anime.cover,
-                contentDescription = anime.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(50.dp)
-                    .height(70.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    anime.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
                     color = Color.White,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                anime.year?.let { year ->
+                favorite.seasonYear?.let { year ->
                     Text(
-                        "$year - ${anime.totalEpisodes} ${if (anime.totalEpisodes == 1) "ep" else "eps"}",
+                        "$year",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )
                 }
-                anime.averageScore?.let { score ->
-                    Text(
-                        "★ ${score / 10.0}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFFFD700)
-                    )
-                }
             }
-            IconButton(onClick = onToggleFavorite) {
+            IconButton(onClick = onRemove) {
                 Icon(
-                    if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
-                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                    tint = if (isFavorite) Color(0xFFFFD700) else Color.White.copy(alpha = 0.5f),
+                    Icons.Filled.Favorite,
+                    contentDescription = "Remove from favorites",
+                    tint = Color(0xFFFF1744),
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -743,237 +615,6 @@ private fun ActivityItem(
                     color = Color.White.copy(alpha = 0.5f)
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun RateTab(
-    viewModel: MainViewModel,
-    isOled: Boolean,
-    completedOnly: List<AnimeMedia>
-) {
-    val context = LocalContext.current
-    val localFavorites by viewModel.localFavorites.collectAsState()
-    var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
-    var selectedRating by remember { mutableIntStateOf(0) }
-
-    Column {
-        Text(
-            "Rate your anime (1-100)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Rate completed anime.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f)
-        )
-        Spacer(Modifier.height(16.dp))
-
-        if (selectedAnime != null) {
-            // Rating UI
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        selectedAnime!!.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(Modifier.height(16.dp))
-
-                    // Rating slider (1-100)
-                    Text(
-                        if (selectedRating > 0) "$selectedRating / 100" else "Slide to rate",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (selectedRating > 0) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f)
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Slider(
-                        value = selectedRating.toFloat(),
-                        onValueChange = { selectedRating = it.toInt() },
-                        valueRange = 0f..100f,
-                        steps = 100,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.2f)
-                        )
-                    )
-
-                    // Quick rating buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(25, 50, 75, 100).forEach { rating ->
-                            OutlinedButton(
-                                onClick = { selectedRating = rating },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = if (selectedRating == rating) MaterialTheme.colorScheme.primary else Color.White
-                                )
-                            ) {
-                                Text("$rating")
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { selectedAnime = null },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                if (selectedRating > 0) {
-                                    viewModel.updateAnimeRating(selectedAnime!!.id, selectedRating)
-                                    Toast.makeText(context, "Rating saved: $selectedRating/100", Toast.LENGTH_SHORT).show()
-                                    selectedAnime = null
-                                    selectedRating = 0
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = selectedRating > 0
-                        ) {
-                            Text("Save Rating")
-                        }
-                    }
-                }
-            }
-        } else {
-            // Anime selection list - ONLY COMPLETED
-            if (completedOnly.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text("No completed anime", color = Color.White.copy(alpha = 0.7f))
-                        Text("Complete some anime to rate them", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(completedOnly) { anime ->
-                        RateAnimeItem(
-                            anime = anime,
-                            isOled = isOled,
-                            isFavorite = localFavorites.containsKey(anime.id),
-                            onRateClick = {
-                                selectedAnime = anime
-                                selectedRating = 0
-                            },
-                            onFavoriteClick = {
-                                if (!localFavorites.containsKey(anime.id) && localFavorites.size >= 10) {
-                                    Toast.makeText(context, "Maximum 10 favorites! Remove one first.", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    viewModel.toggleLocalFavorite(anime)
-                                    Toast.makeText(
-                                        context,
-                                        if (localFavorites.containsKey(anime.id)) "Removed from favorites" else "Added to favorites",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RateAnimeItem(
-    anime: AnimeMedia,
-    isOled: Boolean,
-    isFavorite: Boolean,
-    onRateClick: () -> Unit,
-    onFavoriteClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onRateClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = anime.cover,
-                contentDescription = anime.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(50.dp)
-                    .height(70.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    anime.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                anime.year?.let { year ->
-                    Text(
-                        "$year - ${anime.totalEpisodes} ${if (anime.totalEpisodes == 1) "ep" else "eps"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                }
-            }
-            // Favorite button (star) - YELLOW when favorite
-            IconButton(onClick = onFavoriteClick) {
-                Icon(
-                    if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
-                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                    tint = if (isFavorite) Color(0xFFFFD700) else Color.White.copy(alpha = 0.5f)
-                )
-            }
-            // Chevron arrow
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Rate",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
         }
     }
 }

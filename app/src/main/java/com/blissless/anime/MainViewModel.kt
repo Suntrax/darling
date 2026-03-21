@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 
@@ -117,6 +118,15 @@ class MainViewModel : ViewModel() {
     private val _userActivity = MutableStateFlow<List<UserActivity>>(emptyList())
     val userActivity: StateFlow<List<UserActivity>> = _userActivity.asStateFlow()
 
+    // AniList Favorites
+    private val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
+    val aniListFavorites: StateFlow<List<UserFavoriteAnime>> = _aniListFavorites.asStateFlow()
+    
+    private var lastFavoriteToggleTime = 0L
+    private val favoriteToggleCooldownMs = 3000L // 3 second cooldown
+    private val _isFavoriteRateLimited = MutableStateFlow(false)
+    val isFavoriteRateLimited: StateFlow<Boolean> = _isFavoriteRateLimited.asStateFlow()
+
     private val _completedSearchResults = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val completedSearchResults: StateFlow<List<AnimeMedia>> = _completedSearchResults.asStateFlow()
 
@@ -129,7 +139,6 @@ class MainViewModel : ViewModel() {
     val trackingPercentage: StateFlow<Int> get() = userPreferences.trackingPercentage
     val forwardSkipSeconds: StateFlow<Int> get() = userPreferences.forwardSkipSeconds
     val backwardSkipSeconds: StateFlow<Int> get() = userPreferences.backwardSkipSeconds
-    val forceHighRefreshRate: StateFlow<Boolean> get() = userPreferences.forceHighRefreshRate
     val hideNavbarText: StateFlow<Boolean> get() = userPreferences.hideNavbarText
     val simplifyEpisodeMenu: StateFlow<Boolean> get() = userPreferences.simplifyEpisodeMenu
     val simplifyAnimeDetails: StateFlow<Boolean> get() = userPreferences.simplifyAnimeDetails
@@ -378,7 +387,6 @@ class MainViewModel : ViewModel() {
     fun setTrackingPercentage(percentage: Int) = userPreferences.setTrackingPercentage(percentage)
     fun setForwardSkipSeconds(seconds: Int) = userPreferences.setForwardSkipSeconds(seconds)
     fun setBackwardSkipSeconds(seconds: Int) = userPreferences.setBackwardSkipSeconds(seconds)
-    fun setForceHighRefreshRate(enabled: Boolean) = userPreferences.setForceHighRefreshRate(enabled)
     fun setHideNavbarText(enabled: Boolean) = userPreferences.setHideNavbarText(enabled)
     fun setSimplifyEpisodeMenu(enabled: Boolean) = userPreferences.setSimplifyEpisodeMenu(enabled)
     fun setSimplifyAnimeDetails(enabled: Boolean) = userPreferences.setSimplifyAnimeDetails(enabled)
@@ -496,7 +504,6 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * Main stream fetching function with fallback.
      * Animekai only - Animepahe is disabled. Hianime only as last resort fallback.
      * Returns null if episode is not yet released.
      */
@@ -549,6 +556,7 @@ class MainViewModel : ViewModel() {
                     title = node.title?.english ?: node.title?.romaji ?: "Unknown",
                     cover = node.coverImage?.large ?: "",
                     episodes = node.episodes,
+                    latestEpisode = node.nextAiringEpisode?.episode?.let { it - 1 },
                     averageScore = node.averageScore,
                     format = node.format,
                     relationType = edge.relationType ?: "UNKNOWN"
@@ -562,11 +570,12 @@ class MainViewModel : ViewModel() {
             cover = media.coverImage?.large ?: "", banner = media.bannerImage, description = media.description,
             episodes = media.episodes ?: 0, duration = media.duration, status = media.status,
             averageScore = media.averageScore, popularity = media.popularity, favourites = media.favourites,
-            genres = media.genres ?: emptyList(), season = media.season, year = media.seasonYear ?: media.startDate?.year,
+            genres = media.genres ?: emptyList(), tags = media.tags ?: emptyList(), season = media.season, year = media.seasonYear ?: media.startDate?.year,
             format = media.format, source = media.source,
             studios = media.studios?.nodes?.map { StudioData(it.id ?: 0, it.name ?: "") } ?: emptyList(),
             startDate = media.startDate?.let { "${it.year}-${it.month}-${it.day}" },
             endDate = media.endDate?.let { "${it.year}-${it.month}-${it.day}" },
+            latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
             nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt,
             relations = relationsList
         )
@@ -587,6 +596,35 @@ class MainViewModel : ViewModel() {
     fun fetchUserActivity() {
         val userId = _userId.value ?: return
         viewModelScope.launch { repository.fetchUserActivity(userId)?.let { _userActivity.value = it } }
+    }
+    fun fetchAniListFavorites() {
+        val userId = _userId.value ?: return
+        viewModelScope.launch {
+            repository.fetchUserFavorites(userId)?.let { response ->
+                _aniListFavorites.value = response.data.User.favourites.anime.nodes
+            }
+        }
+    }
+    fun toggleAniListFavorite(mediaId: Int): Boolean {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastFavoriteToggleTime < favoriteToggleCooldownMs) {
+            _isFavoriteRateLimited.value = true
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(favoriteToggleCooldownMs)
+                _isFavoriteRateLimited.value = false
+            }
+            return false // Rate limited
+        }
+        lastFavoriteToggleTime = currentTime
+        _isFavoriteRateLimited.value = false
+        
+        viewModelScope.launch {
+            val success = repository.toggleAniListFavorite(mediaId)
+            if (success) {
+                fetchAniListFavorites()
+            }
+        }
+        return true
     }
     fun updateAnimeRating(mediaId: Int, score: Int) {
         viewModelScope.launch { if (repository.updateScore(mediaId, score)) fetchLists() }

@@ -130,7 +130,7 @@ fun ScheduleScreen(
     val context = LocalContext.current
 
     // Get anime status and favorites from viewModel
-    val localFavorites by viewModel.localFavorites.collectAsState()
+    val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
     val completed by viewModel.completed.collectAsState()
@@ -147,7 +147,14 @@ fun ScheduleScreen(
         map
     }
     
-    val canAddFavorite = remember(localFavorites) { viewModel.canAddFavorite() }
+    val favoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
+    val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
+    
+    LaunchedEffect(isFavoriteRateLimited) {
+        if (isFavoriteRateLimited) {
+            Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     // Callback to clear anime stack (back navigation)
     val onClearAnimeStackHandler: () -> Unit = {
@@ -747,18 +754,13 @@ fun ScheduleScreen(
                         isOled = isOled,
                         listState = currentListState,
                         onAnimeClick = { anime ->
-                            val latestAiredEpisode = if (anime.airingEpisode > 1) {
-                                minOf(anime.airingEpisode - 1, anime.episodes.coerceAtLeast(1))
-                            } else {
-                                anime.airingEpisode
-                            }
                             val exploreAnime = ExploreAnime(
                                 id = anime.id,
                                 title = anime.title,
                                 cover = anime.cover,
                                 banner = null,
                                 episodes = anime.episodes,
-                                latestEpisode = latestAiredEpisode,
+                                latestEpisode = anime.airingEpisode,
                                 averageScore = anime.averageScore,
                                 genres = anime.genres,
                                 year = anime.year,
@@ -778,17 +780,16 @@ fun ScheduleScreen(
     // Inline anime dialog (like ExploreScreen)
     if (showAnimeDialog && selectedAnime != null) {
         if (simplifyAnimeDetails) {
-            val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
+            val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
             ExploreAnimeDialog(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
                 isOled = isOled,
                 currentStatus = animeStatusMap[selectedAnime!!.id],
                 isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavorite || isAnimeFavorite,
                 isLoggedIn = isLoggedIn,
                 onToggleFavorite = {
-                    viewModel.toggleLocalFavorite(selectedAnime!!)
+                    viewModel.toggleAniListFavorite(selectedAnime!!.id)
                 },
                 onDismiss = {
                     showAnimeDialog = false
@@ -872,10 +873,9 @@ fun ScheduleScreen(
                 viewModel = viewModel,
                 isOled = isOled,
                 currentStatus = animeStatusMap[selectedAnime!!.id],
-                isFavorite = localFavorites.containsKey(selectedAnime!!.id),
-                canAddFavorite = canAddFavorite || localFavorites.containsKey(selectedAnime!!.id),
+                isFavorite = favoriteIds.contains(selectedAnime!!.id),
                 isLoggedIn = isLoggedIn,
-                onToggleFavorite = { _ -> viewModel.toggleLocalFavorite(selectedAnime!!) },
+                onToggleFavorite = { _ -> viewModel.toggleAniListFavorite(selectedAnime!!.id) },
                 onDismiss = {
                     if (firstOpenedAnime != null && selectedAnime!!.id != firstOpenedAnime!!.id) {
                         selectedAnime = firstOpenedAnime

@@ -72,6 +72,22 @@ class AnimeRepository(
         return result.data
     }
 
+    suspend fun graphqlMutation(query: String, variables: Map<String, Any?>): String? {
+        val token = userPreferences.authToken.value ?: return null
+
+        val result = graphQLClient.execute(
+            query = query,
+            variables = variables,
+            requiresAuth = true,
+            authToken = token,
+            clientIds = CLIENT_IDS,
+            useCache = false, // Mutations should never be cached
+            parser = { it }
+        )
+
+        return result.data
+    }
+
     suspend fun publicGraphqlRequest(query: String, variables: Map<String, Any?>): String? {
         val result = graphQLClient.execute(
             query = query,
@@ -439,6 +455,12 @@ class AnimeRepository(
                     popularity
                     favourites
                     genres
+                    tags {
+                        name
+                        rank
+                        isMediaSpoiler
+                        description
+                    }
                     season
                     seasonYear
                     format
@@ -457,6 +479,7 @@ class AnimeRepository(
                                 episodes
                                 averageScore
                                 format
+                                nextAiringEpisode { episode }
                             }
                         }
                     }
@@ -487,6 +510,7 @@ class AnimeRepository(
                             title = node.title?.english ?: node.title?.romaji ?: "Unknown",
                             cover = node.coverImage?.large ?: "",
                             episodes = node.episodes,
+                            latestEpisode = node.nextAiringEpisode?.episode?.let { it - 1 },
                             averageScore = node.averageScore,
                             format = node.format,
                             relationType = edge.relationType ?: "UNKNOWN"
@@ -507,6 +531,7 @@ class AnimeRepository(
                     title { romaji english }
                     episodes
                     format
+                    nextAiringEpisode { episode }
                     relations {
                         edges {
                             relationType
@@ -516,6 +541,7 @@ class AnimeRepository(
                                 episodes
                                 type
                                 format
+                                nextAiringEpisode { episode }
                             }
                         }
                     }
@@ -1251,5 +1277,50 @@ class AnimeRepository(
                 }
             } catch (e: Exception) { null }
         }
+    }
+
+    suspend fun fetchUserFavorites(userId: Int): UserFavoritesResponse? {
+        val query = """
+            query (${'$'}userId: Int) {
+                User(id: ${'$'}userId) {
+                    favourites {
+                        anime(page: 1, perPage: 30) {
+                            nodes {
+                                id
+                                title { romaji english }
+                                coverImage { large }
+                                episodes
+                                averageScore
+                                genres
+                                seasonYear
+                            }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return graphqlRequest(query, mapOf("userId" to userId))?.let {
+            try {
+                json.decodeFromString<UserFavoritesResponse>(it)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    suspend fun toggleAniListFavorite(mediaId: Int): Boolean {
+        graphQLClient.clearCache() // Clear cache to ensure fresh data
+        
+        val mutation = """
+            mutation (${'$'}mediaId: Int) {
+                ToggleFavourite(animeId: ${'$'}mediaId) {
+                    anime { nodes { id } }
+                }
+            }
+        """.trimIndent()
+
+        val response = graphqlMutation(mutation, mapOf("mediaId" to mediaId))
+        return response != null && response.isNotEmpty()
     }
 }

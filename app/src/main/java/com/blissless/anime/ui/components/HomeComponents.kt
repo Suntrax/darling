@@ -1,6 +1,7 @@
 package com.blissless.anime.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -96,6 +98,7 @@ fun HomeAnimeHorizontalList(
     showStatusColors: Boolean = false,
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
+    disableMaterialColors: Boolean = false,
     onAnimeClick: (AnimeMedia) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
     onStatusClick: (AnimeMedia) -> Unit,
@@ -110,6 +113,7 @@ fun HomeAnimeHorizontalList(
                 showStatusColors = showStatusColors,
                 isLoggedIn = isLoggedIn,
                 playbackPositions = playbackPositions,
+                disableMaterialColors = disableMaterialColors,
                 onClick = { onAnimeClick(anime) },
                 onPlayClick = { onPlayClick(anime) },
                 onStatusClick = { onStatusClick(anime) },
@@ -127,6 +131,7 @@ fun HomeAnimeCard(
     showStatusColors: Boolean = false,
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
+    disableMaterialColors: Boolean = false,
     onClick: () -> Unit,
     onPlayClick: () -> Unit,
     onStatusClick: () -> Unit,
@@ -134,6 +139,9 @@ fun HomeAnimeCard(
 ) {
     val context = LocalContext.current
     val statusColor = HomeStatusColors.getColor(listType)
+    
+    // Progress bar color: bright white for monochrome, bright user-defined primary for material colors
+    val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
 
     val total = anime.totalEpisodes
     val released = anime.latestEpisode?.let { it - 1 } ?: total
@@ -174,7 +182,7 @@ fun HomeAnimeCard(
     }
 
     Column(modifier = Modifier.width(130.dp)) {
-        Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.height(185.dp), onClick = onClick) {
+        Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.height(185.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(model = imageRequest, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
 
@@ -195,16 +203,18 @@ fun HomeAnimeCard(
                             .fillMaxWidth()
                             .height(4.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(progressPercent)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
+                        // Background
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(Color.Black.copy(alpha = 0.3f))
+                        )
+                        // Progress on top
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progressPercent)
+                                .background(progressColor)
                         )
                     }
                 }

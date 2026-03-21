@@ -1,7 +1,10 @@
 package com.blissless.anime
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.Surface
+import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -35,14 +38,14 @@ import com.blissless.anime.ui.screens.ScheduleScreen
 import com.blissless.anime.ui.screens.SettingsScreen
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.theme.AppTheme
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import android.widget.Toast
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.OverlayState
+import android.widget.Toast
 
 class MainActivity : ComponentActivity() {
 
@@ -62,7 +65,6 @@ class MainActivity : ComponentActivity() {
         val hasToken = prefs.getString(TOKEN_KEY, null) != null
         val savedToken = prefs.getString(TOKEN_KEY, null)
 
-
         mainViewModel.init(applicationContext, hasToken)
 
         handleAuthCallback(intent)
@@ -71,7 +73,6 @@ class MainActivity : ComponentActivity() {
             val isOled by mainViewModel.isOled.collectAsState()
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
-            val forceHighRefreshRate by mainViewModel.forceHighRefreshRate.collectAsState()
 
             var isLoggedIn by remember { mutableStateOf(savedToken != null) }
             val token by mainViewModel.authToken.collectAsState()
@@ -79,30 +80,9 @@ class MainActivity : ComponentActivity() {
                 isLoggedIn = token != null
             }
 
-            LaunchedEffect(forceHighRefreshRate) {
-                if (forceHighRefreshRate) {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                        val display = display
-                        display?.let {
-                            val modes = it.supportedModes
-                            var highestRefreshRateMode: android.view.Display.Mode? = null
-                            var highestRefreshRate = 60f
-
-                            modes?.forEach { mode ->
-                                if (mode.refreshRate > highestRefreshRate) {
-                                    highestRefreshRate = mode.refreshRate
-                                    highestRefreshRateMode = mode
-                                }
-                            }
-
-                            highestRefreshRateMode?.let { mode ->
-                                val params = window.attributes
-                                params.preferredDisplayModeId = mode.modeId
-                                window.attributes = params
-                            }
-                        }
-                    }
-                }
+            // Always enable high refresh rate on supported devices
+            LaunchedEffect(Unit) {
+                enableHighRefreshRate()
             }
 
             AppTheme(useOled = isOled, useMonochrome = disableMaterialColors) {
@@ -110,10 +90,82 @@ class MainActivity : ComponentActivity() {
                     viewModel = mainViewModel,
                     isOled = isOled,
                     showStatusColors = showStatusColors,
-                    forceHighRefreshRate = forceHighRefreshRate,
                     isLoggedIn = isLoggedIn
                 )
             }
+        }
+    }
+
+    /**
+     * Enable the highest supported refresh rate and request high frame rate for animations.
+     */
+    private fun enableHighRefreshRate() {
+        try {
+            // Step 1: Set the preferred display mode to the highest refresh rate available
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display?.let { disp ->
+                    val modes = disp.supportedModes
+                    var bestMode: android.view.Display.Mode? = null
+                    var highestRefreshRate = 60f
+
+                    modes?.forEach { mode ->
+                        if (mode.refreshRate > highestRefreshRate) {
+                            highestRefreshRate = mode.refreshRate
+                            bestMode = mode
+                        }
+                    }
+
+                    bestMode?.let { mode ->
+                        val params = window.attributes
+                        params.preferredDisplayModeId = mode.modeId
+                        window.attributes = params
+                    }
+                }
+            }
+
+            // Step 2: Request high frame rate for the window
+            // This tells the system we want animations to run at the display's native refresh rate
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.attributes = window.attributes.apply {
+                    // Request the surface to render at high frame rate
+                    preferredRefreshRate = 120f // Request up to 120Hz
+                }
+                
+                // Try to set frame rate directly on the decor view's surface (API 30+)
+                try {
+                    val decorView = window.decorView
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        decorView.viewTreeObserver.addOnPreDrawListener {
+                            // Keep requesting high frame rate
+                            decorView.postInvalidateOnAnimation()
+                            true
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore - this is optional enhancement
+                }
+            }
+
+        } catch (e: Exception) {
+            // Gracefully handle any errors - fallback to system default
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Reset to default refresh rate behavior.
+     */
+    private fun disableHighRefreshRate() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Reset to default display mode (0)
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = 0
+                    preferredRefreshRate = 0f // Let system decide
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -138,7 +190,6 @@ fun MainScreen(
     viewModel: MainViewModel,
     isOled: Boolean,
     showStatusColors: Boolean,
-    forceHighRefreshRate: Boolean,
     isLoggedIn: Boolean
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -163,9 +214,16 @@ fun MainScreen(
     val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
     val simplifyAnimeDetails by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
 
-    val localFavorites by viewModel.localFavorites.collectAsState()
-    val canAddFavorite = remember(localFavorites) { viewModel.canAddFavorite() }
+    val aniListFavorites by viewModel.aniListFavorites.collectAsState()
+    val aniListFavoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
+    val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     val playbackPositions by viewModel.playbackPositions.collectAsState()
+
+    LaunchedEffect(isFavoriteRateLimited) {
+        if (isFavoriteRateLimited) {
+            Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val autoSkipOpening by viewModel.autoSkipOpening.collectAsState(initial = false)
     val autoSkipEnding by viewModel.autoSkipEnding.collectAsState(initial = false)
@@ -741,16 +799,15 @@ fun MainScreen(
     val exploreDialog = overlayState as? OverlayState.ExploreAnimeDialog
     if (exploreDialog != null) {
         if (simplifyAnimeDetails) {
-            val isAnimeFavorite = localFavorites.containsKey(exploreDialog.anime.id)
+            val isAnimeFavorite = aniListFavoriteIds.contains(exploreDialog.anime.id)
             ExploreAnimeDialog(
                 anime = exploreDialog.anime,
                 viewModel = viewModel,
                 isOled = isOled,
                 currentStatus = animeStatusMap[exploreDialog.anime.id],
                 isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavorite || isAnimeFavorite,
                 onToggleFavorite = {
-                    viewModel.toggleLocalFavorite(exploreDialog.anime)
+                    viewModel.toggleAniListFavorite(exploreDialog.anime.id)
                 },
                 onDismiss = {
                     overlayState = OverlayState.None
@@ -826,16 +883,25 @@ fun MainScreen(
                 }
             )
         } else {
-            val isAnimeFavorite = localFavorites.containsKey(exploreDialog.anime.id)
+            val isAnimeFavorite = aniListFavoriteIds.contains(exploreDialog.anime.id)
             DetailedAnimeScreen(
                 anime = exploreDialog.anime.toDetailedAnimeData(),
                 viewModel = viewModel,
                 isOled = isOled,
                 currentStatus = animeStatusMap[exploreDialog.anime.id],
                 isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavorite || isAnimeFavorite,
                 onDismiss = {
-                    overlayState = OverlayState.None
+                    // Go back to first anime if we've navigated, otherwise close
+                    val firstAnime = exploreDialog.firstAnime
+                    if (firstAnime != null && exploreDialog.anime.id != firstAnime.id) {
+                        overlayState = OverlayState.ExploreAnimeDialog(
+                            anime = firstAnime,
+                            firstAnime = firstAnime,
+                            isFirstOpen = false
+                        )
+                    } else {
+                        overlayState = OverlayState.None
+                    }
                 },
                 onSwipeToClose = { overlayState = OverlayState.None },
                 onPlayEpisode = { episode ->
@@ -869,7 +935,7 @@ fun MainScreen(
                     viewModel.removeAnimeFromList(exploreDialog.anime.id)
                 },
                 onToggleFavorite = { _ ->
-                    viewModel.toggleLocalFavorite(exploreDialog.anime)
+                    viewModel.toggleAniListFavorite(exploreDialog.anime.id)
                 },
                 isLoggedIn = isLoggedIn,
                 onLoginClick = { viewModel.loginWithAniList() },
@@ -893,8 +959,13 @@ fun MainScreen(
                                         year = detailedData.year,
                                         format = detailedData.format
                                     )
+                                    // Keep firstAnime unchanged, update current anime
                                     val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
-                                    overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = firstAnime, isFirstOpen = false)
+                                    overlayState = OverlayState.ExploreAnimeDialog(
+                                        anime = newAnime,
+                                        firstAnime = firstAnime,
+                                        isFirstOpen = false
+                                    )
                                 } else {
                                     Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
                                 }
@@ -966,7 +1037,8 @@ fun MainScreen(
                 onPrefetchAdjacent = {
                     val latestAired = anime.latestEpisode ?: anime.totalEpisodes
                     viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, latestAired)
-                }
+                },
+                disableMaterialColors = disableMaterialColors
             )
         }
 
@@ -1054,8 +1126,8 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             simplifyAnimeDetails = simplifyAnimeDetails,
-                            localFavorites = localFavorites,
-                            onToggleFavorite = { anime -> viewModel.toggleLocalFavorite(anime) },
+                            favoriteIds = aniListFavoriteIds,
+                            onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
                             planningToWatch = planningToWatch,
@@ -1073,9 +1145,8 @@ fun MainScreen(
                             showStatusColors = showStatusColors,
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
                             simplifyAnimeDetails = simplifyAnimeDetails,
-                            localFavorites = localFavorites,
-                            canAddFavorite = canAddFavorite,
-                            onToggleFavorite = { anime -> viewModel.toggleLocalFavorite(anime) },
+                            favoriteIds = aniListFavoriteIds,
+                            onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
@@ -1087,7 +1158,6 @@ fun MainScreen(
                             isOled = isOled,
                             isLoggedIn = isLoggedIn,
                             showStatusColors = showStatusColors,
-                            forceHighRefreshRate = forceHighRefreshRate,
                             hideNavbarText = hideNavbarText,
                             autoSkipOpening = autoSkipOpening,
                             autoSkipEnding = autoSkipEnding,

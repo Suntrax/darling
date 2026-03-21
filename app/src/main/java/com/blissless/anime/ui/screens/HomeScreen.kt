@@ -38,6 +38,7 @@ import com.blissless.anime.ui.components.HomeAnimeHorizontalList
 import com.blissless.anime.dialogs.HomeAnimeInfoDialog
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.dialogs.UserProfileDialog
+import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.components.HomeStatusColors
 import com.blissless.anime.ui.components.LoadingSkeleton
 import com.blissless.anime.ui.components.RichEpisodeScreen
@@ -45,7 +46,6 @@ import com.blissless.anime.ui.components.EpisodeSelectionDialog
 import com.blissless.anime.ui.components.SearchOverlay
 import com.blissless.anime.ui.components.SectionHeader
 import com.blissless.anime.data.models.toDetailedAnimeData
-import com.blissless.anime.data.models.StoredFavorite
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,8 +56,7 @@ fun HomeScreen(
     showStatusColors: Boolean = true,
     simplifyEpisodeMenu: Boolean = true,
     simplifyAnimeDetails: Boolean = true,
-    localFavorites: Map<Int, StoredFavorite> = emptyMap(),
-    canAddFavorite: Boolean = true,
+    favoriteIds: Set<Int> = emptySet(),
     onToggleFavorite: (AnimeMedia) -> Unit = {},
     onPlayerStateChange: (Boolean) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
@@ -83,13 +82,13 @@ fun HomeScreen(
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showAnimeInfoDialog by remember { mutableStateOf(false) }
+    var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     
     // Track first anime for back navigation
     var firstAnime by remember { mutableStateOf<AnimeMedia?>(null) }
 
     val allListsEmpty = currentlyWatching.isEmpty() && planningToWatch.isEmpty() && completed.isEmpty() && onHold.isEmpty() && dropped.isEmpty()
     var isRefreshing by remember { mutableStateOf(false) }
-    val canAddFavoriteLocal = remember(localFavorites) { localFavorites.size < 10 }
     val scope = rememberCoroutineScope()
 
     var previousScreenIndex by remember { mutableIntStateOf(currentScreenIndex) }
@@ -214,6 +213,7 @@ fun HomeScreen(
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -236,7 +236,13 @@ fun HomeScreen(
                                     selectedAnime = anime; showStatusDialog = true
                                 },
                                 onInfoClick = { anime ->
-                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                    selectedAnime = anime
+                                    if (simplifyAnimeDetails) {
+                                        showAnimeInfoDialog = true
+                                    } else {
+                                        if (firstAnime == null) firstAnime = anime
+                                        showDetailedAnimeScreen = true
+                                    }
                                 })
                         } }
 
@@ -257,6 +263,7 @@ fun HomeScreen(
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -265,7 +272,13 @@ fun HomeScreen(
                                     selectedAnime = anime; showStatusDialog = true
                                 },
                                 onInfoClick = { anime ->
-                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                    selectedAnime = anime
+                                    if (simplifyAnimeDetails) {
+                                        showAnimeInfoDialog = true
+                                    } else {
+                                        if (firstAnime == null) firstAnime = anime
+                                        showDetailedAnimeScreen = true
+                                    }
                                 })
                         } }
 
@@ -286,6 +299,7 @@ fun HomeScreen(
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -294,7 +308,13 @@ fun HomeScreen(
                                     selectedAnime = anime; showStatusDialog = true
                                 },
                                 onInfoClick = { anime ->
-                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                    selectedAnime = anime
+                                    if (simplifyAnimeDetails) {
+                                        showAnimeInfoDialog = true
+                                    } else {
+                                        if (firstAnime == null) firstAnime = anime
+                                        showDetailedAnimeScreen = true
+                                    }
                                 })
                         } }
 
@@ -315,6 +335,7 @@ fun HomeScreen(
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -337,7 +358,12 @@ fun HomeScreen(
                                     selectedAnime = anime; showStatusDialog = true
                                 },
                                 onInfoClick = { anime ->
-                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                    selectedAnime = anime
+                                    if (simplifyAnimeDetails) {
+                                        showAnimeInfoDialog = true
+                                    } else {
+                                        showDetailedAnimeScreen = true
+                                    }
                                 })
                         } }
 
@@ -358,6 +384,7 @@ fun HomeScreen(
                                 showStatusColors = showStatusColors,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = { anime ->
                                     selectedAnime = anime; showEpisodeSheet = true
                                 },
@@ -366,7 +393,13 @@ fun HomeScreen(
                                     selectedAnime = anime; showStatusDialog = true
                                 },
                                 onInfoClick = { anime ->
-                                    selectedAnime = anime; showAnimeInfoDialog = true
+                                    selectedAnime = anime
+                                    if (simplifyAnimeDetails) {
+                                        showAnimeInfoDialog = true
+                                    } else {
+                                        if (firstAnime == null) firstAnime = anime
+                                        showDetailedAnimeScreen = true
+                                    }
                                 })
                         } }
 
@@ -402,7 +435,7 @@ fun HomeScreen(
                 completed = completed,
                 onHold = onHold,
                 dropped = dropped,
-                localFavorites = localFavorites,
+                favoriteIds = favoriteIds,
                 onToggleFavorite = onToggleFavorite,
                 onClose = { showSearchOverlay = false },
                 onPlayEpisode = onPlayEpisode
@@ -439,13 +472,12 @@ fun HomeScreen(
     }
 
     if (showStatusDialog && selectedAnime != null) {
-        val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
+        val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
         HomeAnimeStatusDialog(
             anime = selectedAnime!!,
             isOled = isOled,
             showStatusColors = showStatusColors,
             isFavorite = isAnimeFavorite,
-            canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
             onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
             onDismiss = { showStatusDialog = false },
             onRemove = {
@@ -469,78 +501,139 @@ fun HomeScreen(
         }
         
         val exploreAnime = ExploreAnime(id = selectedAnime!!.id, title = selectedAnime!!.title, cover = selectedAnime!!.cover, banner = selectedAnime!!.banner, episodes = selectedAnime!!.totalEpisodes, latestEpisode = selectedAnime!!.latestEpisode, averageScore = selectedAnime!!.averageScore, genres = selectedAnime!!.genres, year = selectedAnime!!.year, format = selectedAnime!!.format)
-        val isAnimeFavorite = localFavorites.containsKey(selectedAnime!!.id)
-        if (simplifyAnimeDetails) {
-            HomeAnimeInfoDialog(
-                anime = selectedAnime!!,
-                isOled = isOled,
-                isFavorite = isAnimeFavorite,
-                canAddFavorite = canAddFavoriteLocal || isAnimeFavorite,
-                onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
-                onDismiss = { showAnimeInfoDialog = false },
-                onPlayEpisode = { episode ->
-                    onPlayEpisode(
-                        selectedAnime!!,
-                        episode
-                    ); showAnimeInfoDialog = false
-                },
-                onUpdateStatus = { status ->
-                    viewModel.updateAnimeStatus(
-                        selectedAnime!!.id,
-                        status
-                    ); selectedAnime = selectedAnime!!.copy(listStatus = status)
-                },
-                onRemove = {
-                    viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false
-                })
-        } else {
-            DetailedAnimeScreen(anime = exploreAnime.toDetailedAnimeData(), viewModel = viewModel, isOled = isOled, currentStatus = selectedAnime!!.listStatus, isFavorite = isAnimeFavorite, onToggleFavorite = { _ -> onToggleFavorite(selectedAnime!!) }, onDismiss = { 
-                // Go back to first anime if we've navigated, otherwise close
+        val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
+        ExploreAnimeDialog(
+            anime = exploreAnime,
+            viewModel = viewModel,
+            isOled = isOled,
+            currentStatus = selectedAnime!!.listStatus,
+            isFavorite = isAnimeFavorite,
+            onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
+            onDismiss = { showAnimeInfoDialog = false },
+            onAddToPlanning = { viewModel.addExploreAnimeToList(exploreAnime, "PLANNING") },
+            onAddToDropped = { viewModel.addExploreAnimeToList(exploreAnime, "DROPPED") },
+            onAddToOnHold = { viewModel.addExploreAnimeToList(exploreAnime, "PAUSED") },
+            onRemoveFromList = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false },
+            onStartWatching = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false },
+            isLoggedIn = isLoggedIn,
+            onLoginClick = onLoginClick,
+            onRelationClick = { relation ->
+                scope.launch {
+                    try {
+                        val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                        if (detailedData != null) {
+                            selectedAnime = AnimeMedia(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                progress = selectedAnime!!.progress,
+                                totalEpisodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                status = detailedData.status ?: "",
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                listStatus = selectedAnime!!.listStatus,
+                                listEntryId = selectedAnime!!.listEntryId,
+                                year = detailedData.year,
+                                malId = detailedData.malId
+                            )
+                        } else {
+                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+
+    if (showDetailedAnimeScreen && selectedAnime != null) {
+        val detailedAnimeData = selectedAnime!!.toDetailedAnimeData()
+        DetailedAnimeScreen(
+            anime = detailedAnimeData,
+            viewModel = viewModel,
+            isOled = isOled,
+            currentStatus = selectedAnime!!.listStatus,
+            isLoggedIn = isLoggedIn,
+            isFavorite = favoriteIds.contains(selectedAnime!!.id),
+            onDismiss = {
+                // Go back to first anime if navigated, otherwise close
                 if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
                     selectedAnime = firstAnime
                 } else {
-                    showAnimeInfoDialog = false
+                    showDetailedAnimeScreen = false
                     firstAnime = null
                 }
-            }, onSwipeToClose = { 
-                showAnimeInfoDialog = false
+            },
+            onSwipeToClose = {
+                showDetailedAnimeScreen = false
                 firstAnime = null
-            }, onPlayEpisode = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false }, onUpdateStatus = { status -> if (status != null) viewModel.updateAnimeStatus(selectedAnime!!.id, status) }, onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false }, isLoggedIn = isLoggedIn, onLoginClick = onLoginClick, onRelationClick = { relation -> 
-                try { 
-                    scope.launch {
-                        try {
-                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                            if (detailedData != null) {
-                                // Update the current dialog instead of opening a new one
-                                selectedAnime = AnimeMedia(
-                                    id = detailedData.id,
-                                    title = detailedData.title,
-                                    titleEnglish = detailedData.titleEnglish,
-                                    cover = detailedData.cover,
-                                    banner = detailedData.banner,
-                                    progress = selectedAnime!!.progress,
-                                    totalEpisodes = detailedData.episodes,
-                                    latestEpisode = detailedData.latestEpisode,
-                                    status = detailedData.status ?: "",
-                                    averageScore = detailedData.averageScore,
-                                    genres = detailedData.genres,
-                                    listStatus = selectedAnime!!.listStatus,
-                                    listEntryId = selectedAnime!!.listEntryId,
-                                    year = detailedData.year,
-                                    malId = detailedData.malId
-                                )
-                            } else {
-                                Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) { 
+            },
+            onPlayEpisode = { episode ->
+                onPlayEpisode(selectedAnime!!, episode)
+                showDetailedAnimeScreen = false
+            },
+            onUpdateStatus = { status ->
+                if (status != null) {
+                    viewModel.addExploreAnimeToList(
+                        ExploreAnime(
+                            id = selectedAnime!!.id,
+                            title = selectedAnime!!.title,
+                            cover = selectedAnime!!.cover,
+                            banner = selectedAnime!!.banner,
+                            episodes = selectedAnime!!.totalEpisodes,
+                            latestEpisode = selectedAnime!!.latestEpisode,
+                            averageScore = selectedAnime!!.averageScore,
+                            genres = selectedAnime!!.genres,
+                            year = selectedAnime!!.year,
+                            format = selectedAnime!!.format
+                        ),
+                        status
+                    )
+                }
+            },
+            onRemove = {
+                viewModel.removeAnimeFromList(selectedAnime!!.id)
+                showDetailedAnimeScreen = false
+            },
+            onToggleFavorite = { _ ->
+                onToggleFavorite(selectedAnime!!)
+            },
+            onLoginClick = onLoginClick,
+            onRelationClick = { relation ->
+                scope.launch {
+                    try {
+                        val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                        if (detailedData != null) {
+                            selectedAnime = AnimeMedia(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                progress = selectedAnime!!.progress,
+                                totalEpisodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                status = detailedData.status ?: "",
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                listStatus = selectedAnime!!.listStatus,
+                                listEntryId = selectedAnime!!.listEntryId,
+                                year = detailedData.year,
+                                malId = detailedData.malId
+                            )
+                        } else {
                             Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                        } 
-                    } 
-                } catch (e: Exception) { 
-                    Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                } 
-            })
-        }
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
     }
 
     if (showUserProfileDialog) {

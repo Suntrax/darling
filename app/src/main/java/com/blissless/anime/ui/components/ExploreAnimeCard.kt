@@ -10,6 +10,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -114,7 +116,7 @@ fun ExploreAnimeCard(
         val releasedEpisodes = anime.latestEpisode?.let { it - 1 }
         when {
             releasedEpisodes != null && releasedEpisodes > 0 -> "Ep $releasedEpisodes"
-            anime.episodes > 0 -> "${anime.episodes} Ep"
+            anime.episodes > 0 -> "${anime.episodes} ${if (anime.episodes == 1) "ep" else "eps"}"
             else -> ""
         }
     }
@@ -130,8 +132,7 @@ fun ExploreAnimeCard(
     Column(modifier = Modifier.width(130.dp)) {
         Card(
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.height(185.dp),
-            onClick = onClick
+            modifier = Modifier.height(185.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
