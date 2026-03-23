@@ -516,8 +516,7 @@ private fun SearchResultItem(
 
                     when {
                         anime.episodes > 0 -> Text("Episodes: ${anime.episodes}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
-                        anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Episodes: ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
-                        anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Episodes: 1", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        anime.latestEpisode != null && anime.latestEpisode > 0 -> Text("Episodes: ${anime.latestEpisode}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
                         else -> Text("Episodes: ?", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
                     }
                 }
@@ -658,8 +657,7 @@ fun SearchAnimeDetailDialog(
 
                             when {
                                 anime.episodes > 0 -> Text("${anime.episodes} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Ep ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Ep 1", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode > 0 -> Text("Ep ${anime.latestEpisode}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                                 else -> Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                             }
                         }

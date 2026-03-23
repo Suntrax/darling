@@ -76,8 +76,7 @@ fun HomeAnimeInfoDialog(
                             }
                             when {
                                 anime.totalEpisodes > 0 -> Text("${anime.totalEpisodes} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Ep ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Ep 1", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode > 0 -> Text("Ep ${anime.latestEpisode}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                                 else -> Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                             }
                         }

@@ -94,8 +94,7 @@ fun ExploreAnimeDialog(
                             }
                             when {
                                 anime.episodes > 0 -> Text("${anime.episodes} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode > 1 -> Text("Ep ${anime.latestEpisode - 1}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode == 1 -> Text("Ep 1", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                                anime.latestEpisode != null && anime.latestEpisode > 0 -> Text("Ep ${anime.latestEpisode}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                                 else -> Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                             }
                         }

@@ -113,9 +113,8 @@ fun ExploreAnimeCard(
     }
 
     val episodeText = remember(anime.latestEpisode, anime.episodes) {
-        val releasedEpisodes = anime.latestEpisode?.let { it - 1 }
         when {
-            releasedEpisodes != null && releasedEpisodes > 0 -> "Ep $releasedEpisodes"
+            anime.latestEpisode != null && anime.latestEpisode > 0 -> "Ep ${anime.latestEpisode}"
             anime.episodes > 0 -> "${anime.episodes} ${if (anime.episodes == 1) "ep" else "eps"}"
             else -> ""
         }

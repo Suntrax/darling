@@ -164,8 +164,8 @@ fun FeaturedCarousel(
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                     }
-                                    if (anime.latestEpisode != null && anime.latestEpisode > 1) {
-                                        val epText = "Ep ${anime.latestEpisode - 1}${if (anime.episodes > 0) " / ${anime.episodes}" else ""}"
+                                    if (anime.latestEpisode != null && anime.latestEpisode > 0) {
+                                        val epText = "Ep ${anime.latestEpisode}${if (anime.episodes > 0) " / ${anime.episodes}" else ""}"
                                         Text(text = epText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
