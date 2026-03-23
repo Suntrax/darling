@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
@@ -451,7 +452,7 @@ fun DetailedAnimeScreen(
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        Icons.Default.PlaylistAdd,
+                                        Icons.AutoMirrored.Filled.PlaylistAdd,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(20.dp)
@@ -470,7 +471,7 @@ fun DetailedAnimeScreen(
                                             Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
                                             isStatusRateLimited = true
-                                            kotlinx.coroutines.GlobalScope.launch {
+                                            scope.launch {
                                                 kotlinx.coroutines.delay(3000)
                                                 isStatusRateLimited = false
                                             }
@@ -488,7 +489,7 @@ fun DetailedAnimeScreen(
                                             Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
                                             isStatusRateLimited = true
-                                            kotlinx.coroutines.GlobalScope.launch {
+                                            scope.launch {
                                                 kotlinx.coroutines.delay(3000)
                                                 isStatusRateLimited = false
                                             }
@@ -506,7 +507,7 @@ fun DetailedAnimeScreen(
                                             Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
                                             isStatusRateLimited = true
-                                            kotlinx.coroutines.GlobalScope.launch {
+                                            scope.launch {
                                                 kotlinx.coroutines.delay(3000)
                                                 isStatusRateLimited = false
                                             }
@@ -524,7 +525,7 @@ fun DetailedAnimeScreen(
                                             Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
                                             isStatusRateLimited = true
-                                            kotlinx.coroutines.GlobalScope.launch {
+                                            scope.launch {
                                                 kotlinx.coroutines.delay(3000)
                                                 isStatusRateLimited = false
                                             }
@@ -542,7 +543,7 @@ fun DetailedAnimeScreen(
                                             Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
                                             isStatusRateLimited = true
-                                            kotlinx.coroutines.GlobalScope.launch {
+                                            scope.launch {
                                                 kotlinx.coroutines.delay(3000)
                                                 isStatusRateLimited = false
                                             }
@@ -560,7 +561,7 @@ fun DetailedAnimeScreen(
                                             Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
                                         } else {
                                             isStatusRateLimited = true
-                                            kotlinx.coroutines.GlobalScope.launch {
+                                            scope.launch {
                                                 kotlinx.coroutines.delay(3000)
                                                 isStatusRateLimited = false
                                             }

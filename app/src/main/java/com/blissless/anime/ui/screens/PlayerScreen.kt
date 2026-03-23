@@ -326,10 +326,10 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(isPlaying, hasTriggeredPrefetch, hasError) {
-        if (isPlaying && !hasTriggeredPrefetch && !hasError && onPrefetchAdjacent != null) {
+    LaunchedEffect(isPlaying, hasTriggeredPrefetch, hasError, isLatestEpisode) {
+        if (isPlaying && !hasTriggeredPrefetch && !hasError && onPrefetchAdjacent != null && !isLatestEpisode) {
             delay(5000)
-            if (!hasTriggeredPrefetch && isPlaying && !hasError) {
+            if (!hasTriggeredPrefetch && isPlaying && !hasError && !isLatestEpisode) {
                 hasTriggeredPrefetch = true
                 onPrefetchAdjacent.invoke()
             }
@@ -455,7 +455,7 @@ fun PlayerScreen(
                     }
                     hasSkippedOutro = true
                 }
-                showSkipEndingButton = !autoSkipEnding
+                showSkipEndingButton = true // Always show skip ending button
             } else {
                 showSkipEndingButton = false
             }
@@ -508,6 +508,11 @@ fun PlayerScreen(
     val creditsStartRatio = if (duration > 0 && effectiveTimestamps.creditsStart != null) {
         (effectiveTimestamps.creditsStart!! * 1000).toFloat() / duration.toFloat()
     } else null
+    val creditsAtEnd = if (duration > 0 && effectiveTimestamps.creditsEnd != null) {
+        val creditsEndSeconds = effectiveTimestamps.creditsEnd!! * 1000
+        val durationDiff = duration - creditsEndSeconds
+        durationDiff < 30000 // Credits end within 30 seconds of the end
+    } else false
 
     fun handleServerChange(serverName: String, category: String) {
         hasError = false
@@ -684,10 +689,18 @@ fun PlayerScreen(
         ) {
             SkipIconButton(
                 icon = Icons.Default.SkipNext,
-                label = if (isLatestEpisode) "Skip\nEnding" else "Next\nEpisode",
+                label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
                 backgroundColor = Color.Black.copy(alpha = 0.6f),
                 iconTint = Color.White,
-                onClick = { onNextEpisode?.invoke() }
+                onClick = {
+                    if (isLatestEpisode || !creditsAtEnd) {
+                        if (exoPlayer.duration > 0) {
+                            exoPlayer.seekTo(exoPlayer.duration)
+                        }
+                    } else {
+                        onNextEpisode?.invoke()
+                    }
+                }
             )
         }
 
@@ -909,8 +922,8 @@ fun PlayerScreen(
 
                         IconButton(
                             onClick = { onNextEpisode?.invoke() },
-                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
-                            enabled = onNextEpisode != null && !isLoadingStream && !isChangingServer
+                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                            enabled = onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer
                         ) {
                             Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                         }

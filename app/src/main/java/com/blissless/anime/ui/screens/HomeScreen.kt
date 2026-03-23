@@ -429,6 +429,7 @@ fun HomeScreen(
             SearchOverlay(
                 viewModel = viewModel,
                 isOled = isOled,
+                isLoggedIn = isLoggedIn,
                 simplifyAnimeDetails = simplifyAnimeDetails,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,

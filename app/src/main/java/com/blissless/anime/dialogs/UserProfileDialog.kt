@@ -230,7 +230,7 @@ fun UserProfileDialog(
                             ) + fadeIn(animationSpec = tween(300))) togetherWith
                             (slideOutHorizontally(
                                 animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                targetOffsetX = { -direction * targetOffset }
+                                targetOffsetX = { -targetOffset }
                             ) + fadeOut(animationSpec = tween(300)))
                         },
                         modifier = Modifier.fillMaxSize(),

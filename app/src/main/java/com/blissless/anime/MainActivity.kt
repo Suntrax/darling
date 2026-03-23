@@ -984,13 +984,14 @@ fun MainScreen(
 
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
+            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
             PlayerScreen(
                 videoUrl = currentVideoUrl!!,
                 referer = currentReferer,
                 subtitleUrl = currentSubtitleUrl,
                 currentEpisode = currentEpisode,
                 totalEpisodes = totalEpisodes,
-                latestAiredEpisode = anime.latestEpisode,
+                latestAiredEpisode = released,
                 animeName = anime.title,
                 animeId = anime.id,
                 malId = anime.malId ?: 0,
@@ -1025,8 +1026,8 @@ fun MainScreen(
                     }
                 },
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
-                onNextEpisode = if (currentEpisode < (anime.latestEpisode ?: totalEpisodes)) onNextEpisode else null,
-                isLatestEpisode = currentEpisode >= (anime.latestEpisode ?: totalEpisodes) && (anime.latestEpisode ?: 0) > 0,
+                onNextEpisode = if (currentEpisode < released) onNextEpisode else null,
+                isLatestEpisode = currentEpisode >= released && released > 0,
                 onServerChange = { server, category -> changeServer(server, category) },
                 onQualityChange = { qualityUrl, qualityName -> changeQuality(qualityUrl, qualityName) },
                 onPlaybackError = { onPlaybackError() },
@@ -1035,8 +1036,7 @@ fun MainScreen(
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,
                 onPrefetchAdjacent = {
-                    val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                    viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, latestAired)
+                    viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, released)
                 },
                 disableMaterialColors = disableMaterialColors
             )

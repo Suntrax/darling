@@ -318,7 +318,7 @@ class MainViewModel : ViewModel() {
         cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
         banner = media.bannerImage,
         episodes = media.episodes ?: 0,
-        latestEpisode = media.nextAiringEpisode?.episode,
+        latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
         averageScore = media.averageScore,
         genres = media.genres ?: emptyList(),
         year = media.startDate?.year ?: media.seasonYear,
