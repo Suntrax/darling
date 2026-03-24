@@ -56,6 +56,7 @@ fun SearchOverlay(
     isOled: Boolean,
     isLoggedIn: Boolean,
     simplifyAnimeDetails: Boolean = true,
+    hideAdultContent: Boolean = false,
     currentlyWatching: List<AnimeMedia>,
     planningToWatch: List<AnimeMedia>,
     completed: List<AnimeMedia>,
@@ -121,6 +122,15 @@ fun SearchOverlay(
             val results = viewModel.searchAnime(searchQuery)
             searchResults = results
             isSearching = false
+        }
+    }
+
+    // Filter adult content if setting is enabled
+    val filteredSearchResults = remember(searchResults, hideAdultContent) {
+        if (hideAdultContent) {
+            searchResults.filter { !it.isAdult }
+        } else {
+            searchResults
         }
     }
 
@@ -227,7 +237,7 @@ fun SearchOverlay(
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (searchResults.isEmpty() && searchQuery.isNotEmpty()) {
+            } else if (filteredSearchResults.isEmpty() && searchQuery.isNotEmpty()) {
                 Text(
                     "No results found",
                     color = Color.White.copy(alpha = 0.6f),
@@ -237,7 +247,7 @@ fun SearchOverlay(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(searchResults) { anime ->
+                    items(filteredSearchResults) { anime ->
                         SearchResultItem(
                             anime = anime,
                             isOled = isOled,

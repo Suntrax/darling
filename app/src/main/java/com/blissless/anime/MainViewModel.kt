@@ -148,6 +148,7 @@ class MainViewModel : ViewModel() {
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> get() = userPreferences.localFavorites
     val localFavoriteIds: Set<Int> get() = userPreferences.localFavoriteIds
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
+    val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
 
     // Cache Delegations
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> get() = cacheManager.prefetchedStreams
@@ -322,7 +323,8 @@ class MainViewModel : ViewModel() {
         averageScore = media.averageScore,
         genres = media.genres ?: emptyList(),
         year = media.startDate?.year ?: media.seasonYear,
-        malId = media.idMal
+        malId = media.idMal,
+        isAdult = media.isAdult
     )
 
     fun fetchAiringSchedule(force: Boolean = false) {
@@ -348,7 +350,8 @@ class MainViewModel : ViewModel() {
                     averageScore = schedule.media.averageScore,
                     genres = schedule.media.genres ?: emptyList(),
                     year = schedule.media.seasonYear,
-                    malId = schedule.media.idMal
+                    malId = schedule.media.idMal,
+                    isAdult = schedule.media.isAdult
                 )
             }.sortedBy { it.airingAt }
 
@@ -395,6 +398,7 @@ class MainViewModel : ViewModel() {
     fun setAutoPlayNextEpisode(enabled: Boolean) = userPreferences.setAutoPlayNextEpisode(enabled)
     fun setEnableThumbnailPreview(enabled: Boolean) = userPreferences.setEnableThumbnailPreview(enabled)
     fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
+    fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) = userPreferences.toggleLocalFavorite(mediaId, title, cover, banner, year, averageScore)

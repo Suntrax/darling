@@ -75,6 +75,7 @@ fun ScheduleScreen(
     isVisible: Boolean = false,
     disableMaterialColors: Boolean = false,
     simplifyAnimeDetails: Boolean = true,
+    hideAdultContent: Boolean = false,
     isLoggedIn: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
@@ -84,6 +85,11 @@ fun ScheduleScreen(
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
     val isLoading by viewModel.isLoadingSchedule.collectAsState()
+
+    // Filter adult content if setting is enabled
+    val filteredAiringList = remember(airingList, hideAdultContent) {
+        if (hideAdultContent) airingList.filter { !it.isAdult } else airingList
+    }
 
     val scope = rememberCoroutineScope()
 
@@ -235,14 +241,16 @@ fun ScheduleScreen(
     }
 
     // Create filtered schedule - show anime airing from start of today to 7 days from now
-    val filteredScheduleByDay = remember(scheduleByDay, startOfToday, endOfToday, currentTime, sevenDaysFromNow, currentDayOfWeek) {
+    val filteredScheduleByDay = remember(scheduleByDay, startOfToday, endOfToday, currentTime, sevenDaysFromNow, currentDayOfWeek, hideAdultContent) {
         val result = mutableMapOf<Int, MutableList<AiringScheduleAnime>>()
 
         // Initialize all days
         for (i in 0..6) result[i] = mutableListOf()
 
         // Process all anime from the schedule
-        scheduleByDay.values.flatten().forEach { anime ->
+        scheduleByDay.values.flatten()
+            .filter { !hideAdultContent || !it.isAdult }
+            .forEach { anime ->
             // Calculate which day of week this anime airs on
             val animeCalendar = Calendar.getInstance()
             animeCalendar.timeInMillis = anime.airingAt * 1000L
@@ -369,26 +377,34 @@ fun ScheduleScreen(
     }
 
     // Track visible day based on scroll position (only for All Upcoming mode)
-    // Only update when scrolling actually stops to prevent visual jitter
+    // Update instantly during scroll, with debounce for settling
     val scrollJob = remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, listStateAllUpcoming.firstVisibleItemScrollOffset, viewMode) {
+    val isScrolling by remember {
+        derivedStateOf { listStateAllUpcoming.isScrollInProgress }
+    }
+    
+    LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, listStateAllUpcoming.firstVisibleItemScrollOffset, viewMode, isScrolling) {
         if (viewMode == 0 && !isProgrammaticScroll) {
-            // Cancel previous job if still running
-            scrollJob.value?.cancel()
-            
-            // Wait for scroll to settle
-            scrollJob.value = scope.launch {
-                kotlinx.coroutines.delay(200)
-                val firstVisibleIndex = listStateAllUpcoming.firstVisibleItemIndex
+            val firstVisibleIndex = listStateAllUpcoming.firstVisibleItemIndex
 
-                if (firstVisibleIndex < allUpcomingTimelineItems.size) {
-                    var currentDay = currentDayOfWeek
-                    for (i in 0..firstVisibleIndex) {
-                        if (allUpcomingTimelineItems.getOrNull(i) is TimelineItem.DayHeader) {
-                            currentDay = (allUpcomingTimelineItems[i] as TimelineItem.DayHeader).dayIndex
-                        }
+            if (firstVisibleIndex < allUpcomingTimelineItems.size) {
+                var currentDay = currentDayOfWeek
+                for (i in 0..firstVisibleIndex) {
+                    if (allUpcomingTimelineItems.getOrNull(i) is TimelineItem.DayHeader) {
+                        currentDay = (allUpcomingTimelineItems[i] as TimelineItem.DayHeader).dayIndex
                     }
+                }
+                
+                if (isScrolling) {
+                    // Update instantly during active scroll
                     visibleDayByScroll = currentDay
+                } else {
+                    // Debounce when scroll settles
+                    scrollJob.value?.cancel()
+                    scrollJob.value = scope.launch {
+                        kotlinx.coroutines.delay(50)
+                        visibleDayByScroll = currentDay
+                    }
                 }
             }
         }

@@ -3,9 +3,11 @@ package com.blissless.anime.ui.screens
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.os.Build
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -97,7 +99,6 @@ fun PlayerScreen(
     currentQuality: String = "Auto",
     isLatestEpisode: Boolean = false,
     disableMaterialColors: Boolean = false,
-    // PRIMARY: Animekai skip timestamps (in seconds)
     animekaiIntroStart: Int? = null,
     animekaiIntroEnd: Int? = null,
     animekaiOutroStart: Int? = null,
@@ -135,7 +136,6 @@ fun PlayerScreen(
     var showServerMenu by remember { mutableStateOf(false) }
     var showQualityMenu by remember { mutableStateOf(false) }
 
-    // Local quality state that can be updated
     var selectedQuality by remember { mutableStateOf(currentQuality) }
 
     var sliderValue by remember { mutableFloatStateOf(0f) }
@@ -541,17 +541,22 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 1. AndroidView (Bottom Layer)
-        // Hide player surface until playback actually starts to avoid showing first frame
+        // PlayerView
         AndroidView(
-            factory = {
-                PlayerView(context).apply {
+            factory = { ctx ->
+                PlayerView(ctx).apply {
                     player = exoPlayer
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     resizeMode = resizeModes[resizeModeIndex].first
+                    useController = false
+                    setShowNextButton(false)
+                    setShowPreviousButton(false)
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                    controllerShowTimeoutMs = 3000
+                    controllerAutoShow = false
 
                     val style = CaptionStyleCompat(
                         android.graphics.Color.WHITE,
@@ -565,7 +570,6 @@ fun PlayerScreen(
                         setStyle(style)
                         setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
                     }
-                    useController = false
                 }
             },
             modifier = Modifier

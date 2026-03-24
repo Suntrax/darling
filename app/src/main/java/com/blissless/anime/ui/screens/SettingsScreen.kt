@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -63,6 +64,7 @@ fun SettingsScreen(
     val rawPreferredScraper by viewModel.preferredScraper.collectAsState(initial = "Animekai")
     // Ensure Animekai is always the selected scraper (only working option)
     val preferredScraperState = rawPreferredScraper.ifBlank { "Animekai" }
+    val hideAdultContentState by viewModel.hideAdultContent.collectAsState(initial = false)
 
     // Track thumbnail preview state for showing info dialog
     var showThumbnailInfoDialog by remember { mutableStateOf(false) }
@@ -143,6 +145,21 @@ fun SettingsScreen(
                 description = "Use compact dialog (disable for full info page)",
                 checked = simplifyAnimeDetailsState,
                 onCheckedChange = { viewModel.setSimplifyAnimeDetails(it) },
+                isOled = isOled
+            )
+        }
+
+        // Content Settings Section
+        SettingsSection(
+            title = "Content",
+            icon = Icons.Default.FilterAlt,
+            isOled = isOled
+        ) {
+            SettingsToggle(
+                title = "Hide Adult Content",
+                description = "Exclude 18+ anime from search results and airing schedule",
+                checked = hideAdultContentState,
+                onCheckedChange = { viewModel.setHideAdultContent(it) },
                 isOled = isOled
             )
         }

@@ -3,8 +3,6 @@ package com.blissless.anime
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.Surface
-import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -70,6 +68,7 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
 
         setContent {
+            val activity = this@MainActivity
             val isOled by mainViewModel.isOled.collectAsState()
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
@@ -213,6 +212,7 @@ fun MainScreen(
 
     val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
     val simplifyAnimeDetails by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
+    val hideAdultContent by viewModel.hideAdultContent.collectAsState(initial = false)
 
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val aniListFavoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
@@ -1114,6 +1114,7 @@ fun MainScreen(
                             isVisible = isScheduleVisible,
                             disableMaterialColors = disableMaterialColors,
                             simplifyAnimeDetails = simplifyAnimeDetails,
+                            hideAdultContent = hideAdultContent,
                             isLoggedIn = isLoggedIn,
                             onPlayEpisode = onPlayEpisode,
                             onShowAnimeDialog = onShowAnimeDialog,
@@ -1145,6 +1146,7 @@ fun MainScreen(
                             showStatusColors = showStatusColors,
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
                             simplifyAnimeDetails = simplifyAnimeDetails,
+                            hideAdultContent = hideAdultContent,
                             favoriteIds = aniListFavoriteIds,
                             onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,

@@ -46,7 +46,6 @@ data class ZenimeEpisodeStreams(
 
 /**
  * Zenime scraper service for fetching anime streams.
- * API documentation: https://zenimescraper.vercel.app
  */
 object ZenimeScraper {
     private const val TAG = "ZenimeScraper"

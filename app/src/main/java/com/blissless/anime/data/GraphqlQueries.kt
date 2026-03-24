@@ -49,6 +49,7 @@ object GraphqlQueries {
             averageScore
             genres
             seasonYear
+            isAdult
             startDate { year }
             nextAiringEpisode { episode airingAt }
         }
@@ -74,6 +75,7 @@ object GraphqlQueries {
                 averageScore
                 genres
                 seasonYear
+                isAdult
             }
         }
     """

@@ -10,10 +10,4 @@ sealed class OverlayState {
         val firstAnime: ExploreAnime? = null,
         val isFirstOpen: Boolean = true
     ) : OverlayState()
-    
-    data class DetailedAnime(
-        val animeId: Int,
-        val cover: String,
-        val title: String
-    ) : OverlayState()
 }

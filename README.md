@@ -51,7 +51,8 @@ app/src/main/java/com/blissless/anime/
 │   └── theme/        # Material theming
 ├── DarlingApplication.kt
 ├── MainActivity.kt
-└── MainViewModel.kt
+├── MainViewModel.kt
+└── OverlayState.kt
 ```
 
 ## Disclaimer

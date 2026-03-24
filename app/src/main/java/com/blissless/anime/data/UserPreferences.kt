@@ -36,6 +36,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LOCAL_FAVORITES_V2 = "local_favorites_v2"
         private const val KEY_LOCAL_FAVORITES = "local_favorites"
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
+        private const val KEY_HIDE_ADULT_CONTENT = "hide_adult_content"
         private const val KEY_LAST_HOME_REFRESH = "last_home_refresh_time"
         private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
     }
@@ -95,6 +96,10 @@ class UserPreferences(private val context: Context) {
     private val _preferredScraper = MutableStateFlow("Animekai")
     val preferredScraper: StateFlow<String> = _preferredScraper.asStateFlow()
 
+    // Hide Adult Content
+    private val _hideAdultContent = MutableStateFlow(false)
+    val hideAdultContent: StateFlow<Boolean> = _hideAdultContent.asStateFlow()
+
     // Local favorites
     private val _localFavorites = MutableStateFlow<Map<Int, StoredFavorite>>(emptyMap())
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> = _localFavorites.asStateFlow()
@@ -128,6 +133,7 @@ class UserPreferences(private val context: Context) {
         _autoPlayNextEpisode.value = sharedPreferences.getBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, true)
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
+        _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
 
         // Load local favorites
         loadLocalFavorites()
@@ -232,6 +238,11 @@ class UserPreferences(private val context: Context) {
     fun setPreferredScraper(scraper: String) {
         _preferredScraper.value = scraper
         sharedPreferences.edit { putString(KEY_PREFERRED_SCRAPER, scraper) }
+    }
+
+    fun setHideAdultContent(enabled: Boolean) {
+        _hideAdultContent.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_HIDE_ADULT_CONTENT, enabled) }
     }
 
     // ============================================

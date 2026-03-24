@@ -19,7 +19,8 @@ data class ExploreAnime(
     val genres: List<String>,
     val year: Int? = null,
     val malId: Int? = null,
-    val format: String? = null
+    val format: String? = null,
+    val isAdult: Boolean = false
 )
 
 @Serializable
@@ -54,7 +55,8 @@ data class AiringScheduleAnime(
     val averageScore: Int? = null,
     val genres: List<String> = emptyList(),
     val year: Int? = null,
-    val malId: Int? = null
+    val malId: Int? = null,
+    val isAdult: Boolean = false
 )
 
 @Serializable
@@ -450,7 +452,8 @@ data class ExploreMedia(
     val averageScore: Int?,
     val genres: List<String>?,
     val seasonYear: Int? = null,
-    val startDate: FuzzyDate? = null
+    val startDate: FuzzyDate? = null,
+    val isAdult: Boolean = false
 )
 
 @Serializable
@@ -524,7 +527,8 @@ data class AiringScheduleMedia(
     val status: String?,
     val averageScore: Int?,
     val genres: List<String>?,
-    val seasonYear: Int? = null
+    val seasonYear: Int? = null,
+    val isAdult: Boolean = false
 )
 
 @Serializable

@@ -360,6 +360,7 @@ class AnimeRepository(
                             averageScore
                             genres
                             seasonYear
+                            isAdult
                         }
                     }
                 }
@@ -419,6 +420,7 @@ class AnimeRepository(
                         averageScore
                         genres
                         seasonYear
+                        isAdult
                         startDate { year }
                     }
                 }
