@@ -51,10 +51,10 @@ class UserPreferences(private val context: Context) {
     val authToken: StateFlow<String?> = _authToken.asStateFlow()
 
     // UI Preferences
-    private val _isOled = MutableStateFlow(false)
+    private val _isOled = MutableStateFlow(true)
     val isOled: StateFlow<Boolean> = _isOled.asStateFlow()
 
-    private val _disableMaterialColors = MutableStateFlow(false)
+    private val _disableMaterialColors = MutableStateFlow(true)
     val disableMaterialColors: StateFlow<Boolean> = _disableMaterialColors.asStateFlow()
 
     private val _preferredCategory = MutableStateFlow("sub")
@@ -128,8 +128,8 @@ class UserPreferences(private val context: Context) {
         }
 
         // Load UI preferences
-        _isOled.value = sharedPreferences.getBoolean(KEY_OLED_MODE, false)
-        _disableMaterialColors.value = sharedPreferences.getBoolean(KEY_DISABLE_MATERIAL_COLORS, false)
+        _isOled.value = sharedPreferences.getBoolean(KEY_OLED_MODE, true)
+        _disableMaterialColors.value = sharedPreferences.getBoolean(KEY_DISABLE_MATERIAL_COLORS, true)
         _preferredCategory.value = sharedPreferences.getString(KEY_PREFERRED_CATEGORY, "sub") ?: "sub"
         _showStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_STATUS_COLORS, false)
         _trackingPercentage.value = sharedPreferences.getInt(KEY_TRACKING_PERCENTAGE, 85)

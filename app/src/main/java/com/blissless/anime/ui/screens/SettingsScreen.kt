@@ -35,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
 import kotlin.math.round
 
@@ -78,42 +79,84 @@ fun SettingsScreen(
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AsyncImage(
+                model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                contentDescription = "App",
+                modifier = Modifier.size(32.dp).clip(CircleShape)
+            )
+            Text(
+                "Settings",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
-        HorizontalDivider()
-
-        // General Section
-        val startupScreenState by viewModel.startupScreen.collectAsState()
+        // Account Section
         SettingsSection(
-            title = "General",
-            icon = Icons.Default.Settings,
+            title = "Account",
+            icon = Icons.Default.Person,
             isOled = isOled
         ) {
-            Text(
-                "Startup Screen",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    0 to "Schedule",
-                    1 to "Explore",
-                    2 to "Home"
-                ).forEach { (index, label) ->
-                    FilterChip(
-                        selected = startupScreenState == index,
-                        onClick = { viewModel.setStartupScreen(index) },
-                        label = { Text(label) },
-                        modifier = Modifier.weight(1f)
+            if (isLoggedIn) {
+                val userName by viewModel.userName.collectAsState()
+                val userAvatar by viewModel.userAvatar.collectAsState()
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    if (userAvatar != null) {
+                        AsyncImage(
+                            model = userAvatar,
+                            contentDescription = "User Avatar",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        userName ?: "Logged In",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
                     )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { viewModel.logout() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Log Out")
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.loginWithAniList() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data("https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/AniList_logo.svg/960px-AniList_logo.svg.png")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "AniList",
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Login with AniList")
                 }
             }
         }
@@ -196,6 +239,46 @@ fun SettingsScreen(
                 onCheckedChange = { viewModel.setHideAdultContent(it) },
                 isOled = isOled
             )
+        }
+
+        // General Section
+        val startupScreenState by viewModel.startupScreen.collectAsState()
+        SettingsSection(
+            title = "General",
+            icon = Icons.Default.Settings,
+            isOled = isOled
+        ) {
+            Text(
+                "Startup Screen",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "Choose the default screen when opening the app",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                listOf(
+                    0 to "Schedule",
+                    1 to "Explore",
+                    2 to "Home"
+                ).forEach { (index, label) ->
+                    CategoryChip(
+                        label = label,
+                        isSelected = startupScreenState == index,
+                        onClick = { viewModel.setStartupScreen(index) },
+                        isOled = isOled
+                    )
+                }
+            }
         }
 
         // Stream Settings Section
@@ -411,70 +494,6 @@ fun SettingsScreen(
                 onCheckedChange = { viewModel.setAutoPlayNextEpisode(it) },
                 isOled = isOled
             )
-        }
-
-        // Account Section
-        SettingsSection(
-            title = "Account",
-            icon = Icons.Default.Person,
-            isOled = isOled
-        ) {
-            if (isLoggedIn) {
-                val userName by viewModel.userName.collectAsState()
-                val userAvatar by viewModel.userAvatar.collectAsState()
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                ) {
-                    if (userAvatar != null) {
-                        AsyncImage(
-                            model = userAvatar,
-                            contentDescription = "User Avatar",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        userName ?: "Logged In",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = { viewModel.logout() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Log Out")
-                }
-            } else {
-                Button(
-                    onClick = { viewModel.loginWithAniList() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        painter = painterResource(id = com.blissless.anime.R.drawable.ic_anilist),
-                        contentDescription = "AniList",
-                        modifier = Modifier.size(20.dp),
-                        tint = Color.Unspecified
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Login with AniList")
-                }
-            }
         }
 
         // Thumbnail Preview Info Dialog

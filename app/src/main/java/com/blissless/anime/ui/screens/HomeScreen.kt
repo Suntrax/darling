@@ -212,11 +212,13 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.height(8.dp)); Text("Sign in with AniList to sync your anime list and track your progress", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                 Spacer(modifier = Modifier.height(20.dp))
                                 Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
-                                    Icon(
-                                        painter = painterResource(id = com.blissless.anime.R.drawable.ic_anilist),
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data("https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/AniList_logo.svg/960px-AniList_logo.svg.png")
+                                            .crossfade(true)
+                                            .build(),
                                         contentDescription = "AniList",
-                                        modifier = Modifier.size(20.dp),
-                                        tint = Color.Unspecified
+                                        modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) 

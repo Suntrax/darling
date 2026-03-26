@@ -195,13 +195,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
 
     val startupScreen by viewModel.startupScreen.collectAsState()
-    val pagerState = rememberPagerState(initialPage = 2, pageCount = { 4 })
-
-    LaunchedEffect(startupScreen) {
-        if (pagerState.currentPage != startupScreen) {
-            pagerState.scrollToPage(startupScreen)
-        }
-    }
+    val pagerState = rememberPagerState(initialPage = startupScreen, pageCount = { 4 })
 
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
