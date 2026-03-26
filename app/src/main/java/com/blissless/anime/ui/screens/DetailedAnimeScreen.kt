@@ -222,6 +222,7 @@ fun DetailedAnimeScreen(
                 if (shouldDismiss) {
                     scope.launch {
                         offsetY.animateTo(screenHeightPx, tween(180, easing = FastOutSlowInEasing))
+                        onDismiss()
                         onSwipeToClose()
                     }
                 } else {
@@ -427,7 +428,7 @@ fun DetailedAnimeScreen(
                             ) {
                                 Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isLoggedIn) "Start Watching" else "Start Watching (Local)", fontWeight = FontWeight.Medium)
+                                Text("Start Watching", fontWeight = FontWeight.Medium)
                             }
 
                             OutlinedButton(
