@@ -37,8 +37,10 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LOCAL_FAVORITES = "local_favorites"
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
         private const val KEY_HIDE_ADULT_CONTENT = "hide_adult_content"
+        private const val KEY_STARTUP_SCREEN = "startup_screen"
         private const val KEY_LAST_HOME_REFRESH = "last_home_refresh_time"
         private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
+        private const val KEY_LOCAL_ANIME_STATUS = "local_anime_status"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -100,11 +102,19 @@ class UserPreferences(private val context: Context) {
     private val _hideAdultContent = MutableStateFlow(false)
     val hideAdultContent: StateFlow<Boolean> = _hideAdultContent.asStateFlow()
 
+    // Startup Screen
+    private val _startupScreen = MutableStateFlow(2)
+    val startupScreen: StateFlow<Int> = _startupScreen.asStateFlow()
+
     // Local favorites
     private val _localFavorites = MutableStateFlow<Map<Int, StoredFavorite>>(emptyMap())
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> = _localFavorites.asStateFlow()
 
     val localFavoriteIds: Set<Int> get() = _localFavorites.value.keys
+
+    // Local anime status (for offline users)
+    private val _localAnimeStatus = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val localAnimeStatus: StateFlow<Map<Int, String>> = _localAnimeStatus.asStateFlow()
 
     /**
      * Load all preferences from SharedPreferences.
@@ -134,9 +144,13 @@ class UserPreferences(private val context: Context) {
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
+        _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
 
         // Load local favorites
         loadLocalFavorites()
+
+        // Load local anime status
+        loadLocalAnimeStatus()
 
     }
 
@@ -243,6 +257,11 @@ class UserPreferences(private val context: Context) {
     fun setHideAdultContent(enabled: Boolean) {
         _hideAdultContent.value = enabled
         sharedPreferences.edit { putBoolean(KEY_HIDE_ADULT_CONTENT, enabled) }
+    }
+
+    fun setStartupScreen(screen: Int) {
+        _startupScreen.value = screen
+        sharedPreferences.edit { putInt(KEY_STARTUP_SCREEN, screen) }
     }
 
     // ============================================
@@ -388,5 +407,44 @@ class UserPreferences(private val context: Context) {
     fun getLastExploreRefreshTime(): Long = sharedPreferences.getLong(KEY_LAST_EXPLORE_REFRESH, 0L)
     fun setLastExploreRefreshTime(time: Long) {
         sharedPreferences.edit { putLong(KEY_LAST_EXPLORE_REFRESH, time) }
+    }
+
+    // Local Anime Status (for offline users)
+    fun getLocalAnimeStatus(mediaId: Int): String? = _localAnimeStatus.value[mediaId]
+
+    fun setLocalAnimeStatus(mediaId: Int, status: String?) {
+        val currentStatus = _localAnimeStatus.value.toMutableMap()
+        if (status != null) {
+            currentStatus[mediaId] = status
+        } else {
+            currentStatus.remove(mediaId)
+        }
+        _localAnimeStatus.value = currentStatus
+        saveLocalAnimeStatus(currentStatus)
+    }
+
+    private fun saveLocalAnimeStatus(statusMap: Map<Int, String>) {
+        val statusList = statusMap.map { "${it.key}:${it.value}" }
+        val jsonString = statusList.joinToString("|")
+        sharedPreferences.edit { putString(KEY_LOCAL_ANIME_STATUS, jsonString) }
+    }
+
+    private fun loadLocalAnimeStatus() {
+        val saved = sharedPreferences.getString(KEY_LOCAL_ANIME_STATUS, null)
+        if (saved != null) {
+            try {
+                val statusList = saved.split("|").filter { it.contains(":") }
+                val statusMap = mutableMapOf<Int, String>()
+                statusList.forEach { entry ->
+                    val parts = entry.split(":", limit = 2)
+                    if (parts.size == 2) {
+                        parts[0].toIntOrNull()?.let { id -> statusMap[id] = parts[1] }
+                    }
+                }
+                _localAnimeStatus.value = statusMap
+            } catch (e: Exception) {
+                _localAnimeStatus.value = emptyMap()
+            }
+        }
     }
 }

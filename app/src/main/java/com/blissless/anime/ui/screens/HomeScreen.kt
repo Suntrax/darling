@@ -27,12 +27,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.data.models.StoredFavorite
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.ui.components.HomeAnimeHorizontalList
 import com.blissless.anime.dialogs.HomeAnimeInfoDialog
@@ -58,6 +60,8 @@ fun HomeScreen(
     simplifyAnimeDetails: Boolean = true,
     hideAdultContent: Boolean = false,
     favoriteIds: Set<Int> = emptySet(),
+    localFavorites: Map<Int, com.blissless.anime.data.models.StoredFavorite> = emptyMap(),
+    onToggleLocalFavorite: (Int) -> Unit = {},
     onToggleFavorite: (AnimeMedia) -> Unit = {},
     onPlayerStateChange: (Boolean) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
@@ -172,6 +176,27 @@ fun HomeScreen(
                 }
 
                 if (!isLoggedIn) {
+                    // Offline header with app icon and favorites count
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                            contentDescription = "App",
+                            modifier = Modifier.size(40.dp).clip(CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("My Anime", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            Text("${localFavorites.size} favorites", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { showSearchOverlay = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                        }
+                    }
                     // Login Card - centered on screen
                     Box(
                         modifier = Modifier
@@ -182,11 +207,20 @@ fun HomeScreen(
                     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
                         Box(modifier = Modifier.fillMaxWidth().background(Brush.horizontalGradient(colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)))).padding(24.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(modifier = Modifier.size(64.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary) }
+                                AsyncImage(model = com.blissless.anime.R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
                                 Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                                 Spacer(modifier = Modifier.height(8.dp)); Text("Sign in with AniList to sync your anime list and track your progress", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                 Spacer(modifier = Modifier.height(20.dp))
-                                Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(20.dp)); Spacer(modifier = Modifier.width(8.dp)); Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                                Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
+                                    Icon(
+                                        painter = painterResource(id = com.blissless.anime.R.drawable.ic_anilist),
+                                        contentDescription = "AniList",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = Color.Unspecified
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) 
+                                }
                                 Spacer(modifier = Modifier.height(12.dp)); Text("Don't have an account? Sign up for free at anilist.co", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -432,7 +466,6 @@ fun HomeScreen(
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
                 simplifyAnimeDetails = simplifyAnimeDetails,
-                hideAdultContent = hideAdultContent,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,
                 completed = completed,

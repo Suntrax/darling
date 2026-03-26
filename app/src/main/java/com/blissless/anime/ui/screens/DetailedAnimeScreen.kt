@@ -62,14 +62,19 @@ fun DetailedAnimeScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     currentStatus: String? = null,
+    localStatus: String? = null,
     isLoggedIn: Boolean = false,
     isFavorite: Boolean = false,
+    isLocalFavorite: Boolean = false,
     onDismiss: () -> Unit,
     onSwipeToClose: () -> Unit = {},
     onPlayEpisode: (Int) -> Unit = {},
     onUpdateStatus: (String?) -> Unit = {},
     onRemove: () -> Unit = {},
     onToggleFavorite: (DetailedAnimeData) -> Unit = {},
+    onToggleLocalFavorite: (Int) -> Unit = {},
+    onUpdateLocalStatus: (String?) -> Unit = {},
+    onRemoveLocalStatus: () -> Unit = {},
     onLoginClick: () -> Unit = {},
     onRelationClick: (AnimeRelation) -> Unit = {}
 ) {
@@ -85,7 +90,11 @@ fun DetailedAnimeScreen(
     var isTransitioning by remember { mutableStateOf(false) }
     var isStatusRateLimited by remember { mutableStateOf(false) }
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
-    
+
+    val effectiveStatus = if (isLoggedIn) currentStatus else localStatus
+    val effectiveOnUpdateStatus = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
+    val effectiveOnRemove = if (isLoggedIn) onRemove else onRemoveLocalStatus
+
     val scale by animateFloatAsState(
         targetValue = when {
             isTransitioning -> 0.95f
@@ -399,178 +408,192 @@ fun DetailedAnimeScreen(
                                 .padding(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (isLoggedIn) {
-                                Button(
-                                    onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Start Watching", fontWeight = FontWeight.Medium)
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        onToggleFavorite(displayData)
-                                        Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFFF1744).copy(alpha = 0.15f), contentColor = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Icon(
-                                        if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, null, Modifier.size(18.dp),
-                                        tint = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary
-                                    )
-                                }
+                            val notYetAired = displayData.status == "NOT_YET_RELEASED"
+                            val effectiveIsFavorite = if (isLoggedIn) isFavorite else isLocalFavorite
+                            val effectiveOnToggleFavorite: () -> Unit = if (isLoggedIn) {
+                                { onToggleFavorite(displayData) }
                             } else {
-                                Button(
-                                    onClick = onLoginClick,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Log in to AniList first", fontWeight = FontWeight.Medium)
-                                }
+                                { onToggleLocalFavorite(anime.id) }
+                            }
+
+                            Button(
+                                onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !notYetAired,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isLoggedIn) "Start Watching" else "Start Watching (Local)", fontWeight = FontWeight.Medium)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    effectiveOnToggleFavorite()
+                                    Toast.makeText(context, if (effectiveIsFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFFF1744).copy(alpha = 0.15f), contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(
+                                    if (effectiveIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, null, Modifier.size(18.dp),
+                                    tint = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
                 }
 
-                if (isLoggedIn) {
-                    item {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF121212).copy(alpha = 0.9f) else Color(0xFF1A1A1A).copy(alpha = 0.85f)
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.PlaylistAdd,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                item {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isOled) Color(0xFF121212).copy(alpha = 0.9f) else Color(0xFF1A1A1A).copy(alpha = 0.85f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.PlaylistAdd,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (isLoggedIn) "Add to List" else "Local List",
+                                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                                )
+                                if (!isLoggedIn) {
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Add to List", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    Text(
+                                        "(Offline)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                    )
                                 }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), currentStatus == "CURRENT") {
-                                        if (isStatusRateLimited) {
-                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val statusToCheck = if (isLoggedIn) currentStatus else localStatus
+                                val onUpdate = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
+                                val onRemoveStatus = if (isLoggedIn) onRemove else onRemoveLocalStatus
+
+                                StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), statusToCheck == "CURRENT") {
+                                    if (isStatusRateLimited) {
+                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isStatusRateLimited = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(3000)
+                                            isStatusRateLimited = false
+                                        }
+                                        if (statusToCheck == "CURRENT") {
+                                            onRemoveStatus()
+                                            Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            isStatusRateLimited = true
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(3000)
-                                                isStatusRateLimited = false
-                                            }
-                                            if (currentStatus == "CURRENT") {
-                                                onRemove()
-                                                Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                onUpdateStatus("CURRENT")
-                                                Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
-                                            }
+                                            onUpdate("CURRENT")
+                                            Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                    StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), currentStatus == "PLANNING") {
-                                        if (isStatusRateLimited) {
-                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                }
+                                StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), statusToCheck == "PLANNING") {
+                                    if (isStatusRateLimited) {
+                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isStatusRateLimited = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(3000)
+                                            isStatusRateLimited = false
+                                        }
+                                        if (statusToCheck == "PLANNING") {
+                                            onRemoveStatus()
+                                            Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            isStatusRateLimited = true
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(3000)
-                                                isStatusRateLimited = false
-                                            }
-                                            if (currentStatus == "PLANNING") {
-                                                onRemove()
-                                                Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                onUpdateStatus("PLANNING")
-                                                Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
-                                            }
+                                            onUpdate("PLANNING")
+                                            Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                    StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), currentStatus == "COMPLETED") {
-                                        if (isStatusRateLimited) {
-                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                }
+                                StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), statusToCheck == "COMPLETED") {
+                                    if (isStatusRateLimited) {
+                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isStatusRateLimited = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(3000)
+                                            isStatusRateLimited = false
+                                        }
+                                        if (statusToCheck == "COMPLETED") {
+                                            onRemoveStatus()
+                                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            isStatusRateLimited = true
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(3000)
-                                                isStatusRateLimited = false
-                                            }
-                                            if (currentStatus == "COMPLETED") {
-                                                onRemove()
-                                                Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                onUpdateStatus("COMPLETED")
-                                                Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
-                                            }
+                                            onUpdate("COMPLETED")
+                                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                    StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), currentStatus == "PAUSED") {
-                                        if (isStatusRateLimited) {
-                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                }
+                                StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), statusToCheck == "PAUSED") {
+                                    if (isStatusRateLimited) {
+                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isStatusRateLimited = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(3000)
+                                            isStatusRateLimited = false
+                                        }
+                                        if (statusToCheck == "PAUSED") {
+                                            onRemoveStatus()
+                                            Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            isStatusRateLimited = true
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(3000)
-                                                isStatusRateLimited = false
-                                            }
-                                            if (currentStatus == "PAUSED") {
-                                                onRemove()
-                                                Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                onUpdateStatus("PAUSED")
-                                                Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
-                                            }
+                                            onUpdate("PAUSED")
+                                            Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                    StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), currentStatus == "DROPPED") {
-                                        if (isStatusRateLimited) {
-                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                }
+                                StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), statusToCheck == "DROPPED") {
+                                    if (isStatusRateLimited) {
+                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isStatusRateLimited = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(3000)
+                                            isStatusRateLimited = false
+                                        }
+                                        if (statusToCheck == "DROPPED") {
+                                            onRemoveStatus()
+                                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            isStatusRateLimited = true
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(3000)
-                                                isStatusRateLimited = false
-                                            }
-                                            if (currentStatus == "DROPPED") {
-                                                onRemove()
-                                                Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                onUpdateStatus("DROPPED")
-                                                Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
-                                            }
+                                            onUpdate("DROPPED")
+                                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                    StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false) {
-                                        if (isStatusRateLimited) {
-                                            Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                }
+                                StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false) {
+                                    if (isStatusRateLimited) {
+                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        isStatusRateLimited = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(3000)
+                                            isStatusRateLimited = false
+                                        }
+                                        if (statusToCheck != null) {
+                                            onRemoveStatus()
+                                            Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            isStatusRateLimited = true
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(3000)
-                                                isStatusRateLimited = false
-                                            }
-                                            if (currentStatus != null) {
-                                                onRemove()
-                                                Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, "Anime not in list", Toast.LENGTH_SHORT).show()
-                                            }
+                                            Toast.makeText(context, "Anime not in list", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 }

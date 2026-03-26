@@ -147,8 +147,10 @@ class MainViewModel : ViewModel() {
     val autoPlayNextEpisode: StateFlow<Boolean> get() = userPreferences.autoPlayNextEpisode
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> get() = userPreferences.localFavorites
     val localFavoriteIds: Set<Int> get() = userPreferences.localFavoriteIds
+    val localAnimeStatus: StateFlow<Map<Int, String>> get() = userPreferences.localAnimeStatus
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
+    val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
 
     // Cache Delegations
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> get() = cacheManager.prefetchedStreams
@@ -399,8 +401,10 @@ class MainViewModel : ViewModel() {
     fun setEnableThumbnailPreview(enabled: Boolean) = userPreferences.setEnableThumbnailPreview(enabled)
     fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
     fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
+    fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
 
     // Favorites
+    fun toggleLocalFavorite(mediaId: Int) = userPreferences.toggleLocalFavorite(mediaId)
     fun toggleLocalFavorite(mediaId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) = userPreferences.toggleLocalFavorite(mediaId, title, cover, banner, year, averageScore)
     fun toggleLocalFavorite(anime: ExploreAnime) = userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
     fun toggleLocalFavorite(anime: AnimeMedia) = userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
@@ -408,6 +412,10 @@ class MainViewModel : ViewModel() {
     fun isLocalFavorite(mediaId: Int) = userPreferences.isLocalFavorite(mediaId)
     fun canAddFavorite() = userPreferences.canAddFavorite()
     fun getLocalFavoriteCount() = userPreferences.getLocalFavoriteCount()
+
+    // Local Anime Status (for offline users)
+    fun getLocalAnimeStatus(mediaId: Int): String? = userPreferences.getLocalAnimeStatus(mediaId)
+    fun setLocalAnimeStatus(mediaId: Int, status: String?) = userPreferences.setLocalAnimeStatus(mediaId, status)
 
     // Playback
     fun savePlaybackPosition(animeId: Int, episode: Int, position: Long) = cacheManager.savePlaybackPosition(animeId, episode, position)

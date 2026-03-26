@@ -194,7 +194,14 @@ fun MainScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val startupScreen by viewModel.startupScreen.collectAsState()
     val pagerState = rememberPagerState(initialPage = 2, pageCount = { 4 })
+
+    LaunchedEffect(startupScreen) {
+        if (pagerState.currentPage != startupScreen) {
+            pagerState.scrollToPage(startupScreen)
+        }
+    }
 
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
@@ -216,6 +223,9 @@ fun MainScreen(
 
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val aniListFavoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
+    val localFavorites by viewModel.localFavorites.collectAsState()
+    val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
+    val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     val playbackPositions by viewModel.playbackPositions.collectAsState()
 
@@ -937,6 +947,17 @@ fun MainScreen(
                 onToggleFavorite = { _ ->
                     viewModel.toggleAniListFavorite(exploreDialog.anime.id)
                 },
+                localStatus = localAnimeStatus[exploreDialog.anime.id],
+                isLocalFavorite = localFavoriteIds.contains(exploreDialog.anime.id),
+                onToggleLocalFavorite = { id ->
+                    viewModel.toggleLocalFavorite(id, exploreDialog.anime.title, exploreDialog.anime.cover, exploreDialog.anime.banner, exploreDialog.anime.year, exploreDialog.anime.averageScore)
+                },
+                onUpdateLocalStatus = { status ->
+                    viewModel.setLocalAnimeStatus(exploreDialog.anime.id, status)
+                },
+                onRemoveLocalStatus = {
+                    viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
+                },
                 isLoggedIn = isLoggedIn,
                 onLoginClick = { viewModel.loginWithAniList() },
                 onRelationClick = { relation ->
@@ -1148,6 +1169,8 @@ fun MainScreen(
                             simplifyAnimeDetails = simplifyAnimeDetails,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = aniListFavoriteIds,
+                            localFavorites = localFavorites,
+                            onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },

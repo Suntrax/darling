@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -83,6 +85,38 @@ fun SettingsScreen(
         )
 
         HorizontalDivider()
+
+        // General Section
+        val startupScreenState by viewModel.startupScreen.collectAsState()
+        SettingsSection(
+            title = "General",
+            icon = Icons.Default.Settings,
+            isOled = isOled
+        ) {
+            Text(
+                "Startup Screen",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    0 to "Schedule",
+                    1 to "Explore",
+                    2 to "Home"
+                ).forEach { (index, label) ->
+                    FilterChip(
+                        selected = startupScreenState == index,
+                        onClick = { viewModel.setStartupScreen(index) },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
 
         // Appearance Section
         SettingsSection(
@@ -431,6 +465,13 @@ fun SettingsScreen(
                     onClick = { viewModel.loginWithAniList() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    Icon(
+                        painter = painterResource(id = com.blissless.anime.R.drawable.ic_anilist),
+                        contentDescription = "AniList",
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.Unspecified
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Login with AniList")
                 }
             }
