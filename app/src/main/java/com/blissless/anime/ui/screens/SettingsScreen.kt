@@ -58,6 +58,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
@@ -137,10 +138,10 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedButton(
-                    onClick = { viewModel.logout() },
+                    onClick = { showLogoutConfirmation = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Log Out")
+                    Text("Log Out From AniList")
                 }
             } else {
                 Button(
@@ -529,6 +530,29 @@ fun SettingsScreen(
                 }
             )
         }
+    }
+
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { Text("Logout") },
+            text = { Text("Are you sure you want to logout from AniList?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.logout()
+                        showLogoutConfirmation = false
+                    }
+                ) {
+                    Text("Logout")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

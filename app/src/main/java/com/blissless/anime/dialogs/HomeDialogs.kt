@@ -107,7 +107,6 @@ fun HomeAnimeInfoDialog(
                         selectedStatus = status
                         markedForRemoval = false
                         showAnimation = true
-                        Toast.makeText(context, "Status updated", Toast.LENGTH_SHORT).show()
                         onUpdateStatus(status)
                     },
                     onRemoveToggled = {
@@ -123,7 +122,6 @@ fun HomeAnimeInfoDialog(
                         Button(
                             onClick = {
                                 onToggleFavorite()
-                                Toast.makeText(context, "Removed from Favorites", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(10.dp),
@@ -174,7 +172,7 @@ fun HomeAnimeInfoDialog(
 
                 if (markedForRemoval) {
                     Button(
-                        onClick = { Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show(); onRemove() },
+                        onClick = { onRemove() },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
@@ -339,7 +337,7 @@ fun HomeAnimeStatusDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        if (markedForRemoval) { Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show(); onRemove() }
+                        if (markedForRemoval) { onRemove() }
                         else { val progress = selectedProgress.toIntOrNull(); onUpdate(selectedStatus, progress) }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),

@@ -214,11 +214,6 @@ fun ExploreAnimeCard(
                         FilledTonalIconButton(
                             onClick = {
                                 showAnimation = true
-                                if (currentStatus != null) {
-                                    Toast.makeText(context, "Removed from ${StatusLabels[currentStatus]}", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
-                                }
                                 onBookmarkClick()
                             },
                             modifier = Modifier

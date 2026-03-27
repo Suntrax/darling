@@ -2,8 +2,10 @@ package com.blissless.anime.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,9 +13,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,38 +61,52 @@ fun FeaturedCarousel(
     val scope = rememberCoroutineScope()
     val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
     var autoScrollJob by remember { mutableStateOf<Job?>(null) }
-    var previousPage by remember { mutableIntStateOf(pagerState.currentPage) }
     var headerVisible by remember { mutableStateOf(false) }
+    var pageWhenScrollStarted by remember { mutableIntStateOf(pagerState.currentPage) }
+    var isHeaderSwiping by remember { mutableStateOf(false) }
+    var timerResetSignal by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         delay(300)
         headerVisible = true
     }
 
-    LaunchedEffect(pagerState.currentPage, isDragged) {
-        if (previousPage != pagerState.currentPage && !isDragged) {
+    LaunchedEffect(pagerState.isScrollInProgress, pagerState.currentPageOffsetFraction) {
+        if (pagerState.isScrollInProgress) {
+            pageWhenScrollStarted = pagerState.currentPage
+        } else if (pagerState.currentPage != pageWhenScrollStarted) {
             headerVisible = false
-            delay(150)
+            delay(80)
             headerVisible = true
-            previousPage = pagerState.currentPage
+            pageWhenScrollStarted = pagerState.currentPage
         }
     }
 
-    LaunchedEffect(autoScrollEnabled, isVisible, isDragged) {
-        if (autoScrollEnabled && isVisible && !isDragged) {
+    LaunchedEffect(isDragged) {
+        if (isDragged) {
+            timerResetSignal++
+        }
+    }
+
+    LaunchedEffect(autoScrollEnabled, isVisible, isHeaderSwiping, timerResetSignal) {
+        if (autoScrollEnabled && isVisible && !isHeaderSwiping) {
             while (true) {
                 delay(4000)
-                if (isDragged) break
+                if (isHeaderSwiping) continue
 
+                val currentPage = pagerState.currentPage
+                headerVisible = false
+                delay(80)
+                headerVisible = true
+                
                 autoScrollJob = scope.launch {
                     try {
-                        pagerState.animateScrollToPage(
-                            pagerState.currentPage + 1,
-                            animationSpec = tween(800, easing = FastOutSlowInEasing)
-                        )
+                        pagerState.animateScrollToPage(pagerState.currentPage + 1)
                     } catch (_: Exception) {}
                 }
                 autoScrollJob?.join()
+                
+                delay(300)
             }
         }
     }
@@ -156,6 +174,46 @@ fun FeaturedCarousel(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            var totalDragX = 0f
+                            var hasTriggeredSwipe = false
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    totalDragX = 0f
+                                    hasTriggeredSwipe = false
+                                    isHeaderSwiping = true
+                                },
+                                onDragEnd = {
+                                    totalDragX = 0f
+                                    isHeaderSwiping = false
+                                },
+                                onDragCancel = {
+                                    totalDragX = 0f
+                                    isHeaderSwiping = false
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDragX += dragAmount
+                                    val threshold = 50f
+                                    if (!hasTriggeredSwipe) {
+                                        if (totalDragX > threshold) {
+                                            scope.launch {
+                                                try {
+                                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                                } catch (_: Exception) {}
+                                            }
+                                            hasTriggeredSwipe = true
+                                        } else if (totalDragX < -threshold) {
+                                            scope.launch {
+                                                try {
+                                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                                } catch (_: Exception) {}
+                                            }
+                                            hasTriggeredSwipe = true
+                                        }
+                                    }
+                                }
+                            )
+                        }
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null

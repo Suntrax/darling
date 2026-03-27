@@ -717,7 +717,6 @@ fun SearchAnimeDetailDialog(
                         onClick = {
                             selectedStatus = "CURRENT"
                             showAnimation = true
-                            Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
                             onUpdateStatus("CURRENT")
                         },
                         modifier = Modifier
@@ -733,7 +732,6 @@ fun SearchAnimeDetailDialog(
                         onClick = {
                             selectedStatus = "PLANNING"
                             showAnimation = true
-                            Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
                             onUpdateStatus("PLANNING")
                         },
                         modifier = Modifier
@@ -757,8 +755,6 @@ fun SearchAnimeDetailDialog(
                         onClick = {
                             selectedStatus = "COMPLETED"
                             showAnimation = true
-                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT)
-                                .show()
                             onUpdateStatus("COMPLETED")
                         },
                         modifier = Modifier
@@ -774,7 +770,6 @@ fun SearchAnimeDetailDialog(
                         onClick = {
                             selectedStatus = "PAUSED"
                             showAnimation = true
-                            Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
                             onUpdateStatus("PAUSED")
                         },
                         modifier = Modifier
@@ -798,7 +793,6 @@ fun SearchAnimeDetailDialog(
                         onClick = {
                             selectedStatus = "DROPPED"
                             showAnimation = true
-                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
                             onUpdateStatus("DROPPED")
                         },
                         modifier = Modifier
@@ -811,7 +805,6 @@ fun SearchAnimeDetailDialog(
                         Button(
                             onClick = {
                                 selectedStatus = ""
-                                Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
                                 onRemove()
                             },
                             modifier = Modifier

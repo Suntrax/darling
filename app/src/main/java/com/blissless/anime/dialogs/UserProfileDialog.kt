@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 
 import androidx.compose.material3.*
@@ -70,6 +71,7 @@ fun UserProfileDialog(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Favorites", "History")
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
     
     LaunchedEffect(selectedTab) {
         dragOffset = 0f
@@ -86,13 +88,6 @@ fun UserProfileDialog(
         if (userId != null) {
             viewModel.fetchUserActivity()
             viewModel.fetchAniListFavorites()
-        }
-    }
-
-    val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
-    LaunchedEffect(isFavoriteRateLimited) {
-        if (isFavoriteRateLimited) {
-            Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -147,6 +142,9 @@ fun UserProfileDialog(
                         )
                     }
                     Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = { showLogoutConfirmation = true }) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, "Logout", tint = Color.White)
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, "Close", tint = Color.White)
                     }
@@ -295,6 +293,30 @@ fun UserProfileDialog(
             }
         }
     }
+
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { Text("Logout") },
+            text = { Text("Are you sure you want to logout from AniList?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.logout()
+                        showLogoutConfirmation = false
+                        onDismiss()
+                    }
+                ) {
+                    Text("Logout")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -371,7 +393,6 @@ private fun FavoritesTab(
                         },
                         onRemove = {
                             viewModel.toggleAniListFavorite(fav.id)
-                            Toast.makeText(context, "Removed from favorites", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }

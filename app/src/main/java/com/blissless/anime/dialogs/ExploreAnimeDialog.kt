@@ -118,7 +118,6 @@ fun ExploreAnimeDialog(
                         Button(
                             onClick = {
                                 onToggleFavorite()
-                                Toast.makeText(context, "Removed from Favorites", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(10.dp),
@@ -135,7 +134,6 @@ fun ExploreAnimeDialog(
                         OutlinedButton(
                             onClick = {
                                 onToggleFavorite()
-                                Toast.makeText(context, "Added to Favorites", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(10.dp)

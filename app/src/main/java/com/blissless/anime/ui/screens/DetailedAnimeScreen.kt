@@ -90,7 +90,7 @@ fun DetailedAnimeScreen(
     var isVisible by remember { mutableStateOf(false) }
     var previousAnimeId by remember { mutableIntStateOf(anime.id) }
     var isTransitioning by remember { mutableStateOf(false) }
-    var isStatusRateLimited by remember { mutableStateOf(false) }
+
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
 
     val localFavorites by viewModel.localFavorites.collectAsState()
@@ -442,7 +442,6 @@ fun DetailedAnimeScreen(
                                 onClick = {
                                     if (isLoggedIn) {
                                         onToggleFavorite(displayData)
-                                        Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
                                     } else {
                                         viewModel.toggleOfflineFavorite(
                                             anime.id,
@@ -452,7 +451,6 @@ fun DetailedAnimeScreen(
                                             anime.year,
                                             anime.averageScore
                                         )
-                                        Toast.makeText(context, if (effectiveLocalFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -532,110 +530,43 @@ fun DetailedAnimeScreen(
                                 }
 
                                 StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), statusToCheck == "CURRENT") {
-                                    if (isStatusRateLimited) {
-                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    if (statusToCheck == "CURRENT") {
+                                        onRemoveStatus()
                                     } else {
-                                        isStatusRateLimited = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(3000)
-                                            isStatusRateLimited = false
-                                        }
-                                        if (statusToCheck == "CURRENT") {
-                                            onRemoveStatus()
-                                            Toast.makeText(context, "Removed from Watching", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            onUpdate("CURRENT")
-                                            Toast.makeText(context, "Added to Watching", Toast.LENGTH_SHORT).show()
-                                        }
+                                        onUpdate("CURRENT")
                                     }
                                 }
                                 StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), statusToCheck == "PLANNING") {
-                                    if (isStatusRateLimited) {
-                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    if (statusToCheck == "PLANNING") {
+                                        onRemoveStatus()
                                     } else {
-                                        isStatusRateLimited = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(3000)
-                                            isStatusRateLimited = false
-                                        }
-                                        if (statusToCheck == "PLANNING") {
-                                            onRemoveStatus()
-                                            Toast.makeText(context, "Removed from Planning", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            onUpdate("PLANNING")
-                                            Toast.makeText(context, "Added to Planning", Toast.LENGTH_SHORT).show()
-                                        }
+                                        onUpdate("PLANNING")
                                     }
                                 }
                                 StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), statusToCheck == "COMPLETED") {
-                                    if (isStatusRateLimited) {
-                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    if (statusToCheck == "COMPLETED") {
+                                        onRemoveStatus()
                                     } else {
-                                        isStatusRateLimited = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(3000)
-                                            isStatusRateLimited = false
-                                        }
-                                        if (statusToCheck == "COMPLETED") {
-                                            onRemoveStatus()
-                                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            onUpdate("COMPLETED")
-                                            Toast.makeText(context, "Marked as Completed", Toast.LENGTH_SHORT).show()
-                                        }
+                                        onUpdate("COMPLETED")
                                     }
                                 }
                                 StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), statusToCheck == "PAUSED") {
-                                    if (isStatusRateLimited) {
-                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    if (statusToCheck == "PAUSED") {
+                                        onRemoveStatus()
                                     } else {
-                                        isStatusRateLimited = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(3000)
-                                            isStatusRateLimited = false
-                                        }
-                                        if (statusToCheck == "PAUSED") {
-                                            onRemoveStatus()
-                                            Toast.makeText(context, "Removed from On Hold", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            onUpdate("PAUSED")
-                                            Toast.makeText(context, "Added to On Hold", Toast.LENGTH_SHORT).show()
-                                        }
+                                        onUpdate("PAUSED")
                                     }
                                 }
                                 StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), statusToCheck == "DROPPED") {
-                                    if (isStatusRateLimited) {
-                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
+                                    if (statusToCheck == "DROPPED") {
+                                        onRemoveStatus()
                                     } else {
-                                        isStatusRateLimited = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(3000)
-                                            isStatusRateLimited = false
-                                        }
-                                        if (statusToCheck == "DROPPED") {
-                                            onRemoveStatus()
-                                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            onUpdate("DROPPED")
-                                            Toast.makeText(context, "Marked as Dropped", Toast.LENGTH_SHORT).show()
-                                        }
+                                        onUpdate("DROPPED")
                                     }
                                 }
                                 StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false) {
-                                    if (isStatusRateLimited) {
-                                        Toast.makeText(context, "Please wait before changing again", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        isStatusRateLimited = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(3000)
-                                            isStatusRateLimited = false
-                                        }
-                                        if (statusToCheck != null) {
-                                            onRemoveStatus()
-                                            Toast.makeText(context, "Removed from list", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Anime not in list", Toast.LENGTH_SHORT).show()
-                                        }
+                                    if (statusToCheck != null) {
+                                        onRemoveStatus()
                                     }
                                 }
                             }
