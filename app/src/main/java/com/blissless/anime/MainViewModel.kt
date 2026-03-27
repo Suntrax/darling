@@ -219,6 +219,12 @@ class MainViewModel : ViewModel() {
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
+    
+    // Buffer Settings
+    val bufferAheadSeconds: StateFlow<Int> get() = userPreferences.bufferAheadSeconds
+    val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
+    val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
+    val loadFullEpisode: StateFlow<Boolean> get() = userPreferences.loadFullEpisode
 
     // Cache Delegations
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> get() = cacheManager.prefetchedStreams
@@ -232,6 +238,9 @@ class MainViewModel : ViewModel() {
         cacheManager = CacheManager(userPreferences.getSharedPreferences())
         repository = AnimeRepository(userPreferences, cacheManager)
 
+        // Initialize video cache for offline playback
+        cacheManager.initializeVideoCache(context)
+
         userPreferences.loadPreferences(hasToken)
         cacheManager.loadStreamCache()
         cacheManager.loadPlaybackPositions()
@@ -239,7 +248,11 @@ class MainViewModel : ViewModel() {
         updateOfflineLists()
 
         viewModelScope.launch {
-            if (hasToken) loadHomeDataWithCache()
+            if (hasToken) {
+                loadHomeDataWithCache()
+            } else {
+                prefetchOfflineWatchingStreams()
+            }
             loadExploreDataWithCache()
             fetchAiringSchedule()
         }
@@ -323,6 +336,9 @@ class MainViewModel : ViewModel() {
         _offlineCompleted.value = completed.sortedByDescending { it.averageScore ?: 0 }
         _offlineOnHold.value = onHold.sortedByDescending { it.averageScore ?: 0 }
         _offlineDropped.value = dropped.sortedByDescending { it.averageScore ?: 0 }
+        
+        // Prefetch streams for offline "Continue Watching" list
+        prefetchOfflineWatchingStreams()
     }
 
     private suspend fun loadHomeDataWithCache() {
@@ -739,6 +755,10 @@ class MainViewModel : ViewModel() {
     fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
     fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
     fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
+    fun setBufferAheadSeconds(seconds: Int) = userPreferences.setBufferAheadSeconds(seconds)
+    fun setBufferSizeMb(sizeMb: Int) = userPreferences.setBufferSizeMb(sizeMb)
+    fun setShowBufferIndicator(show: Boolean) = userPreferences.setShowBufferIndicator(show)
+    fun setLoadFullEpisode(enabled: Boolean) = userPreferences.setLoadFullEpisode(enabled)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {
@@ -1116,6 +1136,34 @@ class MainViewModel : ViewModel() {
      */
     private fun prefetchContinueWatchingStreams() {
         val watchingList = _currentlyWatching.value
+        if (watchingList.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            watchingList.forEach { anime ->
+                val nextEp = anime.progress + 1
+                val latest = anime.latestEpisode ?: anime.totalEpisodes
+
+                // Skip if no more episodes to watch OR if episode not yet released
+                if ((latest > 0 && nextEp > latest) || (anime.totalEpisodes > 0 && nextEp > anime.totalEpisodes)) {
+                    return@forEach
+                }
+
+                // Use English title for scraping
+                val scrapingName = getScrapingName(anime)
+
+                // Prefetch BOTH sub and dub
+                listOf("sub", "dub").forEach { category ->
+                    val cacheKey = "${anime.id}_${nextEp}_$category"
+                    if (!cacheManager.hasStream(cacheKey)) {
+                        tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun prefetchOfflineWatchingStreams() {
+        val watchingList = _offlineCurrentlyWatching.value
         if (watchingList.isEmpty()) return
 
         viewModelScope.launch(Dispatchers.IO) {

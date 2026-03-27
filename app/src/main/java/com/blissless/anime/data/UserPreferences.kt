@@ -41,6 +41,10 @@ class UserPreferences(private val context: Context) {
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
         private const val KEY_HIDE_ADULT_CONTENT = "hide_adult_content"
         private const val KEY_STARTUP_SCREEN = "startup_screen"
+        private const val KEY_BUFFER_AHEAD_SECONDS = "buffer_ahead_seconds"
+        private const val KEY_BUFFER_SIZE_MB = "buffer_size_mb"
+        private const val KEY_SHOW_BUFFER_INDICATOR = "show_buffer_indicator"
+        private const val KEY_LOAD_FULL_EPISODE = "load_full_episode"
         private const val KEY_LAST_HOME_REFRESH = "last_home_refresh_time"
         private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
         private const val KEY_LOCAL_ANIME_STATUS = "local_anime_status"
@@ -114,6 +118,19 @@ class UserPreferences(private val context: Context) {
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
     val startupScreen: StateFlow<Int> = _startupScreen.asStateFlow()
+    
+    // Buffer Settings
+    private val _bufferAheadSeconds = MutableStateFlow(30)
+    val bufferAheadSeconds: StateFlow<Int> = _bufferAheadSeconds.asStateFlow()
+    
+    private val _bufferSizeMb = MutableStateFlow(100)
+    val bufferSizeMb: StateFlow<Int> = _bufferSizeMb.asStateFlow()
+    
+    private val _showBufferIndicator = MutableStateFlow(true)
+    val showBufferIndicator: StateFlow<Boolean> = _showBufferIndicator.asStateFlow()
+    
+    private val _loadFullEpisode = MutableStateFlow(false)
+    val loadFullEpisode: StateFlow<Boolean> = _loadFullEpisode.asStateFlow()
 
     // Local favorites
     private val _localFavorites = MutableStateFlow<Map<Int, StoredFavorite>>(emptyMap())
@@ -156,6 +173,10 @@ class UserPreferences(private val context: Context) {
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
+        _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 30)
+        _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 100)
+        _showBufferIndicator.value = sharedPreferences.getBoolean(KEY_SHOW_BUFFER_INDICATOR, true)
+        _loadFullEpisode.value = sharedPreferences.getBoolean(KEY_LOAD_FULL_EPISODE, false)
 
         // Load local favorites
         loadLocalFavorites()
@@ -283,6 +304,30 @@ class UserPreferences(private val context: Context) {
     fun setStartupScreen(screen: Int) {
         _startupScreen.value = screen
         sharedPreferences.edit { putInt(KEY_STARTUP_SCREEN, screen) }
+    }
+
+    // ============================================
+    // Buffer Settings
+    // ============================================
+    
+    fun setBufferAheadSeconds(seconds: Int) {
+        _bufferAheadSeconds.value = seconds
+        sharedPreferences.edit { putInt(KEY_BUFFER_AHEAD_SECONDS, seconds) }
+    }
+    
+    fun setBufferSizeMb(sizeMb: Int) {
+        _bufferSizeMb.value = sizeMb
+        sharedPreferences.edit { putInt(KEY_BUFFER_SIZE_MB, sizeMb) }
+    }
+    
+    fun setShowBufferIndicator(show: Boolean) {
+        _showBufferIndicator.value = show
+        sharedPreferences.edit { putBoolean(KEY_SHOW_BUFFER_INDICATOR, show) }
+    }
+    
+    fun setLoadFullEpisode(enabled: Boolean) {
+        _loadFullEpisode.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_LOAD_FULL_EPISODE, enabled) }
     }
 
     // ============================================

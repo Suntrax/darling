@@ -1,6 +1,14 @@
 package com.blissless.anime.data
 
+import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.datasource.DefaultHttpDataSource
 import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.ServerInfo
@@ -11,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import androidx.core.content.edit
+import java.io.File
 
 class CacheManager(private val sharedPreferences: SharedPreferences) {
 
@@ -28,6 +37,62 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         private const val CACHE_AIRING_TIME = "cache_airing_time"
         private const val CACHE_AIRING_DATA = "cache_airing_data"
         private const val CACHE_PLAYBACK_POSITIONS = "cache_playback_positions"
+        
+        // Video cache settings
+        private const val VIDEO_CACHE_SIZE_BYTES = 500L * 1024 * 1024 // 500 MB default
+        private var videoCache: SimpleCache? = null
+        private var isCacheInitialized = false
+    }
+
+    // Initialize video cache - call this once when app starts
+    @OptIn(UnstableApi::class)
+    fun initializeVideoCache(context: Context) {
+        if (isCacheInitialized) return
+        
+        try {
+            val cacheDir = File(context.cacheDir, "video_cache")
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
+            }
+            val evictor = LeastRecentlyUsedCacheEvictor(VIDEO_CACHE_SIZE_BYTES)
+            val databaseProvider = StandaloneDatabaseProvider(context)
+            videoCache = SimpleCache(cacheDir, evictor, databaseProvider)
+            isCacheInitialized = true
+        } catch (e: Exception) {
+            // Cache initialization failed, continue without caching
+        }
+    }
+    
+    // Get a CacheDataSource.Factory that uses the video cache
+    @OptIn(UnstableApi::class)
+    fun getCacheDataSourceFactory(referer: String): CacheDataSource.Factory? {
+        val cache = videoCache ?: return null
+        
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setConnectTimeoutMs(20000)
+            .setReadTimeoutMs(20000)
+            .setDefaultRequestProperties(mapOf("Referer" to referer))
+        
+        return CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(httpDataSourceFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+    
+    // Get the raw SimpleCache for direct access if needed
+    @OptIn(UnstableApi::class)
+    fun getVideoCache(): SimpleCache? = videoCache
+    
+    // Release the cache when app closes
+    @OptIn(UnstableApi::class)
+    fun releaseVideoCache() {
+        try {
+            videoCache?.release()
+            videoCache = null
+            isCacheInitialized = false
+        } catch (e: Exception) {
+            // Ignore errors during release
+        }
     }
 
     private val json = Json {

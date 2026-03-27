@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -70,6 +71,12 @@ fun SettingsScreen(
     // Ensure Animekai is always the selected scraper (only working option)
     val preferredScraperState = rawPreferredScraper.ifBlank { "Animekai" }
     val hideAdultContentState by viewModel.hideAdultContent.collectAsState(initial = false)
+    
+    // Buffer Settings
+    val bufferAheadSeconds by viewModel.bufferAheadSeconds.collectAsState(initial = 30)
+    val bufferSizeMb by viewModel.bufferSizeMb.collectAsState(initial = 100)
+    val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
+    val loadFullEpisode by viewModel.loadFullEpisode.collectAsState(initial = false)
 
     // Track thumbnail preview state for showing info dialog
     var showThumbnailInfoDialog by remember { mutableStateOf(false) }
@@ -289,10 +296,10 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             SettingsToggle(
-                title = "Prevent Schedule Auto-Sync",
-                description = "Don't automatically sync airing schedule when opening",
-                checked = preventScheduleSync,
-                onCheckedChange = { viewModel.setPreventScheduleSync(it) },
+                title = "Auto Sync in Airing Schedule",
+                description = "Automatically sync airing schedule when opening",
+                checked = !preventScheduleSync,
+                onCheckedChange = { viewModel.setPreventScheduleSync(!it) },
                 isOled = isOled
             )
         }
@@ -413,6 +420,107 @@ fun SettingsScreen(
                         isOled = isOled,
                         enabled = true,
                         disableMaterialColors = disableMaterialColors
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Buffer Settings Card - Stand out with background
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = if (isOled) Color(0xFF1E1E1E) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                tonalElevation = if (isOled) 0.dp else 2.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    // Buffer Settings Header
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Memory,
+                            contentDescription = null,
+                            tint = Color(0xFF00BCD4),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            "Buffer Settings",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00BCD4)
+                        )
+                    }
+                    Text(
+                        "Control video buffering behavior",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Load Full Episode Toggle
+                    SettingsToggle(
+                        title = "Load Full Episode",
+                        description = "Buffer the entire episode before playing (saves data but uses more storage)",
+                        checked = loadFullEpisode,
+                        onCheckedChange = { viewModel.setLoadFullEpisode(it) },
+                        isOled = isOled
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Buffer Ahead Slider (disabled when Load Full Episode is on)
+                    val isBufferLimited = !loadFullEpisode
+                    Column(
+                        modifier = if (!isBufferLimited) Modifier.alpha(0.4f) else Modifier
+                    ) {
+                        SettingsSlider(
+                            title = "Buffer Ahead",
+                            description = "Amount of video to buffer ahead of playback",
+                            value = bufferAheadSeconds.toFloat(),
+                            valueRange = 15f..120f,
+                            valueLabel = "${bufferAheadSeconds}s",
+                            onValueChange = { newValue ->
+                                val snapped = round(newValue / 5f) * 5f
+                                viewModel.setBufferAheadSeconds(snapped.toInt())
+                            },
+                            isOled = isOled,
+                            minLabel = "15s",
+                            maxLabel = "120s",
+                            leadingIcon = Icons.Default.PlayArrow
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SettingsSlider(
+                            title = "Max Buffer Size",
+                            description = "Maximum amount of data to buffer (approximate)",
+                            value = bufferSizeMb.toFloat(),
+                            valueRange = 50f..500f,
+                            valueLabel = "${bufferSizeMb}MB",
+                            onValueChange = { newValue ->
+                                val snapped = round(newValue / 25f) * 25f
+                                viewModel.setBufferSizeMb(snapped.toInt())
+                            },
+                            isOled = isOled,
+                            minLabel = "50MB",
+                            maxLabel = "500MB",
+                            leadingIcon = Icons.Default.Settings
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    SettingsToggle(
+                        title = "Show Buffer Indicator",
+                        description = "Display buffered amount on the progress bar",
+                        checked = showBufferIndicator,
+                        onCheckedChange = { viewModel.setShowBufferIndicator(it) },
+                        isOled = isOled
                     )
                 }
             }

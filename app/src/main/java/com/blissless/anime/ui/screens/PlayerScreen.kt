@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -50,6 +51,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
@@ -99,6 +101,9 @@ fun PlayerScreen(
     currentQuality: String = "Auto",
     isLatestEpisode: Boolean = false,
     disableMaterialColors: Boolean = false,
+    showBufferIndicator: Boolean = true,
+    loadFullEpisode: Boolean = false,
+    bufferAheadSeconds: Int = 30,
     animekaiIntroStart: Int? = null,
     animekaiIntroEnd: Int? = null,
     animekaiOutroStart: Int? = null,
@@ -133,6 +138,8 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(true) }
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
+    var bufferedPosition by remember { mutableLongStateOf(0L) }
+    var maxBufferedPosition by remember { mutableLongStateOf(0L) }
     var showServerMenu by remember { mutableStateOf(false) }
     var showQualityMenu by remember { mutableStateOf(false) }
 
@@ -233,7 +240,29 @@ fun PlayerScreen(
         }
     }
 
-    val exoPlayer = remember {
+    val exoPlayer = remember(context, loadFullEpisode, bufferAheadSeconds) {
+        val bufferAheadMs = bufferAheadSeconds * 1000
+        val loadControl = if (loadFullEpisode) {
+            DefaultLoadControl.Builder()
+                .setBackBuffer(Integer.MAX_VALUE, true)
+                .setBufferDurationsMs(
+                    Integer.MAX_VALUE, // minBufferMs - buffer at least this much before playing
+                    Integer.MAX_VALUE, // maxBufferMs - buffer as much as possible
+                    0, // bufferForPlaybackMs - start immediately
+                    0  // bufferForPlaybackAfterRebufferMs - restart immediately after rebuffer
+                )
+                .build()
+        } else {
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    bufferAheadMs, // minBufferMs - buffer this much before playing
+                    bufferAheadMs + 30000, // maxBufferMs - buffer a bit more than ahead
+                    1500, // bufferForPlaybackMs - start playing after this much
+                    3000  // bufferForPlaybackAfterRebufferMs - resume after rebuffer
+                )
+                .build()
+        }
+        
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(context).setDataSourceFactory(
@@ -243,6 +272,7 @@ fun PlayerScreen(
                         .setDefaultRequestProperties(mapOf("Referer" to referer))
                 )
             )
+            .setLoadControl(loadControl)
             .build()
             .apply {
                 addListener(object : Player.Listener {
@@ -293,6 +323,8 @@ fun PlayerScreen(
         hasTriggeredPrefetch = false
         isChangingServer = false
         hasPlaybackStarted = false
+        bufferedPosition = 0L
+        maxBufferedPosition = 0L
 
         val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl)
@@ -364,6 +396,12 @@ fun PlayerScreen(
             if (!isDragging) {
                 currentPosition = exoPlayer.currentPosition
                 duration = exoPlayer.duration
+                // Get buffered position from ExoPlayer
+                bufferedPosition = exoPlayer.bufferedPosition
+                // Track max buffer position to preserve buffer when scrubbing back
+                if (bufferedPosition > maxBufferedPosition) {
+                    maxBufferedPosition = bufferedPosition
+                }
                 if (duration > 0) {
                     sliderValue = currentPosition.toFloat()
                     if (actualEpisodeLength == null && duration > 60000 && exoPlayer.playbackState == Player.STATE_READY) {
@@ -1051,35 +1089,84 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .drawBehind {
                                 val sliderWidth = size.width
-                                val trackHeight = 12.dp.toPx()
+                                val trackHeight = 8.dp.toPx()
                                 val trackTop = (size.height - trackHeight) / 2f
-                                val cornerRadius = 6.dp.toPx()
+                                val cornerRadius = 4.dp.toPx()
+                                val thumbRadius = 8.dp.toPx()
 
-                                if (introStartRatio != null && introEndRatio != null) {
-                                    val startX = introStartRatio * sliderWidth
-                                    val endX = introEndRatio * sliderWidth
+                                if (duration > 0) {
+                                    val progressRatio = currentPosition.toFloat() / duration
+                                    val bufferedRatio = maxBufferedPosition.toFloat() / duration
+                                    
+                                    // Draw inactive track (entire track background)
                                     drawRoundRect(
-                                        color = Color(0xFF505050),
-                                        topLeft = Offset(startX, trackTop),
-                                        size = Size(endX - startX, trackHeight),
-                                        cornerRadius = CornerRadius(if (introStartRatio < 0.05f) cornerRadius else 2.dp.toPx())
+                                        color = Color.White.copy(alpha = 0.3f),
+                                        topLeft = Offset(0f, trackTop),
+                                        size = Size(sliderWidth, trackHeight),
+                                        cornerRadius = CornerRadius(cornerRadius)
                                     )
-                                }
+                                    
+                                    // Draw buffer indicator (if enabled and has buffered content) - darker white
+                                    if (showBufferIndicator && maxBufferedPosition > currentPosition) {
+                                        val bufferStartX = progressRatio * sliderWidth
+                                        val bufferEndX = bufferedRatio * sliderWidth
+                                        drawRoundRect(
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            topLeft = Offset(bufferStartX, trackTop),
+                                            size = Size(bufferEndX - bufferStartX, trackHeight),
+                                            cornerRadius = CornerRadius(2.dp.toPx())
+                                        )
+                                    }
+                                    
+                                    // Draw active track (played portion) first
+                                    val progressX = progressRatio * sliderWidth
+                                    drawRoundRect(
+                                        color = Color.White,
+                                        topLeft = Offset(0f, trackTop),
+                                        size = Size(progressX.coerceAtLeast(thumbRadius), trackHeight),
+                                        cornerRadius = CornerRadius(cornerRadius)
+                                    )
+                                    
+                                    // Draw intro/credits overlay ON TOP using BlendMode.Multiply to show through white
+                                    if (introStartRatio != null && introEndRatio != null) {
+                                        val introStartX = introStartRatio * sliderWidth
+                                        val introEndX = introEndRatio * sliderWidth
+                                        val introWidth = introEndX - introStartX
+                                        if (introWidth > 0) {
+                                            val leftRadius = if (introStartX < 10f) cornerRadius else 2.dp.toPx()
+                                            val rightRadius = if (introEndX > sliderWidth - 10f) cornerRadius else 2.dp.toPx()
+                                            drawRoundRect(
+                                                color = Color(0xFFFF9800), // Full opacity, BlendMode.Multiply will show through
+                                                topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
+                                                size = Size(
+                                                    introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
+                                                    trackHeight
+                                                ),
+                                                cornerRadius = CornerRadius(leftRadius, rightRadius),
+                                                blendMode = BlendMode.Multiply
+                                            )
+                                        }
+                                    }
 
-                                if (creditsStartRatio != null) {
-                                    val startX = creditsStartRatio * sliderWidth
-                                    drawRoundRect(
-                                        color = Color(0xFF505050),
-                                        topLeft = Offset(startX, trackTop),
-                                        size = Size(sliderWidth - startX, trackHeight),
-                                        cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius)
-                                    )
+                                    if (creditsStartRatio != null) {
+                                        val creditsStartX = creditsStartRatio * sliderWidth
+                                        val creditsWidth = sliderWidth - creditsStartX
+                                        if (creditsStartX < sliderWidth && creditsWidth > 0) {
+                                            drawRoundRect(
+                                                color = Color(0xFFFF9800),
+                                                topLeft = Offset(creditsStartX, trackTop),
+                                                size = Size(creditsWidth.coerceAtLeast(0f), trackHeight),
+                                                cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius),
+                                                blendMode = BlendMode.Multiply
+                                            )
+                                        }
+                                    }
                                 }
                             },
                         colors = SliderDefaults.colors(
                             thumbColor = Color.White,
-                            activeTrackColor = Color.White,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                            activeTrackColor = Color.Transparent,
+                            inactiveTrackColor = Color.Transparent
                         )
                     )
 

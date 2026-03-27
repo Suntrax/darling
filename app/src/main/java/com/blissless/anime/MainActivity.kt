@@ -357,6 +357,9 @@ fun MainScreen(
 
     val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
     val preferredCategory by viewModel.preferredCategory.collectAsState(initial = "sub")
+    val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
+    val loadFullEpisode by viewModel.loadFullEpisode.collectAsState(initial = false)
+    val bufferAheadSeconds by viewModel.bufferAheadSeconds.collectAsState(initial = 30)
 
     LaunchedEffect(currentlyWatching) {
         if (currentlyWatching.isNotEmpty()) {
@@ -1096,7 +1099,10 @@ fun MainScreen(
                 onPrefetchAdjacent = {
                     viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, released)
                 },
-                disableMaterialColors = disableMaterialColors
+                disableMaterialColors = disableMaterialColors,
+                showBufferIndicator = showBufferIndicator,
+                loadFullEpisode = loadFullEpisode,
+                bufferAheadSeconds = bufferAheadSeconds
             )
         }
 
