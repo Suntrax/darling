@@ -109,6 +109,14 @@ fun SearchOverlay(
         dropped.forEach { map[it.id] = "DROPPED" }
         map
     }
+    
+    // Force recomposition when lists change by tracking a version counter
+    var listVersion by remember { mutableIntStateOf(0) }
+    
+    // Update listVersion when lists change to trigger recomposition
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        listVersion++
+    }
 
     // Back handler for search overlay - close search on back press
     BackHandler(enabled = true) {
@@ -286,7 +294,9 @@ fun SearchOverlay(
     // Detail Dialog
     if (showDetailDialog && selectedAnime != null) {
         val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
-        val currentStatus = savedAnimeMap[selectedAnime!!.id]
+        val currentStatus by remember(listVersion, selectedAnime!!.id) {
+            derivedStateOf { savedAnimeMap[selectedAnime!!.id] }
+        }
         
         DetailedAnimeScreen(
             anime = selectedAnime!!.toDetailedAnimeData(),

@@ -28,12 +28,62 @@ class MainViewModel : ViewModel() {
         private const val TAG = "MainViewModel"
         private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
         private const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+        private const val SYNC_DEBOUNCE_MS = 2000L // 2 seconds debounce for API sync
     }
 
     private lateinit var userPreferences: UserPreferences
     private lateinit var cacheManager: CacheManager
     private lateinit var repository: AnimeRepository
     private lateinit var context: Context
+
+    // Sync queue for debounced AniList API calls
+    private data class PendingSync(val type: String, val mediaId: Int, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null)
+    private val pendingSyncs = mutableMapOf<Int, PendingSync>() // mediaId -> pending sync
+    private var syncJob: kotlinx.coroutines.Job? = null
+
+    private fun queueSync(mediaId: Int, type: String, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null) {
+        pendingSyncs[mediaId] = PendingSync(type, mediaId, status, progress, score, entryId)
+        
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch {
+            delay(SYNC_DEBOUNCE_MS)
+            executePendingSyncs()
+        }
+    }
+
+    private suspend fun executePendingSyncs() {
+        val syncsToExecute = pendingSyncs.toMap()
+        pendingSyncs.clear()
+        var hasFavoritesSync = false
+        
+        for ((_, sync) in syncsToExecute) {
+            when (sync.type) {
+                "status" -> {
+                    sync.status?.let { repository.updateStatus(sync.mediaId, it, sync.progress) }
+                }
+                "progress" -> {
+                    sync.progress?.let { repository.updateProgress(sync.mediaId, it) }
+                }
+                "score" -> {
+                    sync.score?.let { repository.updateScore(sync.mediaId, it) }
+                }
+                "delete" -> {
+                    sync.entryId?.let { repository.deleteListEntry(it) }
+                }
+                "favorite" -> {
+                    repository.toggleAniListFavorite(sync.mediaId)
+                    hasFavoritesSync = true
+                }
+            }
+        }
+        
+        if (syncsToExecute.isNotEmpty()) {
+            fetchLists()
+        }
+        if (hasFavoritesSync) {
+            fetchAniListFavorites()
+        }
+    }
 
     // Track last refresh time to prevent rapid re-fetches (persisted to survive app restarts)
     private var lastHomeRefreshTime: Long
@@ -470,17 +520,32 @@ class MainViewModel : ViewModel() {
     }
 
     fun updateAnimeProgress(mediaId: Int, progress: Int) {
-        viewModelScope.launch { if (repository.updateProgress(mediaId, progress)) fetchLists() }
         val currentEntry = userPreferences.getLocalAnimeStatus(mediaId)
         if (currentEntry != null) {
             val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
             userPreferences.updateLocalAnimeProgress(mediaId, progress, cachedAnime?.episodes ?: currentEntry.totalEpisodes)
             updateOfflineLists()
         }
+        
+        // Immediately update progress in logged-in lists
+        updateProgressInLists(mediaId, progress)
+        
+        queueSync(mediaId, "progress", progress = progress)
+    }
+    
+    private fun updateProgressInLists(mediaId: Int, progress: Int) {
+        val updateInList: (MutableStateFlow<List<AnimeMedia>>, (AnimeMedia) -> AnimeMedia) -> Unit = { list, updater ->
+            list.value = list.value.map { if (it.id == mediaId) updater(it) else it }
+        }
+        
+        updateInList(_currentlyWatching) { it.copy(progress = progress) }
+        updateInList(_planningToWatch) { it.copy(progress = progress) }
+        updateInList(_completed) { it.copy(progress = progress) }
+        updateInList(_onHold) { it.copy(progress = progress) }
+        updateInList(_dropped) { it.copy(progress = progress) }
     }
 
     fun updateAnimeStatus(mediaId: Int, status: String, progress: Int? = null) {
-        viewModelScope.launch { if (repository.updateStatus(mediaId, status, progress)) fetchLists() }
         val currentEntry = userPreferences.getLocalAnimeStatus(mediaId)
         val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
         setLocalAnimeStatus(
@@ -492,15 +557,166 @@ class MainViewModel : ViewModel() {
                 totalEpisodes = cachedAnime?.episodes ?: currentEntry?.totalEpisodes ?: 0
             )
         )
+        
+        // Immediately update logged-in lists for instant visual feedback
+        moveAnimeBetweenLists(mediaId, status, progress)
+        
+        queueSync(mediaId, "status", status = status, progress = progress)
+    }
+    
+    private fun moveAnimeBetweenLists(mediaId: Int, newStatus: String, newProgress: Int?) {
+        // Find the anime in the current list
+        val allLists = listOf(
+            _currentlyWatching.value to { l: List<AnimeMedia> -> _currentlyWatching.value = l },
+            _planningToWatch.value to { l: List<AnimeMedia> -> _planningToWatch.value = l },
+            _completed.value to { l: List<AnimeMedia> -> _completed.value = l },
+            _onHold.value to { l: List<AnimeMedia> -> _onHold.value = l },
+            _dropped.value to { l: List<AnimeMedia> -> _dropped.value = l }
+        )
+        
+        var anime: AnimeMedia? = null
+        var sourceListIndex = -1
+        
+        for ((index, pair) in allLists.withIndex()) {
+            val (list, _) = pair
+            val found = list.find { it.id == mediaId }
+            if (found != null) {
+                anime = found
+                sourceListIndex = index
+                break
+            }
+        }
+        
+        // If anime not found in any list, create a new entry from cached/local data
+        if (anime == null) {
+            val localEntry = userPreferences.getLocalAnimeStatus(mediaId)
+            val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
+            
+            anime = if (cachedAnime != null) {
+                AnimeMedia(
+                    id = cachedAnime.id,
+                    title = cachedAnime.title,
+                    titleEnglish = cachedAnime.titleEnglish,
+                    cover = cachedAnime.cover,
+                    banner = cachedAnime.banner,
+                    progress = newProgress ?: 0,
+                    totalEpisodes = cachedAnime.episodes,
+                    latestEpisode = cachedAnime.nextAiringEpisode,
+                    status = cachedAnime.status ?: "",
+                    averageScore = cachedAnime.averageScore,
+                    genres = cachedAnime.genres,
+                    listStatus = newStatus,
+                    year = cachedAnime.year,
+                    malId = cachedAnime.malId,
+                    format = cachedAnime.format
+                )
+            } else if (localEntry != null) {
+                AnimeMedia(
+                    id = localEntry.id,
+                    title = localEntry.title.ifEmpty { "Unknown" },
+                    cover = localEntry.cover,
+                    banner = localEntry.banner,
+                    progress = newProgress ?: localEntry.progress,
+                    totalEpisodes = localEntry.totalEpisodes,
+                    listStatus = newStatus,
+                    year = localEntry.year,
+                    averageScore = localEntry.averageScore
+                )
+            } else {
+                // No data available, skip
+                return
+            }
+        }
+        
+        // If anime was found in a source list, remove from it first
+        if (sourceListIndex >= 0) {
+            val (sourceList, sourceSetter) = allLists[sourceListIndex]
+            sourceSetter(sourceList.filter { it.id != mediaId })
+        }
+        
+        // Update the anime with new status and progress
+        val updatedAnime = anime.copy(
+            listStatus = newStatus,
+            progress = newProgress ?: anime.progress
+        )
+        
+        // Add to target list
+        val targetList = when (newStatus) {
+            "CURRENT" -> _currentlyWatching
+            "PLANNING" -> _planningToWatch
+            "COMPLETED" -> _completed
+            "PAUSED" -> _onHold
+            "DROPPED" -> _dropped
+            else -> return
+        }
+        
+        targetList.value = targetList.value + updatedAnime
     }
 
     fun removeAnimeFromList(mediaId: Int) {
         val entryId = (currentlyWatching.value + planningToWatch.value + completed.value + onHold.value + dropped.value)
             .find { it.id == mediaId }?.listEntryId
-        if (entryId != null) {
-            viewModelScope.launch { if (repository.deleteListEntry(entryId)) fetchLists() }
-        }
+        
+        // Immediately remove from all lists for instant feedback
+        _currentlyWatching.value = _currentlyWatching.value.filter { it.id != mediaId }
+        _planningToWatch.value = _planningToWatch.value.filter { it.id != mediaId }
+        _completed.value = _completed.value.filter { it.id != mediaId }
+        _onHold.value = _onHold.value.filter { it.id != mediaId }
+        _dropped.value = _dropped.value.filter { it.id != mediaId }
+        
         setLocalAnimeStatus(mediaId, null)
+        if (entryId != null) {
+            queueSync(mediaId, "delete", entryId = entryId)
+        }
+    }
+
+    fun hasLocalAnimeChanges(): Boolean {
+        return localAnimeStatus.value.isNotEmpty()
+    }
+
+    fun discardLocalChanges() {
+        userPreferences.clearLocalAnimeStatus()
+        updateOfflineLists()
+    }
+
+    fun addLocalToAniListOnlyNew() {
+        viewModelScope.launch {
+            val localStatus = localAnimeStatus.value
+            val allAniListEntries = currentlyWatching.value + planningToWatch.value + completed.value + onHold.value + dropped.value
+            
+            for ((mediaId, entry) in localStatus) {
+                if (allAniListEntries.none { it.id == mediaId }) {
+                    repository.updateStatus(mediaId, entry.status, entry.progress)
+                }
+            }
+            userPreferences.clearLocalAnimeStatus()
+            updateOfflineLists()
+            fetchLists()
+        }
+    }
+
+    fun overwriteAniListWithLocal() {
+        viewModelScope.launch {
+            val localStatus = localAnimeStatus.value
+            val allAniListEntries = currentlyWatching.value + planningToWatch.value + completed.value + onHold.value + dropped.value
+            
+            for (entry in allAniListEntries) {
+                val localEntry = localStatus[entry.id]
+                if (localEntry != null) {
+                    repository.updateStatus(entry.id, localEntry.status, localEntry.progress)
+                }
+            }
+            
+            for ((mediaId, entry) in localStatus) {
+                if (allAniListEntries.none { it.id == mediaId }) {
+                    repository.updateStatus(mediaId, entry.status, entry.progress)
+                }
+            }
+            
+            userPreferences.clearLocalAnimeStatus()
+            updateOfflineLists()
+            fetchLists()
+        }
     }
 
     // Settings
@@ -777,16 +993,32 @@ class MainViewModel : ViewModel() {
         lastFavoriteToggleTime = currentTime
         _isFavoriteRateLimited.value = false
         
-        viewModelScope.launch {
-            val success = repository.toggleAniListFavorite(mediaId)
-            if (success) {
-                fetchAniListFavorites()
-            }
+        // Immediately update local state for instant feedback
+        val isFavorite = _aniListFavorites.value.any { it.id == mediaId }
+        if (isFavorite) {
+            _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
         }
+        
+        // Queue the API call for debounced sync
+        queueSync(mediaId, "favorite")
         return true
     }
     fun updateAnimeRating(mediaId: Int, score: Int) {
-        viewModelScope.launch { if (repository.updateScore(mediaId, score)) fetchLists() }
+        // Immediately update rating in lists
+        updateRatingInLists(mediaId, score)
+        queueSync(mediaId, "score", score = score)
+    }
+    
+    private fun updateRatingInLists(mediaId: Int, score: Int) {
+        val updateInList: (MutableStateFlow<List<AnimeMedia>>, (AnimeMedia) -> AnimeMedia) -> Unit = { list, updater ->
+            list.value = list.value.map { if (it.id == mediaId) updater(it) else it }
+        }
+        
+        updateInList(_currentlyWatching) { it.copy(userScore = score) }
+        updateInList(_planningToWatch) { it.copy(userScore = score) }
+        updateInList(_completed) { it.copy(userScore = score) }
+        updateInList(_onHold) { it.copy(userScore = score) }
+        updateInList(_dropped) { it.copy(userScore = score) }
     }
 
     // ============================================

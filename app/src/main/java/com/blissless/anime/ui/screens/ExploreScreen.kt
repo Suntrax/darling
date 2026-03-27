@@ -72,8 +72,21 @@ fun ExploreScreen(
         }
     }
 
+    // Derive currentStatus from lists dynamically to ensure immediate UI updates
+    val currentStatusForAnime: (Int) -> String? = { animeId ->
+        animeStatusMap[animeId]
+    }
+
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+    
+    // Force recomposition when lists change by tracking a version counter
+    var listVersion by remember { mutableIntStateOf(0) }
+    
+    // Update listVersion when lists change to trigger recomposition
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        listVersion++
+    }
     
     // Track navigation history for back button
     var firstAnime by remember { mutableStateOf<ExploreAnime?>(null) }
@@ -90,7 +103,11 @@ fun ExploreScreen(
         
         val anime = selectedAnime!!
         val isAnimeFavorite = favoriteIds.contains(anime.id)
-        val animeStatus = animeStatusMap[anime.id]
+        // Use derived status that updates immediately when lists change
+        // Key on listVersion to force recomposition when lists update
+        val animeStatus by remember(listVersion, anime.id) {
+            derivedStateOf { animeStatusMap[anime.id] }
+        }
 
         DetailedAnimeScreen(
             anime = anime.toDetailedAnimeData(),

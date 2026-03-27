@@ -69,7 +69,7 @@ class UserPreferences(private val context: Context) {
     private val _showAnimeCardButtons = MutableStateFlow(false)
     val showAnimeCardButtons: StateFlow<Boolean> = _showAnimeCardButtons.asStateFlow()
 
-    private val _preventScheduleSync = MutableStateFlow(true)
+    private val _preventScheduleSync = MutableStateFlow(false)
     val preventScheduleSync: StateFlow<Boolean> = _preventScheduleSync.asStateFlow()
 
     private val _trackingPercentage = MutableStateFlow(85)
@@ -450,6 +450,11 @@ class UserPreferences(private val context: Context) {
         if (current != null) {
             setLocalAnimeStatus(mediaId, current.copy(progress = progress, totalEpisodes = totalEpisodes))
         }
+    }
+
+    fun clearLocalAnimeStatus() {
+        _localAnimeStatus.value = emptyMap()
+        saveLocalAnimeStatus(emptyMap())
     }
 
     private fun saveLocalAnimeStatus(statusMap: Map<Int, LocalAnimeEntry>) {

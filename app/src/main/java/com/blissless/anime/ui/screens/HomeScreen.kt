@@ -114,6 +114,14 @@ fun HomeScreen(
 
     var previousScreenIndex by remember { mutableIntStateOf(currentScreenIndex) }
 
+    // Force recomposition when lists change by tracking a version counter
+    var listVersion by remember { mutableIntStateOf(0) }
+    
+    // Update listVersion when lists change to trigger recomposition
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        listVersion++
+    }
+
     val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
 
     val authToken by viewModel.authToken.collectAsState()
@@ -552,11 +560,14 @@ fun HomeScreen(
 
     if (showDetailedAnimeScreen && selectedAnime != null) {
         val detailedAnimeData = selectedAnime!!.toDetailedAnimeData()
+        val currentStatus by remember(listVersion, selectedAnime!!.id) {
+            derivedStateOf { selectedAnime?.listStatus }
+        }
         DetailedAnimeScreen(
             anime = detailedAnimeData,
             viewModel = viewModel,
             isOled = isOled,
-            currentStatus = selectedAnime!!.listStatus,
+            currentStatus = currentStatus,
             isLoggedIn = isLoggedIn,
             isFavorite = favoriteIds.contains(selectedAnime!!.id),
             onDismiss = {

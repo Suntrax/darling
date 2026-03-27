@@ -9,6 +9,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Explore
@@ -78,13 +79,120 @@ class MainActivity : ComponentActivity() {
 
             var isLoggedIn by remember { mutableStateOf(savedToken != null) }
             val token by mainViewModel.authToken.collectAsState()
+            var showLocalSyncDialog by remember { mutableStateOf(false) }
+            val localAnimeStatus by mainViewModel.localAnimeStatus.collectAsState()
+            
             LaunchedEffect(token) {
+                if (token != null && !isLoggedIn && localAnimeStatus.isNotEmpty()) {
+                    showLocalSyncDialog = true
+                }
                 isLoggedIn = token != null
             }
 
             // Always enable high refresh rate on supported devices
             LaunchedEffect(Unit) {
                 enableHighRefreshRate()
+            }
+
+            if (showLocalSyncDialog) {
+                AlertDialog(
+                    onDismissRequest = { showLocalSyncDialog = false },
+                    containerColor = Color(0xFF1A1A1A),
+                    title = { 
+                        Text(
+                            "Sync Local Changes",
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall
+                        ) 
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                "You have ${localAnimeStatus.size} anime tracked offline.",
+                                color = Color.White.copy(alpha = 0.8f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Text(
+                                "Choose how to sync:",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Text(
+                                "1. Discard Local Changes",
+                                color = Color(0xFFF44336),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Remove all offline changes. AniList data will remain unchanged.",
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Text(
+                                "2. Add New Anime Only",
+                                color = Color(0xFF4CAF50),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Add new anime from offline to AniList. Won't overwrite existing entries.",
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Text(
+                                "3. Overwrite AniList",
+                                color = Color(0xFF2196F3),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Replace all matching anime on AniList with your offline changes.",
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showLocalSyncDialog = false
+                                mainViewModel.discardLocalChanges()
+                            }
+                        ) {
+                            Text("Discard", color = Color(0xFFF44336))
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(
+                                onClick = {
+                                    showLocalSyncDialog = false
+                                    mainViewModel.addLocalToAniListOnlyNew()
+                                }
+                            ) {
+                                Text("Add New Only", color = Color(0xFF4CAF50))
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            TextButton(
+                                onClick = {
+                                    showLocalSyncDialog = false
+                                    mainViewModel.overwriteAniListWithLocal()
+                                }
+                            ) {
+                                Text("Overwrite", color = Color(0xFF2196F3))
+                            }
+                        }
+                    }
+                )
             }
 
             AppTheme(useOled = isOled, useMonochrome = disableMaterialColors) {

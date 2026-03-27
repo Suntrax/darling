@@ -40,7 +40,8 @@ data class AnimeMedia(
     val listEntryId: Int? = null,
     val year: Int? = null,
     val malId: Int? = null,
-    val format: String? = null
+    val format: String? = null,
+    val userScore: Int? = null
 )
 
 @Serializable

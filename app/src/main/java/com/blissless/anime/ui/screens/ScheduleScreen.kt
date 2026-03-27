@@ -165,6 +165,14 @@ fun ScheduleScreen(
     val favoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     
+    // Force recomposition when lists change by tracking a version counter
+    var listVersion by remember { mutableIntStateOf(0) }
+    
+    // Update listVersion when lists change to trigger recomposition
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        listVersion++
+    }
+    
     LaunchedEffect(isFavoriteRateLimited) {
         if (isFavoriteRateLimited) {
             Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
@@ -801,11 +809,15 @@ fun ScheduleScreen(
 
     // Inline anime dialog
     if (showAnimeDialog && selectedAnime != null) {
+        val currentStatus by remember(listVersion, selectedAnime!!.id) {
+            derivedStateOf { animeStatusMap[selectedAnime!!.id] }
+        }
+        
         DetailedAnimeScreen(
             anime = selectedAnime!!.toDetailedAnimeData(),
             viewModel = viewModel,
             isOled = isOled,
-            currentStatus = animeStatusMap[selectedAnime!!.id],
+            currentStatus = currentStatus,
             isFavorite = favoriteIds.contains(selectedAnime!!.id),
             isLoggedIn = isLoggedIn,
             onToggleFavorite = { _ -> viewModel.toggleAniListFavorite(selectedAnime!!.id) },
