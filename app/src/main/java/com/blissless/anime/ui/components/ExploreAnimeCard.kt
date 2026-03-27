@@ -41,10 +41,14 @@ fun ExploreAnimeHorizontalList(
     animeList: List<ExploreAnime>,
     animeStatusMap: Map<Int, String>,
     showStatusColors: Boolean,
+    showAnimeCardButtons: Boolean = true,
     onAnimeClick: (ExploreAnime) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
     isLoggedIn: Boolean = false,
-    isOled: Boolean = false
+    isOled: Boolean = false,
+    localAnimeStatus: Map<Int, com.blissless.anime.data.models.LocalAnimeEntry> = emptyMap(),
+    onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
+    onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {}
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -54,14 +58,21 @@ fun ExploreAnimeHorizontalList(
             items = animeList,
             key = { it.id }
         ) { anime ->
+            val localStatus = localAnimeStatus[anime.id]?.status
+            val handleAddLocalPlanning: () -> Unit = { onAddToLocalPlanning(anime) }
+            val handleRemoveLocalStatus: () -> Unit = { onRemoveFromLocalStatus(anime) }
             ExploreAnimeCard(
                 anime = anime,
                 currentStatus = animeStatusMap[anime.id],
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 onClick = { onAnimeClick(anime) },
                 onBookmarkClick = { onBookmarkClick(anime) },
                 isLoggedIn = isLoggedIn,
-                isOled = isOled
+                isOled = isOled,
+                localStatus = localStatus,
+                onAddToLocalPlanning = handleAddLocalPlanning,
+                onRemoveFromLocalStatus = handleRemoveLocalStatus
             )
         }
     }
@@ -72,10 +83,14 @@ fun ExploreAnimeCard(
     anime: ExploreAnime,
     currentStatus: String?,
     showStatusColors: Boolean,
+    showAnimeCardButtons: Boolean = true,
     onClick: () -> Unit,
     onBookmarkClick: () -> Unit,
     isLoggedIn: Boolean = false,
-    isOled: Boolean = false
+    isOled: Boolean = false,
+    localStatus: String? = null,
+    onAddToLocalPlanning: () -> Unit = {},
+    onRemoveFromLocalStatus: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -91,6 +106,8 @@ fun ExploreAnimeCard(
         label = "bookmarkScale"
     )
 
+    val effectiveHasStatus = if (isLoggedIn) currentStatus != null else localStatus != null
+
     val imageRequest = remember(anime.cover) {
         ImageRequest.Builder(context)
             .data(anime.cover)
@@ -100,9 +117,11 @@ fun ExploreAnimeCard(
             .build()
     }
 
-    val statusIndicatorColor = remember(currentStatus, showStatusColors) {
-        if (showStatusColors && currentStatus != null) {
-            StatusColors[currentStatus] ?: Color.Transparent
+    val effectiveStatus = if (isLoggedIn) currentStatus else localStatus
+    
+    val statusIndicatorColor = remember(effectiveStatus, showStatusColors) {
+        if (showStatusColors && effectiveStatus != null) {
+            StatusColors[effectiveStatus] ?: Color.Transparent
         } else {
             Color.Transparent
         }
@@ -120,9 +139,9 @@ fun ExploreAnimeCard(
         }
     }
 
-    val buttonContainerColor = remember(showStatusColors, currentStatus) {
-        if (showStatusColors && currentStatus != null) {
-            (StatusColors[currentStatus] ?: Color.Black).copy(alpha = 0.8f)
+    val buttonContainerColor = remember(showStatusColors, effectiveStatus) {
+        if (showStatusColors && effectiveStatus != null) {
+            (StatusColors[effectiveStatus] ?: Color.Black).copy(alpha = 0.8f)
         } else {
             Color.Black.copy(alpha = 0.6f)
         }
@@ -203,7 +222,7 @@ fun ExploreAnimeCard(
                     }
                 }
 
-                if (isLoggedIn) {
+                if (showAnimeCardButtons) {
                     Row(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -214,7 +233,15 @@ fun ExploreAnimeCard(
                         FilledTonalIconButton(
                             onClick = {
                                 showAnimation = true
-                                onBookmarkClick()
+                                if (isLoggedIn) {
+                                    onBookmarkClick()
+                                } else {
+                                    if (localStatus != null) {
+                                        onRemoveFromLocalStatus()
+                                    } else {
+                                        onAddToLocalPlanning()
+                                    }
+                                }
                             },
                             modifier = Modifier
                                 .size(32.dp)
@@ -226,16 +253,16 @@ fun ExploreAnimeCard(
                             )
                         ) {
                             AnimatedContent(
-                                targetState = currentStatus,
+                                targetState = effectiveHasStatus,
                                 transitionSpec = {
                                     (scaleIn(animationSpec = tween(200)) + fadeIn())
                                         .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
                                 },
                                 label = "bookmarkIcon"
-                            ) { status ->
+                            ) { hasStatus ->
                                 Icon(
-                                    imageVector = if (status != null) Icons.Filled.Bookmark else Icons.Outlined.BookmarkAdd,
-                                    contentDescription = if (status != null) StatusLabels[status] else "Add to Planning",
+                                    imageVector = if (hasStatus) Icons.Filled.Bookmark else Icons.Outlined.BookmarkAdd,
+                                    contentDescription = if (hasStatus) "Remove from list" else "Add to planning",
                                     modifier = Modifier.size(18.dp)
                                 )
                             }

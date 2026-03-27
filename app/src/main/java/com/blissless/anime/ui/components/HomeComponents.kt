@@ -261,29 +261,27 @@ fun HomeAnimeCard(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // BOTTOM END: Play Button (Only show if logged in)
-                    if (isLoggedIn) {
-                        FilledTonalIconButton(
-                            onClick = {
-                                if (listType == "CURRENT" || listType == "PAUSED") {
-                                    onPlayClick() // Plays next episode
-                                } else {
-                                    onClick() // Opens Episode Dialogue
-                                }
-                            },
-                            modifier = Modifier.size(32.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color.Black.copy(alpha = 0.6f),
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = if (listType == "CURRENT" || listType == "PAUSED") "Play next episode" else "Episodes",
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                    // BOTTOM END: Play Button
+                    FilledTonalIconButton(
+                        onClick = {
+                            if (listType == "CURRENT" || listType == "PAUSED") {
+                                onPlayClick() // Plays next episode
+                            } else {
+                                onClick() // Opens Episode Dialogue
+                            }
+                        },
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = if (listType == "CURRENT" || listType == "PAUSED") "Play next episode" else "Episodes",
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
             val isOled by mainViewModel.isOled.collectAsState()
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
+            val showAnimeCardButtons by mainViewModel.showAnimeCardButtons.collectAsState()
 
             var isLoggedIn by remember { mutableStateOf(savedToken != null) }
             val token by mainViewModel.authToken.collectAsState()
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = mainViewModel,
                     isOled = isOled,
                     showStatusColors = showStatusColors,
+                    showAnimeCardButtons = showAnimeCardButtons,
                     isLoggedIn = isLoggedIn
                 )
             }
@@ -190,6 +192,7 @@ fun MainScreen(
     viewModel: MainViewModel,
     isOled: Boolean,
     showStatusColors: Boolean,
+    showAnimeCardButtons: Boolean,
     isLoggedIn: Boolean
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1069,6 +1072,7 @@ fun MainScreen(
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
                             showStatusColors = showStatusColors,
+                            showAnimeCardButtons = showAnimeCardButtons,
                             favoriteIds = aniListFavoriteIds,
                             onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,

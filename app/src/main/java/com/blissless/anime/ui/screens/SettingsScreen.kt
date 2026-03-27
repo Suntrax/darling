@@ -59,6 +59,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     var showLogoutConfirmation by remember { mutableStateOf(false) }
+    val showAnimeCardButtons by viewModel.showAnimeCardButtons.collectAsState(initial = true)
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
@@ -213,6 +214,16 @@ fun SettingsScreen(
                 description = "Use compact episode grid (disable for detailed cards)",
                 checked = simplifyEpisodeMenuState,
                 onCheckedChange = { viewModel.setSimplifyEpisodeMenu(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsToggle(
+                title = "Show Card Buttons",
+                description = "Show bookmark and play buttons on anime cards",
+                checked = showAnimeCardButtons,
+                onCheckedChange = { viewModel.setShowAnimeCardButtons(it) },
                 isOled = isOled
             )
 

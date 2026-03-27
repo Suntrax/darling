@@ -152,6 +152,7 @@ class MainViewModel : ViewModel() {
     val disableMaterialColors: StateFlow<Boolean> get() = userPreferences.disableMaterialColors
     val preferredCategory: StateFlow<String> get() = userPreferences.preferredCategory
     val showStatusColors: StateFlow<Boolean> get() = userPreferences.showStatusColors
+    val showAnimeCardButtons: StateFlow<Boolean> get() = userPreferences.showAnimeCardButtons
     val trackingPercentage: StateFlow<Int> get() = userPreferences.trackingPercentage
     val forwardSkipSeconds: StateFlow<Int> get() = userPreferences.forwardSkipSeconds
     val backwardSkipSeconds: StateFlow<Int> get() = userPreferences.backwardSkipSeconds
@@ -506,6 +507,7 @@ class MainViewModel : ViewModel() {
     fun setDisableMaterialColors(enabled: Boolean) = userPreferences.setDisableMaterialColors(enabled)
     fun setPreferredCategory(category: String) = userPreferences.setPreferredCategory(category)
     fun setShowStatusColors(enabled: Boolean) = userPreferences.setShowStatusColors(enabled)
+    fun setShowAnimeCardButtons(enabled: Boolean) = userPreferences.setShowAnimeCardButtons(enabled)
     fun setTrackingPercentage(percentage: Int) = userPreferences.setTrackingPercentage(percentage)
     fun setForwardSkipSeconds(seconds: Int) = userPreferences.setForwardSkipSeconds(seconds)
     fun setBackwardSkipSeconds(seconds: Int) = userPreferences.setBackwardSkipSeconds(seconds)

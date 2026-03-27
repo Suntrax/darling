@@ -24,6 +24,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_DISABLE_MATERIAL_COLORS = "disable_material_colors"
         private const val KEY_PREFERRED_CATEGORY = "preferred_category"
         private const val KEY_SHOW_STATUS_COLORS = "show_status_colors"
+        private const val KEY_SHOW_ANIME_CARD_BUTTONS = "show_anime_card_buttons"
         private const val KEY_TRACKING_PERCENTAGE = "tracking_percentage"
         private const val KEY_FORWARD_SKIP_SECONDS = "forward_skip_seconds"
         private const val KEY_BACKWARD_SKIP_SECONDS = "backward_skip_seconds"
@@ -63,6 +64,9 @@ class UserPreferences(private val context: Context) {
 
     private val _showStatusColors = MutableStateFlow(true)
     val showStatusColors: StateFlow<Boolean> = _showStatusColors.asStateFlow()
+
+    private val _showAnimeCardButtons = MutableStateFlow(true)
+    val showAnimeCardButtons: StateFlow<Boolean> = _showAnimeCardButtons.asStateFlow()
 
     private val _trackingPercentage = MutableStateFlow(85)
     val trackingPercentage: StateFlow<Int> = _trackingPercentage.asStateFlow()
@@ -133,6 +137,7 @@ class UserPreferences(private val context: Context) {
         _disableMaterialColors.value = sharedPreferences.getBoolean(KEY_DISABLE_MATERIAL_COLORS, true)
         _preferredCategory.value = sharedPreferences.getString(KEY_PREFERRED_CATEGORY, "sub") ?: "sub"
         _showStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_STATUS_COLORS, false)
+        _showAnimeCardButtons.value = sharedPreferences.getBoolean(KEY_SHOW_ANIME_CARD_BUTTONS, true)
         _trackingPercentage.value = sharedPreferences.getInt(KEY_TRACKING_PERCENTAGE, 85)
         _forwardSkipSeconds.value = sharedPreferences.getInt(KEY_FORWARD_SKIP_SECONDS, 10)
         _backwardSkipSeconds.value = sharedPreferences.getInt(KEY_BACKWARD_SKIP_SECONDS, 10)
@@ -191,6 +196,11 @@ class UserPreferences(private val context: Context) {
     fun setShowStatusColors(enabled: Boolean) {
         _showStatusColors.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SHOW_STATUS_COLORS, enabled) }
+    }
+
+    fun setShowAnimeCardButtons(enabled: Boolean) {
+        _showAnimeCardButtons.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SHOW_ANIME_CARD_BUTTONS, enabled) }
     }
 
     fun setTrackingPercentage(percentage: Int) {

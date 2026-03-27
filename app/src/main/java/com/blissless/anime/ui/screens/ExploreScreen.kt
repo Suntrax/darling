@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
@@ -32,6 +33,7 @@ fun ExploreScreen(
     isLoggedIn: Boolean = false,
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
+    showAnimeCardButtons: Boolean = true,
     favoriteIds: Set<Int> = emptySet(),
     onToggleFavorite: (ExploreAnime) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
@@ -55,6 +57,9 @@ fun ExploreScreen(
     val fantasyAnime by viewModel.fantasyAnime.collectAsState()
     val scifiAnime by viewModel.scifiAnime.collectAsState()
     val isLoading by viewModel.isLoadingExplore.collectAsState()
+    val localFavorites by viewModel.localFavorites.collectAsState()
+    val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
+    val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
 
     // Create a map of animeId -> status for quick lookup
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
@@ -235,10 +240,31 @@ fun ExploreScreen(
                     animeList = seasonalAnime,
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
+                    showAnimeCardButtons = showAnimeCardButtons,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
                     isLoggedIn = isLoggedIn,
-                    isOled = isOled
+                    isOled = isOled,
+                    localAnimeStatus = localAnimeStatus,
+                    onAddToLocalPlanning = { anime ->
+                        viewModel.setLocalAnimeStatus(
+                            anime.id,
+                            LocalAnimeEntry(
+                                id = anime.id,
+                                status = "PLANNING",
+                                progress = 0,
+                                totalEpisodes = anime.episodes,
+                                title = anime.title,
+                                cover = anime.cover,
+                                banner = anime.banner,
+                                year = anime.year,
+                                averageScore = anime.averageScore
+                            )
+                        )
+                    },
+                    onRemoveFromLocalStatus = { anime ->
+                        viewModel.setLocalAnimeStatus(anime.id, null)
+                    }
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -251,10 +277,31 @@ fun ExploreScreen(
                     animeList = topSeries,
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
+                    showAnimeCardButtons = showAnimeCardButtons,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
                     isLoggedIn = isLoggedIn,
-                    isOled = isOled
+                    isOled = isOled,
+                    localAnimeStatus = localAnimeStatus,
+                    onAddToLocalPlanning = { anime ->
+                        viewModel.setLocalAnimeStatus(
+                            anime.id,
+                            LocalAnimeEntry(
+                                id = anime.id,
+                                status = "PLANNING",
+                                progress = 0,
+                                totalEpisodes = anime.episodes,
+                                title = anime.title,
+                                cover = anime.cover,
+                                banner = anime.banner,
+                                year = anime.year,
+                                averageScore = anime.averageScore
+                            )
+                        )
+                    },
+                    onRemoveFromLocalStatus = { anime ->
+                        viewModel.setLocalAnimeStatus(anime.id, null)
+                    }
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -267,10 +314,31 @@ fun ExploreScreen(
                     animeList = topMovies,
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
+                    showAnimeCardButtons = showAnimeCardButtons,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
                     isLoggedIn = isLoggedIn,
-                    isOled = isOled
+                    isOled = isOled,
+                    localAnimeStatus = localAnimeStatus,
+                    onAddToLocalPlanning = { anime ->
+                        viewModel.setLocalAnimeStatus(
+                            anime.id,
+                            LocalAnimeEntry(
+                                id = anime.id,
+                                status = "PLANNING",
+                                progress = 0,
+                                totalEpisodes = anime.episodes,
+                                title = anime.title,
+                                cover = anime.cover,
+                                banner = anime.banner,
+                                year = anime.year,
+                                averageScore = anime.averageScore
+                            )
+                        )
+                    },
+                    onRemoveFromLocalStatus = { anime ->
+                        viewModel.setLocalAnimeStatus(anime.id, null)
+                    }
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -282,11 +350,32 @@ fun ExploreScreen(
                 animeList = actionAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 isLoading = isLoading,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
                 onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
+                onBookmarkClick = onBookmarkClickStable,
+                localAnimeStatus = localAnimeStatus,
+                onAddToLocalPlanning = { anime ->
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = "PLANNING",
+                            progress = 0,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore
+                        )
+                    )
+                },
+                onRemoveFromLocalStatus = { anime ->
+                    viewModel.setLocalAnimeStatus(anime.id, null)
+                }
             )
 
             GenreSection(
@@ -294,11 +383,32 @@ fun ExploreScreen(
                 animeList = romanceAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 isLoading = isLoading,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
                 onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
+                onBookmarkClick = onBookmarkClickStable,
+                localAnimeStatus = localAnimeStatus,
+                onAddToLocalPlanning = { anime ->
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = "PLANNING",
+                            progress = 0,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore
+                        )
+                    )
+                },
+                onRemoveFromLocalStatus = { anime ->
+                    viewModel.setLocalAnimeStatus(anime.id, null)
+                }
             )
 
             GenreSection(
@@ -306,11 +416,32 @@ fun ExploreScreen(
                 animeList = comedyAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 isLoading = isLoading,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
                 onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
+                onBookmarkClick = onBookmarkClickStable,
+                localAnimeStatus = localAnimeStatus,
+                onAddToLocalPlanning = { anime ->
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = "PLANNING",
+                            progress = 0,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore
+                        )
+                    )
+                },
+                onRemoveFromLocalStatus = { anime ->
+                    viewModel.setLocalAnimeStatus(anime.id, null)
+                }
             )
 
             GenreSection(
@@ -318,11 +449,32 @@ fun ExploreScreen(
                 animeList = fantasyAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 isLoading = isLoading,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
                 onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
+                onBookmarkClick = onBookmarkClickStable,
+                localAnimeStatus = localAnimeStatus,
+                onAddToLocalPlanning = { anime ->
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = "PLANNING",
+                            progress = 0,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore
+                        )
+                    )
+                },
+                onRemoveFromLocalStatus = { anime ->
+                    viewModel.setLocalAnimeStatus(anime.id, null)
+                }
             )
 
             GenreSection(
@@ -330,11 +482,32 @@ fun ExploreScreen(
                 animeList = scifiAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 isLoading = isLoading,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
                 onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable
+                onBookmarkClick = onBookmarkClickStable,
+                localAnimeStatus = localAnimeStatus,
+                onAddToLocalPlanning = { anime ->
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = "PLANNING",
+                            progress = 0,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore
+                        )
+                    )
+                },
+                onRemoveFromLocalStatus = { anime ->
+                    viewModel.setLocalAnimeStatus(anime.id, null)
+                }
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -360,11 +533,15 @@ private fun GenreSection(
     animeList: List<ExploreAnime>,
     animeStatusMap: Map<Int, String>,
     showStatusColors: Boolean,
+    showAnimeCardButtons: Boolean,
     isLoading: Boolean,
     isOled: Boolean,
     isLoggedIn: Boolean,
     onAnimeClick: (ExploreAnime) -> Unit,
-    onBookmarkClick: (ExploreAnime) -> Unit
+    onBookmarkClick: (ExploreAnime) -> Unit,
+    localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap(),
+    onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
+    onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {}
 ) {
     if (animeList.isEmpty() && !isLoading) return
 
@@ -375,10 +552,14 @@ private fun GenreSection(
                 animeList = animeList,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
+                showAnimeCardButtons = showAnimeCardButtons,
                 onAnimeClick = onAnimeClick,
                 onBookmarkClick = onBookmarkClick,
                 isLoggedIn = isLoggedIn,
-                isOled = isOled
+                isOled = isOled,
+                localAnimeStatus = localAnimeStatus,
+                onAddToLocalPlanning = onAddToLocalPlanning,
+                onRemoveFromLocalStatus = onRemoveFromLocalStatus
             )
         } else if (isLoading) {
             LoadingPlaceholder(isOled)
