@@ -73,6 +73,7 @@ fun ScheduleScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     isVisible: Boolean = false,
+    preventAutoSync: Boolean = true,
     disableMaterialColors: Boolean = false,
     hideAdultContent: Boolean = false,
     isLoggedIn: Boolean = false,
@@ -180,9 +181,11 @@ fun ScheduleScreen(
         }
     }
 
-    // Fetch schedule on first load
+    // Fetch schedule on first load (only if not preventing auto sync)
     LaunchedEffect(Unit) {
-        viewModel.fetchAiringSchedule()
+        if (!preventAutoSync) {
+            viewModel.fetchAiringSchedule()
+        }
     }
 
     // Reset pull-to-refresh when loading completes
@@ -192,12 +195,14 @@ fun ScheduleScreen(
         }
     }
 
-    // Auto-refresh every 5 minutes (respects cooldown internally)
+    // Auto-refresh every 5 minutes (respects cooldown internally, skip if preventing auto sync)
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(5 * 60000) // 5 minutes
             currentTime = System.currentTimeMillis() / 1000
-            viewModel.fetchAiringSchedule()
+            if (!preventAutoSync) {
+                viewModel.fetchAiringSchedule()
+            }
         }
     }
 
@@ -418,9 +423,9 @@ fun ScheduleScreen(
         }
     }
 
-    // Automatically scroll to NOW indicator only on first visit
-    LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay) {
-        if (isVisible && !hasUserInteracted) {
+    // Automatically scroll to NOW indicator only on first visit (unless preventing auto sync)
+    LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay, preventAutoSync) {
+        if (isVisible && !hasUserInteracted && !preventAutoSync) {
             val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
             val listState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
             if (targetIndex >= 0) {

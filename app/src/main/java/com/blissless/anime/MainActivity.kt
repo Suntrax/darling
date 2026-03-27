@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
             val showAnimeCardButtons by mainViewModel.showAnimeCardButtons.collectAsState()
+            val preventScheduleSync by mainViewModel.preventScheduleSync.collectAsState()
 
             var isLoggedIn by remember { mutableStateOf(savedToken != null) }
             val token by mainViewModel.authToken.collectAsState()
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
                     isOled = isOled,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
+                    preventScheduleSync = preventScheduleSync,
                     isLoggedIn = isLoggedIn
                 )
             }
@@ -193,6 +195,7 @@ fun MainScreen(
     isOled: Boolean,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean,
+    preventScheduleSync: Boolean,
     isLoggedIn: Boolean
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1059,6 +1062,7 @@ fun MainScreen(
                             viewModel = viewModel,
                             isOled = isOled,
                             isVisible = isScheduleVisible,
+                            preventAutoSync = preventScheduleSync,
                             disableMaterialColors = disableMaterialColors,
                             hideAdultContent = hideAdultContent,
                             isLoggedIn = isLoggedIn,

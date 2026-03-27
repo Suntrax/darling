@@ -248,6 +248,7 @@ fun SettingsScreen(
 
         // General Section
         val startupScreenState by viewModel.startupScreen.collectAsState()
+        val preventScheduleSync by viewModel.preventScheduleSync.collectAsState()
         SettingsSection(
             title = "General",
             icon = Icons.Default.Settings,
@@ -284,6 +285,16 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingsToggle(
+                title = "Prevent Schedule Auto-Sync",
+                description = "Don't automatically sync airing schedule when opening",
+                checked = preventScheduleSync,
+                onCheckedChange = { viewModel.setPreventScheduleSync(it) },
+                isOled = isOled
+            )
         }
 
         // Stream Settings Section
