@@ -71,12 +71,10 @@ fun UserProfileDialog(
     val tabs = listOf("Favorites", "History")
     var dragOffset by remember { mutableFloatStateOf(0f) }
     
-    // Reset drag offset when tab changes
     LaunchedEffect(selectedTab) {
         dragOffset = 0f
     }
     
-    // Timeout-based auto-reset for drag offset (safety net)
     LaunchedEffect(dragOffset) {
         if (dragOffset != 0f) {
             kotlinx.coroutines.delay(300)
@@ -111,14 +109,12 @@ fun UserProfileDialog(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Header with user info
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Avatar
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -156,7 +152,6 @@ fun UserProfileDialog(
                     }
                 }
 
-                // Tabs
                 val tabPositions = remember { mutableStateListOf<TabPosition>() }
                 val animatedOffset by animateDpAsState(
                     targetValue = if (selectedTab < tabPositions.size) tabPositions[selectedTab].left else 0.dp,
@@ -207,7 +202,6 @@ fun UserProfileDialog(
                     }
                 }
 
-                // Content with swipe gesture and smooth animation
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxSize()
@@ -216,14 +210,12 @@ fun UserProfileDialog(
                     val maxWidth = constraints.maxWidth.toFloat()
                     val progress = (dragOffset / maxWidth).coerceIn(-1f, 1f)
                     
-                    // Animated content for smooth tab transitions
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
                             val direction = if (targetState > initialState) 1 else -1
                             val targetOffset = if (targetState > initialState) maxWidth.toInt() else -maxWidth.toInt()
                             
-                            // Fade + slide animation
                             (slideInHorizontally(
                                 animationSpec = tween(300, easing = FastOutSlowInEasing),
                                 initialOffsetX = { targetOffset }
@@ -236,7 +228,6 @@ fun UserProfileDialog(
                         modifier = Modifier.fillMaxSize(),
                         label = "tabAnimation"
                     ) { tab ->
-                        // Interactive drag layer on top
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -268,7 +259,6 @@ fun UserProfileDialog(
                                     )
                                 }
                         ) {
-                            // Swipe preview effect
                             if (kotlin.math.abs(progress) > 0.05f) {
                                 val previewAlpha = kotlin.math.abs(progress) * 0.3f
                                 Box(
@@ -283,7 +273,6 @@ fun UserProfileDialog(
                                 )
                             }
                             
-                            // Tab content
                             if (tab == 0) {
                                 FavoritesTab(
                                     viewModel = viewModel,
@@ -507,7 +496,6 @@ private fun ActivityItem(
     activity: UserActivity,
     isOled: Boolean
 ) {
-    // Use English locale for date formatting
     val timeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.ENGLISH)
     val timeString = remember(activity.createdAt) {
         timeFormat.format(Date(activity.createdAt * 1000L))
@@ -554,7 +542,6 @@ private fun ActivityItem(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Show anime cover image if available, otherwise status icon
             if (activity.mediaCover.isNotEmpty()) {
                 AsyncImage(
                     model = activity.mediaCover,
@@ -566,7 +553,6 @@ private fun ActivityItem(
                         .clip(RoundedCornerShape(8.dp))
                 )
             } else {
-                // Fallback to status icon if no cover
                 Box(
                     modifier = Modifier
                         .width(50.dp)
@@ -619,7 +605,6 @@ private fun ActivityItem(
     }
 }
 
-// Tab indicator offset modifier
 private fun Modifier.tabIndicatorOffset(
     currentTabPosition: TabPosition
 ): Modifier = this

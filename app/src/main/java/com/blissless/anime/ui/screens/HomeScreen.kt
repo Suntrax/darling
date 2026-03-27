@@ -39,6 +39,7 @@ import com.blissless.anime.MainViewModel
 import com.blissless.anime.ui.components.HomeAnimeHorizontalList
 import com.blissless.anime.dialogs.HomeAnimeInfoDialog
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
+import com.blissless.anime.dialogs.OfflineFavoritesDialog
 import com.blissless.anime.dialogs.UserProfileDialog
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.components.HomeStatusColors
@@ -85,6 +86,7 @@ fun HomeScreen(
     var showEpisodeSheet by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
     var showSearchOverlay by remember { mutableStateOf(false) }
+    var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showAnimeInfoDialog by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
@@ -180,7 +182,8 @@ fun HomeScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 16.dp)
+                            .clickable { showOfflineFavoritesDialog = true },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AsyncImage(
@@ -671,6 +674,16 @@ fun HomeScreen(
                     }
                 }
             }
+        )
+    }
+
+    if (showOfflineFavoritesDialog) {
+        OfflineFavoritesDialog(
+            favorites = localFavorites,
+            isOled = isOled,
+            onDismiss = { showOfflineFavoritesDialog = false },
+            onAnimeClick = { anime -> onShowAnimeDialog(anime, null) },
+            onRemoveFavorite = { id -> viewModel.toggleLocalFavorite(id) }
         )
     }
 

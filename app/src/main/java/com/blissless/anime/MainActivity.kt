@@ -197,6 +197,14 @@ fun MainScreen(
     val startupScreen by viewModel.startupScreen.collectAsState()
     val pagerState = rememberPagerState(initialPage = startupScreen, pageCount = { 4 })
 
+    var committedPage by remember { mutableIntStateOf(startupScreen) }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.isScrollInProgress to pagerState.targetPage }
+            .collect { (isScrolling, targetPage) ->
+                committedPage = if (isScrolling) targetPage else pagerState.currentPage
+            }
+    }
+
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
@@ -1096,7 +1104,7 @@ fun MainScreen(
                             label = if (hideNavbarText) null else {
                                 { Text(item, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) }
                             },
-                            selected = pagerState.currentPage == index,
+                            selected = pagerState.targetPage == index,
                             onClick = {
                                 scope.launch {
                                     pagerState.animateScrollToPage(index)
@@ -1169,7 +1177,7 @@ fun MainScreen(
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
-                            currentScreenIndex = pagerState.currentPage,
+                            currentScreenIndex = committedPage,
                             playbackPositions = playbackPositions
                         )
                         3 -> SettingsScreen(
