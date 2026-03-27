@@ -37,7 +37,6 @@ import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.StoredFavorite
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.ui.components.HomeAnimeHorizontalList
-import com.blissless.anime.dialogs.HomeAnimeInfoDialog
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.dialogs.OfflineFavoritesDialog
 import com.blissless.anime.dialogs.UserProfileDialog
@@ -58,7 +57,6 @@ fun HomeScreen(
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
     simplifyEpisodeMenu: Boolean = true,
-    simplifyAnimeDetails: Boolean = true,
     hideAdultContent: Boolean = false,
     favoriteIds: Set<Int> = emptySet(),
     onToggleLocalFavorite: (Int) -> Unit = {},
@@ -95,7 +93,6 @@ fun HomeScreen(
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
-    var showAnimeInfoDialog by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     
     // Track first anime for back navigation
@@ -248,12 +245,12 @@ fun HomeScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     AsyncImage(model = com.blissless.anime.R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
                                     Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
-                                    Spacer(modifier = Modifier.height(8.dp)); Text("Sign in with AniList to sync your anime list and track your progress", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                    Spacer(modifier = Modifier.height(8.dp)); Text("Your lists are empty. Sign in with AniList to sync your anime list and track your progress, or start exploring!", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
                                         AsyncImage(
                                             model = ImageRequest.Builder(LocalContext.current)
-                                                .data("https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/AniList_logo.svg/960px-AniList_logo.svg.png")
+                                                .data("https://anilist.co/img/icons/favicon-32x32.png")
                                                 .crossfade(true)
                                                 .build(),
                                             contentDescription = "AniList",
@@ -316,12 +313,8 @@ fun HomeScreen(
                                 },
                                 onInfoClick = { anime ->
                                     selectedAnime = anime
-                                    if (simplifyAnimeDetails) {
-                                        showAnimeInfoDialog = true
-                                    } else {
-                                        if (firstAnime == null) firstAnime = anime
-                                        showDetailedAnimeScreen = true
-                                    }
+                                    if (firstAnime == null) firstAnime = anime
+                                    showDetailedAnimeScreen = true
                                 })
                         } }
 
@@ -352,12 +345,8 @@ fun HomeScreen(
                                 },
                                 onInfoClick = { anime ->
                                     selectedAnime = anime
-                                    if (simplifyAnimeDetails) {
-                                        showAnimeInfoDialog = true
-                                    } else {
-                                        if (firstAnime == null) firstAnime = anime
-                                        showDetailedAnimeScreen = true
-                                    }
+                                    if (firstAnime == null) firstAnime = anime
+                                    showDetailedAnimeScreen = true
                                 })
                         } }
 
@@ -388,12 +377,8 @@ fun HomeScreen(
                                 },
                                 onInfoClick = { anime ->
                                     selectedAnime = anime
-                                    if (simplifyAnimeDetails) {
-                                        showAnimeInfoDialog = true
-                                    } else {
-                                        if (firstAnime == null) firstAnime = anime
-                                        showDetailedAnimeScreen = true
-                                    }
+                                    if (firstAnime == null) firstAnime = anime
+                                    showDetailedAnimeScreen = true
                                 })
                         } }
 
@@ -438,11 +423,7 @@ fun HomeScreen(
                                 },
                                 onInfoClick = { anime ->
                                     selectedAnime = anime
-                                    if (simplifyAnimeDetails) {
-                                        showAnimeInfoDialog = true
-                                    } else {
-                                        showDetailedAnimeScreen = true
-                                    }
+                                    showDetailedAnimeScreen = true
                                 })
                         } }
 
@@ -473,28 +454,18 @@ fun HomeScreen(
                                 },
                                 onInfoClick = { anime ->
                                     selectedAnime = anime
-                                    if (simplifyAnimeDetails) {
-                                        showAnimeInfoDialog = true
-                                    } else {
-                                        if (firstAnime == null) firstAnime = anime
-                                        showDetailedAnimeScreen = true
-                                    }
+                                    if (firstAnime == null) firstAnime = anime
+                                    showDetailedAnimeScreen = true
                                 })
                         } }
 
-                        if (allListsEmpty) {
+                        if (allListsEmpty && !showWelcomeCard) {
                             item(key = "empty_state") {
                                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                                     Card(colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
                                         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("Your lists are empty", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                                             Text("Check out the Explore tab to discover anime!", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if (!isLoggedIn) {
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                                Button(onClick = onLoginClick, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
-                                                    Text("Login with AniList")
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -515,7 +486,6 @@ fun HomeScreen(
                 viewModel = viewModel,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
-                simplifyAnimeDetails = simplifyAnimeDetails,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,
                 completed = completed,
@@ -578,62 +548,6 @@ fun HomeScreen(
                 ) else viewModel.updateAnimeStatus(selectedAnime!!.id, status); showStatusDialog =
                 false; viewModel.refreshHome()
             })
-    }
-
-    if (showAnimeInfoDialog && selectedAnime != null) {
-        // Set first anime on first open
-        if (firstAnime == null) {
-            firstAnime = selectedAnime
-        }
-        
-        val exploreAnime = ExploreAnime(id = selectedAnime!!.id, title = selectedAnime!!.title, cover = selectedAnime!!.cover, banner = selectedAnime!!.banner, episodes = selectedAnime!!.totalEpisodes, latestEpisode = selectedAnime!!.latestEpisode, averageScore = selectedAnime!!.averageScore, genres = selectedAnime!!.genres, year = selectedAnime!!.year, format = selectedAnime!!.format)
-        val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
-        ExploreAnimeDialog(
-            anime = exploreAnime,
-            viewModel = viewModel,
-            isOled = isOled,
-            currentStatus = selectedAnime!!.listStatus,
-            isFavorite = isAnimeFavorite,
-            onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
-            onDismiss = { showAnimeInfoDialog = false },
-            onAddToPlanning = { viewModel.addExploreAnimeToList(exploreAnime, "PLANNING") },
-            onAddToDropped = { viewModel.addExploreAnimeToList(exploreAnime, "DROPPED") },
-            onAddToOnHold = { viewModel.addExploreAnimeToList(exploreAnime, "PAUSED") },
-            onRemoveFromList = { viewModel.removeAnimeFromList(selectedAnime!!.id); showAnimeInfoDialog = false },
-            onStartWatching = { episode -> onPlayEpisode(selectedAnime!!, episode); showAnimeInfoDialog = false },
-            isLoggedIn = isLoggedIn,
-            onLoginClick = onLoginClick,
-            onRelationClick = { relation ->
-                scope.launch {
-                    try {
-                        val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                        if (detailedData != null) {
-                            selectedAnime = AnimeMedia(
-                                id = detailedData.id,
-                                title = detailedData.title,
-                                titleEnglish = detailedData.titleEnglish,
-                                cover = detailedData.cover,
-                                banner = detailedData.banner,
-                                progress = selectedAnime!!.progress,
-                                totalEpisodes = detailedData.episodes,
-                                latestEpisode = detailedData.latestEpisode,
-                                status = detailedData.status ?: "",
-                                averageScore = detailedData.averageScore,
-                                genres = detailedData.genres,
-                                listStatus = selectedAnime!!.listStatus,
-                                listEntryId = selectedAnime!!.listEntryId,
-                                year = detailedData.year,
-                                malId = detailedData.malId
-                            )
-                        } else {
-                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        )
     }
 
     if (showDetailedAnimeScreen && selectedAnime != null) {

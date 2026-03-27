@@ -472,10 +472,10 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, isDragging, hasError) {
-        if (showControls && isPlaying && !isDragging && !hasError) {
+    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu) {
+        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu) {
             delay(3000)
-            if (!isDragging && !hasError && isPlaying) {
+            if (!isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu) {
                 showControls = false
             }
         }

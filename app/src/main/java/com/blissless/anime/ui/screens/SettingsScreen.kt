@@ -54,7 +54,6 @@ fun SettingsScreen(
     disableMaterialColors: Boolean = false,
     preferredCategory: String = "sub",
     simplifyEpisodeMenu: Boolean = false,
-    simplifyAnimeDetails: Boolean = false,
     preferredScraper: String = "Animekai"
 ) {
     val context = LocalContext.current
@@ -65,7 +64,6 @@ fun SettingsScreen(
 
     // Collect the settings from ViewModel
     val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = false)
-    val simplifyAnimeDetailsState by viewModel.simplifyAnimeDetails.collectAsState(initial = false)
     val rawPreferredScraper by viewModel.preferredScraper.collectAsState(initial = "Animekai")
     // Ensure Animekai is always the selected scraper (only working option)
     val preferredScraperState = rawPreferredScraper.ifBlank { "Animekai" }
@@ -151,7 +149,7 @@ fun SettingsScreen(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data("https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/AniList_logo.svg/960px-AniList_logo.svg.png")
+                            .data("https://anilist.co/img/icons/favicon-32x32.png")
                             .crossfade(true)
                             .build(),
                         contentDescription = "AniList",
@@ -219,13 +217,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            SettingsToggle(
-                title = "Simple Anime Details",
-                description = "Use compact dialog (disable for full info page)",
-                checked = simplifyAnimeDetailsState,
-                onCheckedChange = { viewModel.setSimplifyAnimeDetails(it) },
-                isOled = isOled
-            )
         }
 
         // Content Settings Section

@@ -221,7 +221,6 @@ fun MainScreen(
     val hideNavbarText by viewModel.hideNavbarText.collectAsState(initial = false)
 
     val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
-    val simplifyAnimeDetails by viewModel.simplifyAnimeDetails.collectAsState(initial = true)
     val hideAdultContent by viewModel.hideAdultContent.collectAsState(initial = false)
 
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
@@ -811,211 +810,119 @@ fun MainScreen(
 
     val exploreDialog = overlayState as? OverlayState.ExploreAnimeDialog
     if (exploreDialog != null) {
-        if (simplifyAnimeDetails) {
-            val isAnimeFavorite = aniListFavoriteIds.contains(exploreDialog.anime.id)
-            ExploreAnimeDialog(
-                anime = exploreDialog.anime,
-                viewModel = viewModel,
-                isOled = isOled,
-                currentStatus = animeStatusMap[exploreDialog.anime.id],
-                isFavorite = isAnimeFavorite,
-                onToggleFavorite = {
-                    viewModel.toggleAniListFavorite(exploreDialog.anime.id)
-                },
-                onDismiss = {
-                    overlayState = OverlayState.None
-                },
-                onAddToPlanning = {
-                    viewModel.addExploreAnimeToList(exploreDialog.anime, "PLANNING")
-                },
-                onAddToDropped = {
-                    viewModel.addExploreAnimeToList(exploreDialog.anime, "DROPPED")
-                },
-                onAddToOnHold = {
-                    viewModel.addExploreAnimeToList(exploreDialog.anime, "PAUSED")
-                },
-                onRemoveFromList = {
-                    viewModel.removeAnimeFromList(exploreDialog.anime.id)
-                },
-                onStartWatching = { episode ->
-                    val animeMedia = AnimeMedia(
-                        id = exploreDialog.anime.id,
-                        title = exploreDialog.anime.title,
-                        titleEnglish = exploreDialog.anime.titleEnglish,
-                        cover = exploreDialog.anime.cover,
-                        banner = exploreDialog.anime.banner,
-                        progress = 0,
-                        totalEpisodes = exploreDialog.anime.episodes,
-                        latestEpisode = exploreDialog.anime.latestEpisode,
-                        status = "",
-                        averageScore = exploreDialog.anime.averageScore,
-                        genres = exploreDialog.anime.genres,
-                        listStatus = "",
-                        listEntryId = 0,
-                        year = exploreDialog.anime.year,
-                        malId = exploreDialog.anime.malId
+        val isAnimeFavorite = aniListFavoriteIds.contains(exploreDialog.anime.id)
+        DetailedAnimeScreen(
+            anime = exploreDialog.anime.toDetailedAnimeData(),
+            viewModel = viewModel,
+            isOled = isOled,
+            currentStatus = animeStatusMap[exploreDialog.anime.id],
+            isFavorite = isAnimeFavorite,
+            onDismiss = {
+                val firstAnime = exploreDialog.firstAnime
+                if (firstAnime != null && exploreDialog.anime.id != firstAnime.id) {
+                    overlayState = OverlayState.ExploreAnimeDialog(
+                        anime = firstAnime,
+                        firstAnime = firstAnime,
+                        isFirstOpen = false
                     )
-                    viewModel.addExploreAnimeToList(exploreDialog.anime, "CURRENT")
-                    onPlayEpisode(animeMedia, episode)
+                } else {
                     overlayState = OverlayState.None
-                },
-                isLoggedIn = isLoggedIn,
-                onLoginClick = { viewModel.loginWithAniList() },
-                onRelationClick = { relation ->
-                    try {
-                        scope.launch {
-                            try {
-                                delay(100)
-                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                                if (detailedData != null) {
-                                    val newAnime = ExploreAnime(
-                                        id = relation.id,
-                                        title = detailedData.title,
-                                        titleEnglish = detailedData.titleEnglish,
-                                        cover = detailedData.cover,
-                                        banner = detailedData.banner,
-                                        episodes = detailedData.episodes,
-                                        latestEpisode = detailedData.latestEpisode,
-                                        averageScore = detailedData.averageScore,
-                                        genres = detailedData.genres,
-                                        year = detailedData.year,
-                                        format = detailedData.format
-                                    )
-                                    val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
-                                    overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = firstAnime, isFirstOpen = false)
-                                } else {
-                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
                 }
-            )
-        } else {
-            val isAnimeFavorite = aniListFavoriteIds.contains(exploreDialog.anime.id)
-            DetailedAnimeScreen(
-                anime = exploreDialog.anime.toDetailedAnimeData(),
-                viewModel = viewModel,
-                isOled = isOled,
-                currentStatus = animeStatusMap[exploreDialog.anime.id],
-                isFavorite = isAnimeFavorite,
-                onDismiss = {
-                    // Go back to first anime if we've navigated, otherwise close
-                    val firstAnime = exploreDialog.firstAnime
-                    if (firstAnime != null && exploreDialog.anime.id != firstAnime.id) {
-                        overlayState = OverlayState.ExploreAnimeDialog(
-                            anime = firstAnime,
-                            firstAnime = firstAnime,
-                            isFirstOpen = false
+            },
+            onSwipeToClose = { overlayState = OverlayState.None },
+            onPlayEpisode = { episode ->
+                val animeMedia = AnimeMedia(
+                    id = exploreDialog.anime.id,
+                    title = exploreDialog.anime.title,
+                    titleEnglish = exploreDialog.anime.titleEnglish,
+                    cover = exploreDialog.anime.cover,
+                    banner = exploreDialog.anime.banner,
+                    progress = 0,
+                    totalEpisodes = exploreDialog.anime.episodes,
+                    latestEpisode = exploreDialog.anime.latestEpisode,
+                    status = "",
+                    averageScore = exploreDialog.anime.averageScore,
+                    genres = exploreDialog.anime.genres,
+                    listStatus = "",
+                    listEntryId = 0,
+                    year = exploreDialog.anime.year,
+                    malId = exploreDialog.anime.malId
+                )
+                viewModel.addExploreAnimeToList(exploreDialog.anime, "CURRENT")
+                onPlayEpisode(animeMedia, episode)
+                overlayState = OverlayState.None
+            },
+            onUpdateStatus = { status ->
+                if (status != null) {
+                    viewModel.addExploreAnimeToList(exploreDialog.anime, status)
+                }
+            },
+            onRemove = {
+                viewModel.removeAnimeFromList(exploreDialog.anime.id)
+            },
+            onToggleFavorite = { _ ->
+                viewModel.toggleAniListFavorite(exploreDialog.anime.id)
+            },
+            localStatus = localAnimeStatus[exploreDialog.anime.id]?.status,
+            isLocalFavorite = localFavoriteIds.contains(exploreDialog.anime.id),
+            onToggleLocalFavorite = { id ->
+                viewModel.toggleLocalFavorite(id, exploreDialog.anime.title, exploreDialog.anime.cover, exploreDialog.anime.banner, exploreDialog.anime.year, exploreDialog.anime.averageScore)
+            },
+            onUpdateLocalStatus = { status ->
+                val currentEntry = localAnimeStatus[exploreDialog.anime.id]
+                if (status != null) {
+                    viewModel.setLocalAnimeStatus(
+                        exploreDialog.anime.id,
+                        LocalAnimeEntry(
+                            id = exploreDialog.anime.id,
+                            status = status,
+                            progress = currentEntry?.progress ?: 0,
+                            totalEpisodes = exploreDialog.anime.episodes
                         )
-                    } else {
-                        overlayState = OverlayState.None
-                    }
-                },
-                onSwipeToClose = { overlayState = OverlayState.None },
-                onPlayEpisode = { episode ->
-                    val animeMedia = AnimeMedia(
-                        id = exploreDialog.anime.id,
-                        title = exploreDialog.anime.title,
-                        titleEnglish = exploreDialog.anime.titleEnglish,
-                        cover = exploreDialog.anime.cover,
-                        banner = exploreDialog.anime.banner,
-                        progress = 0,
-                        totalEpisodes = exploreDialog.anime.episodes,
-                        latestEpisode = exploreDialog.anime.latestEpisode,
-                        status = "",
-                        averageScore = exploreDialog.anime.averageScore,
-                        genres = exploreDialog.anime.genres,
-                        listStatus = "",
-                        listEntryId = 0,
-                        year = exploreDialog.anime.year,
-                        malId = exploreDialog.anime.malId
                     )
-                    viewModel.addExploreAnimeToList(exploreDialog.anime, "CURRENT")
-                    onPlayEpisode(animeMedia, episode)
-                    overlayState = OverlayState.None
-                },
-                onUpdateStatus = { status ->
-                    if (status != null) {
-                        viewModel.addExploreAnimeToList(exploreDialog.anime, status)
-                    }
-                },
-                onRemove = {
-                    viewModel.removeAnimeFromList(exploreDialog.anime.id)
-                },
-                onToggleFavorite = { _ ->
-                    viewModel.toggleAniListFavorite(exploreDialog.anime.id)
-                },
-                localStatus = localAnimeStatus[exploreDialog.anime.id]?.status,
-                isLocalFavorite = localFavoriteIds.contains(exploreDialog.anime.id),
-                onToggleLocalFavorite = { id ->
-                    viewModel.toggleLocalFavorite(id, exploreDialog.anime.title, exploreDialog.anime.cover, exploreDialog.anime.banner, exploreDialog.anime.year, exploreDialog.anime.averageScore)
-                },
-                onUpdateLocalStatus = { status ->
-                    val currentEntry = localAnimeStatus[exploreDialog.anime.id]
-                    if (status != null) {
-                        viewModel.setLocalAnimeStatus(
-                            exploreDialog.anime.id,
-                            LocalAnimeEntry(
-                                id = exploreDialog.anime.id,
-                                status = status,
-                                progress = currentEntry?.progress ?: 0,
-                                totalEpisodes = exploreDialog.anime.episodes
-                            )
-                        )
-                    } else {
-                        viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
-                    }
-                },
-                onRemoveLocalStatus = {
+                } else {
                     viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
-                },
-                isLoggedIn = isLoggedIn,
-                onLoginClick = { viewModel.loginWithAniList() },
-                onRelationClick = { relation ->
-                    try {
-                        scope.launch {
-                            try {
-                                delay(100)
-                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                                if (detailedData != null) {
-                                    val newAnime = ExploreAnime(
-                                        id = relation.id,
-                                        title = detailedData.title,
-                                        titleEnglish = detailedData.titleEnglish,
-                                        cover = detailedData.cover,
-                                        banner = detailedData.banner,
-                                        episodes = detailedData.episodes,
-                                        latestEpisode = detailedData.latestEpisode,
-                                        averageScore = detailedData.averageScore,
-                                        genres = detailedData.genres,
-                                        year = detailedData.year,
-                                        format = detailedData.format
-                                    )
-                                    // Keep firstAnime unchanged, update current anime
-                                    val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
-                                    overlayState = OverlayState.ExploreAnimeDialog(
-                                        anime = newAnime,
-                                        firstAnime = firstAnime,
-                                        isFirstOpen = false
-                                    )
-                                } else {
-                                    Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
                 }
-            )
-        }
+            },
+            onRemoveLocalStatus = {
+                viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
+            },
+            isLoggedIn = isLoggedIn,
+            onLoginClick = { viewModel.loginWithAniList() },
+            onRelationClick = { relation ->
+                try {
+                    scope.launch {
+                        try {
+                            delay(100)
+                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedData != null) {
+                                val newAnime = ExploreAnime(
+                                    id = relation.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    episodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    year = detailedData.year,
+                                    format = detailedData.format
+                                )
+                                val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
+                                overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = firstAnime, isFirstOpen = false)
+                            } else {
+                                Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
 
@@ -1150,7 +1057,6 @@ fun MainScreen(
                             isOled = isOled,
                             isVisible = isScheduleVisible,
                             disableMaterialColors = disableMaterialColors,
-                            simplifyAnimeDetails = simplifyAnimeDetails,
                             hideAdultContent = hideAdultContent,
                             isLoggedIn = isLoggedIn,
                             onPlayEpisode = onPlayEpisode,
@@ -1163,7 +1069,6 @@ fun MainScreen(
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
                             showStatusColors = showStatusColors,
-                            simplifyAnimeDetails = simplifyAnimeDetails,
                             favoriteIds = aniListFavoriteIds,
                             onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,
@@ -1182,7 +1087,6 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
-                            simplifyAnimeDetails = simplifyAnimeDetails,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = aniListFavoriteIds,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },

@@ -2,14 +2,19 @@ package com.blissless.anime.ui.components
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -55,7 +60,6 @@ fun SearchOverlay(
     viewModel: MainViewModel,
     isOled: Boolean,
     isLoggedIn: Boolean,
-    simplifyAnimeDetails: Boolean = true,
     hideAdultContent: Boolean = false,
     currentlyWatching: List<AnimeMedia>,
     planningToWatch: List<AnimeMedia>,
@@ -70,6 +74,7 @@ fun SearchOverlay(
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
+    var resultsVisible by remember { mutableStateOf(false) }
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var firstAnime by remember { mutableStateOf<ExploreAnime?>(null) }
@@ -116,12 +121,16 @@ fun SearchOverlay(
         if (searchQuery.isEmpty()) {
             searchResults = emptyList()
             isSearching = false
+            resultsVisible = false
         } else {
             isSearching = true
+            resultsVisible = false
             delay(500) // Debounce delay
             val results = viewModel.searchAnime(searchQuery)
             searchResults = results
             isSearching = false
+            delay(50)
+            resultsVisible = true
         }
     }
 
@@ -247,18 +256,27 @@ fun SearchOverlay(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredSearchResults) { anime ->
-                        SearchResultItem(
-                            anime = anime,
-                            isOled = isOled,
-                            currentStatus = savedAnimeMap[anime.id],
-                            onClick = {
-                                keyboardController?.hide() // Hide keyboard on selection
-                                selectedAnime = anime
-                                firstAnime = anime // Set first anime on selection
-                                showDetailDialog = true
-                            }
-                        )
+                    itemsIndexed(filteredSearchResults) { index, anime ->
+                        AnimatedVisibility(
+                            visible = resultsVisible,
+                            enter = fadeIn(animationSpec = tween(300, delayMillis = index * 50, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        animationSpec = tween(300, delayMillis = index * 50, easing = FastOutSlowInEasing),
+                                        initialOffsetY = { it / 2 }
+                                    )
+                        ) {
+                            SearchResultItem(
+                                anime = anime,
+                                isOled = isOled,
+                                currentStatus = savedAnimeMap[anime.id],
+                                onClick = {
+                                    keyboardController?.hide() // Hide keyboard on selection
+                                    selectedAnime = anime
+                                    firstAnime = anime // Set first anime on selection
+                                    showDetailDialog = true
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -270,24 +288,39 @@ fun SearchOverlay(
         val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
         val currentStatus = savedAnimeMap[selectedAnime!!.id]
         
-        if (simplifyAnimeDetails) {
-            ExploreAnimeDialog(
-            anime = selectedAnime!!,
+        DetailedAnimeScreen(
+            anime = selectedAnime!!.toDetailedAnimeData(),
             viewModel = viewModel,
             isOled = isOled,
+            isLoggedIn = isLoggedIn,
             currentStatus = currentStatus,
             isFavorite = isAnimeFavorite,
-            onToggleFavorite = {
-                if (!viewModel.toggleAniListFavorite(selectedAnime!!.id)) {
-                    Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
+            onDismiss = {
+                if (firstAnime != null && selectedAnime!!.id != firstAnime!!.id) {
+                    scope.launch {
+                        val detailedData = viewModel.fetchDetailedAnimeData(firstAnime!!.id)
+                        if (detailedData != null) {
+                            selectedAnime = ExploreAnime(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                        }
+                    }
+                } else {
+                    showDetailDialog = false
+                    firstAnime = null
                 }
             },
-            onDismiss = { showDetailDialog = false },
-            onAddToPlanning = { viewModel.addExploreAnimeToList(selectedAnime!!, "PLANNING") },
-            onAddToDropped = { viewModel.addExploreAnimeToList(selectedAnime!!, "DROPPED") },
-            onAddToOnHold = { viewModel.addExploreAnimeToList(selectedAnime!!, "PAUSED") },
-            onRemoveFromList = { viewModel.removeAnimeFromList(selectedAnime!!.id) },
-            onStartWatching = { episode ->
+            onPlayEpisode = { episode ->
                 val animeMedia = AnimeMedia(
                     id = selectedAnime!!.id,
                     title = selectedAnime!!.title,
@@ -305,7 +338,18 @@ fun SearchOverlay(
                 onPlayEpisode(animeMedia, episode)
                 showDetailDialog = false
             },
-            isLoggedIn = true,
+            onUpdateStatus = { status ->
+                if (status != null) {
+                    viewModel.addExploreAnimeToList(selectedAnime!!, status)
+                }
+            },
+            onRemove = {
+                viewModel.removeAnimeFromList(selectedAnime!!.id)
+                showDetailDialog = false
+            },
+            onToggleFavorite = { _ ->
+                viewModel.toggleAniListFavorite(selectedAnime!!.id)
+            },
             onRelationClick = { relation ->
                 scope.launch {
                     try {
@@ -334,99 +378,6 @@ fun SearchOverlay(
                 }
             }
         )
-        } else {
-            // Full detailed screen when simplify is off
-            DetailedAnimeScreen(
-                anime = selectedAnime!!.toDetailedAnimeData(),
-                viewModel = viewModel,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                currentStatus = currentStatus,
-                isFavorite = isAnimeFavorite,
-                onDismiss = {
-                    if (firstAnime != null && selectedAnime!!.id != firstAnime!!.id) {
-                        scope.launch {
-                            val detailedData = viewModel.fetchDetailedAnimeData(firstAnime!!.id)
-                            if (detailedData != null) {
-                                selectedAnime = ExploreAnime(
-                                    id = detailedData.id,
-                                    title = detailedData.title,
-                                    titleEnglish = detailedData.titleEnglish,
-                                    cover = detailedData.cover,
-                                    banner = detailedData.banner,
-                                    episodes = detailedData.episodes,
-                                    latestEpisode = detailedData.latestEpisode,
-                                    averageScore = detailedData.averageScore,
-                                    genres = detailedData.genres,
-                                    year = detailedData.year,
-                                    format = detailedData.format
-                                )
-                            }
-                        }
-                    } else {
-                        showDetailDialog = false
-                        firstAnime = null
-                    }
-                },
-                onPlayEpisode = { episode ->
-                    val animeMedia = AnimeMedia(
-                        id = selectedAnime!!.id,
-                        title = selectedAnime!!.title,
-                        cover = selectedAnime!!.cover,
-                        banner = selectedAnime!!.banner,
-                        progress = 0,
-                        totalEpisodes = selectedAnime!!.episodes,
-                        latestEpisode = selectedAnime!!.latestEpisode,
-                        status = "",
-                        averageScore = selectedAnime!!.averageScore,
-                        genres = selectedAnime!!.genres,
-                        listStatus = "",
-                        listEntryId = 0
-                    )
-                    onPlayEpisode(animeMedia, episode)
-                    showDetailDialog = false
-                },
-                onUpdateStatus = { status ->
-                    if (status != null) {
-                        viewModel.addExploreAnimeToList(selectedAnime!!, status)
-                    }
-                },
-                onRemove = {
-                    viewModel.removeAnimeFromList(selectedAnime!!.id)
-                    showDetailDialog = false
-                },
-                onToggleFavorite = { _ ->
-                    viewModel.toggleAniListFavorite(selectedAnime!!.id)
-                },
-                onRelationClick = { relation ->
-                    scope.launch {
-                        try {
-                            delay(100)
-                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                            if (detailedData != null) {
-                                selectedAnime = ExploreAnime(
-                                    id = relation.id,
-                                    title = detailedData.title,
-                                    titleEnglish = detailedData.titleEnglish,
-                                    cover = detailedData.cover,
-                                    banner = detailedData.banner,
-                                    episodes = detailedData.episodes,
-                                    latestEpisode = detailedData.latestEpisode,
-                                    averageScore = detailedData.averageScore,
-                                    genres = detailedData.genres,
-                                    year = detailedData.year,
-                                    format = detailedData.format
-                                )
-                            } else {
-                                Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-            )
-        }
     }
 
 }
