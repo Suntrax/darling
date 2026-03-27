@@ -1,8 +1,10 @@
 package com.blissless.anime.ui.components
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +55,34 @@ fun FeaturedCarousel(
     val scope = rememberCoroutineScope()
     val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
     var autoScrollJob by remember { mutableStateOf<Job?>(null) }
+    var previousPage by remember { mutableIntStateOf(pagerState.currentPage) }
+    var headerVisible by remember { mutableStateOf(true) }
+
+    LaunchedEffect(pagerState.currentPage, isDragged) {
+        if (previousPage != pagerState.currentPage) {
+            headerVisible = false
+            if (!isDragged) {
+                kotlinx.coroutines.delay(80)
+                headerVisible = true
+                previousPage = pagerState.currentPage
+            }
+        }
+    }
+
+    val headerAlpha by animateFloatAsState(
+        targetValue = if (headerVisible) 1f else 0f,
+        animationSpec = tween(200),
+        label = "headerAlpha"
+    )
+
+    val headerScale by animateFloatAsState(
+        targetValue = if (headerVisible) 1f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "headerScale"
+    )
 
     LaunchedEffect(autoScrollEnabled, isVisible, isDragged) {
         if (autoScrollEnabled && isVisible && !isDragged) {
@@ -114,11 +145,19 @@ fun FeaturedCarousel(
                 // Info Card overlay
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomStart) {
                     Card(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp).clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onAnimeClick(anime) }
-                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .graphicsLayer {
+                                alpha = headerAlpha
+                                scaleX = headerScale
+                                scaleY = headerScale
+                            }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onAnimeClick(anime) }
+                            ),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
                     ) {

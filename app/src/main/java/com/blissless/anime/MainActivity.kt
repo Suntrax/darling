@@ -26,6 +26,7 @@ import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.CachedStream
+import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.ui.screens.DetailedAnimeScreen
 import com.blissless.anime.dialogs.ExploreAnimeDialog
@@ -949,13 +950,26 @@ fun MainScreen(
                 onToggleFavorite = { _ ->
                     viewModel.toggleAniListFavorite(exploreDialog.anime.id)
                 },
-                localStatus = localAnimeStatus[exploreDialog.anime.id],
+                localStatus = localAnimeStatus[exploreDialog.anime.id]?.status,
                 isLocalFavorite = localFavoriteIds.contains(exploreDialog.anime.id),
                 onToggleLocalFavorite = { id ->
                     viewModel.toggleLocalFavorite(id, exploreDialog.anime.title, exploreDialog.anime.cover, exploreDialog.anime.banner, exploreDialog.anime.year, exploreDialog.anime.averageScore)
                 },
                 onUpdateLocalStatus = { status ->
-                    viewModel.setLocalAnimeStatus(exploreDialog.anime.id, status)
+                    val currentEntry = localAnimeStatus[exploreDialog.anime.id]
+                    if (status != null) {
+                        viewModel.setLocalAnimeStatus(
+                            exploreDialog.anime.id,
+                            LocalAnimeEntry(
+                                id = exploreDialog.anime.id,
+                                status = status,
+                                progress = currentEntry?.progress ?: 0,
+                                totalEpisodes = exploreDialog.anime.episodes
+                            )
+                        )
+                    } else {
+                        viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
+                    }
                 },
                 onRemoveLocalStatus = {
                     viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
@@ -1171,7 +1185,6 @@ fun MainScreen(
                             simplifyAnimeDetails = simplifyAnimeDetails,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = aniListFavoriteIds,
-                            localFavorites = localFavorites,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
                             onPlayEpisode = onPlayEpisode,

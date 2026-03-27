@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -49,6 +50,7 @@ import coil.compose.AsyncImage
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.TagData
 import com.blissless.anime.data.models.DetailedAnimeData
+import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -91,7 +93,12 @@ fun DetailedAnimeScreen(
     var isStatusRateLimited by remember { mutableStateOf(false) }
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
 
-    val effectiveStatus = if (isLoggedIn) currentStatus else localStatus
+    val localFavorites by viewModel.localFavorites.collectAsState()
+    val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
+    val effectiveLocalFavorite = if (isLoggedIn) isLocalFavorite else localFavorites.containsKey(anime.id)
+    val effectiveLocalStatus = if (isLoggedIn) null else localAnimeStatus[anime.id]?.status
+
+    val effectiveStatus = if (isLoggedIn) currentStatus else (effectiveLocalStatus ?: localStatus)
     val effectiveOnUpdateStatus = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
     val effectiveOnRemove = if (isLoggedIn) onRemove else onRemoveLocalStatus
 
@@ -410,7 +417,7 @@ fun DetailedAnimeScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val notYetAired = displayData.status == "NOT_YET_RELEASED"
-                            val effectiveIsFavorite = if (isLoggedIn) isFavorite else isLocalFavorite
+                            val effectiveIsFavorite = if (isLoggedIn) isFavorite else effectiveLocalFavorite
                             val effectiveOnToggleFavorite: () -> Unit = if (isLoggedIn) {
                                 { onToggleFavorite(displayData) }
                             } else {
@@ -433,8 +440,20 @@ fun DetailedAnimeScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    effectiveOnToggleFavorite()
-                                    Toast.makeText(context, if (effectiveIsFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
+                                    if (isLoggedIn) {
+                                        onToggleFavorite(displayData)
+                                        Toast.makeText(context, if (isFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        viewModel.toggleOfflineFavorite(
+                                            anime.id,
+                                            anime.title,
+                                            anime.cover,
+                                            anime.banner,
+                                            anime.year,
+                                            anime.averageScore
+                                        )
+                                        Toast.makeText(context, if (effectiveLocalFavorite) "Removed from Favorites" else "Added to Favorites", Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFFF1744).copy(alpha = 0.15f), contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary)
@@ -487,9 +506,30 @@ fun DetailedAnimeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                val statusToCheck = if (isLoggedIn) currentStatus else localStatus
-                                val onUpdate = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
-                                val onRemoveStatus = if (isLoggedIn) onRemove else onRemoveLocalStatus
+                                val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
+                                val onUpdate: (String) -> Unit = if (isLoggedIn) {
+                                    { status -> onUpdateStatus(status) }
+                                } else { status ->
+                                    viewModel.setLocalAnimeStatus(
+                                        anime.id,
+                                        LocalAnimeEntry(
+                                            id = anime.id,
+                                            status = status,
+                                            progress = 0,
+                                            totalEpisodes = anime.episodes,
+                                            title = anime.title,
+                                            cover = anime.cover,
+                                            banner = anime.banner,
+                                            year = anime.year,
+                                            averageScore = anime.averageScore
+                                        )
+                                    )
+                                }
+                                val onRemoveStatus: () -> Unit = if (isLoggedIn) {
+                                    { onRemove() }
+                                } else {
+                                    { viewModel.setLocalAnimeStatus(anime.id, null) }
+                                }
 
                                 StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), statusToCheck == "CURRENT") {
                                     if (isStatusRateLimited) {

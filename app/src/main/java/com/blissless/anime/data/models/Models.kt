@@ -821,3 +821,16 @@ data class StoredFavorite(
     val year: Int? = null,
     val averageScore: Int? = null
 )
+
+@Serializable
+data class LocalAnimeEntry(
+    val id: Int,
+    val status: String,
+    val progress: Int = 0,
+    val totalEpisodes: Int = 0,
+    val title: String = "",
+    val cover: String = "",
+    val banner: String? = null,
+    val year: Int? = null,
+    val averageScore: Int? = null
+)

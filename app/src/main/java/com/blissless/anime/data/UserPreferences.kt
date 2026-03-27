@@ -2,6 +2,7 @@ package com.blissless.anime.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.StoredFavorite
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -113,8 +114,8 @@ class UserPreferences(private val context: Context) {
     val localFavoriteIds: Set<Int> get() = _localFavorites.value.keys
 
     // Local anime status (for offline users)
-    private val _localAnimeStatus = MutableStateFlow<Map<Int, String>>(emptyMap())
-    val localAnimeStatus: StateFlow<Map<Int, String>> = _localAnimeStatus.asStateFlow()
+    private val _localAnimeStatus = MutableStateFlow<Map<Int, LocalAnimeEntry>>(emptyMap())
+    val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> = _localAnimeStatus.asStateFlow()
 
     /**
      * Load all preferences from SharedPreferences.
@@ -410,12 +411,13 @@ class UserPreferences(private val context: Context) {
     }
 
     // Local Anime Status (for offline users)
-    fun getLocalAnimeStatus(mediaId: Int): String? = _localAnimeStatus.value[mediaId]
+    fun getLocalAnimeStatus(mediaId: Int): LocalAnimeEntry? = _localAnimeStatus.value[mediaId]
+    fun getAllLocalAnimeStatus(): Map<Int, LocalAnimeEntry> = _localAnimeStatus.value
 
-    fun setLocalAnimeStatus(mediaId: Int, status: String?) {
+    fun setLocalAnimeStatus(mediaId: Int, entry: LocalAnimeEntry?) {
         val currentStatus = _localAnimeStatus.value.toMutableMap()
-        if (status != null) {
-            currentStatus[mediaId] = status
+        if (entry != null) {
+            currentStatus[mediaId] = entry
         } else {
             currentStatus.remove(mediaId)
         }
@@ -423,22 +425,34 @@ class UserPreferences(private val context: Context) {
         saveLocalAnimeStatus(currentStatus)
     }
 
-    private fun saveLocalAnimeStatus(statusMap: Map<Int, String>) {
-        val statusList = statusMap.map { "${it.key}:${it.value}" }
-        val jsonString = statusList.joinToString("|")
-        sharedPreferences.edit { putString(KEY_LOCAL_ANIME_STATUS, jsonString) }
+    fun updateLocalAnimeProgress(mediaId: Int, progress: Int, totalEpisodes: Int) {
+        val current = _localAnimeStatus.value[mediaId]
+        if (current != null) {
+            setLocalAnimeStatus(mediaId, current.copy(progress = progress, totalEpisodes = totalEpisodes))
+        }
+    }
+
+    private fun saveLocalAnimeStatus(statusMap: Map<Int, LocalAnimeEntry>) {
+        val json = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+        val statusList = statusMap.values.map { json.encodeToString(LocalAnimeEntry.serializer(), it) }.toSet()
+        sharedPreferences.edit { putStringSet(KEY_LOCAL_ANIME_STATUS, statusList) }
     }
 
     private fun loadLocalAnimeStatus() {
-        val saved = sharedPreferences.getString(KEY_LOCAL_ANIME_STATUS, null)
-        if (saved != null) {
+        val saved = sharedPreferences.getStringSet(KEY_LOCAL_ANIME_STATUS, null)
+        if (saved != null && saved.isNotEmpty()) {
             try {
-                val statusList = saved.split("|").filter { it.contains(":") }
-                val statusMap = mutableMapOf<Int, String>()
-                statusList.forEach { entry ->
-                    val parts = entry.split(":", limit = 2)
-                    if (parts.size == 2) {
-                        parts[0].toIntOrNull()?.let { id -> statusMap[id] = parts[1] }
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val statusMap = mutableMapOf<Int, LocalAnimeEntry>()
+                saved.forEach { entryJson ->
+                    try {
+                        val entry = json.decodeFromString(LocalAnimeEntry.serializer(), entryJson)
+                        statusMap[entry.id] = entry
+                    } catch (e: Exception) {
+                        // Skip invalid entries
                     }
                 }
                 _localAnimeStatus.value = statusMap

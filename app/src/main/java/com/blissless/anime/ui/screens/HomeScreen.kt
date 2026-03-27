@@ -61,7 +61,6 @@ fun HomeScreen(
     simplifyAnimeDetails: Boolean = true,
     hideAdultContent: Boolean = false,
     favoriteIds: Set<Int> = emptySet(),
-    localFavorites: Map<Int, com.blissless.anime.data.models.StoredFavorite> = emptyMap(),
     onToggleLocalFavorite: (Int) -> Unit = {},
     onToggleFavorite: (AnimeMedia) -> Unit = {},
     onPlayerStateChange: (Boolean) -> Unit = {},
@@ -77,6 +76,14 @@ fun HomeScreen(
     val onHold by viewModel.onHold.collectAsState()
     val dropped by viewModel.dropped.collectAsState()
     val isLoading by viewModel.isLoadingHome.collectAsState()
+
+    val offlineCurrentlyWatching by viewModel.offlineCurrentlyWatching.collectAsState()
+    val offlinePlanningToWatch by viewModel.offlinePlanningToWatch.collectAsState()
+    val offlineCompleted by viewModel.offlineCompleted.collectAsState()
+    val offlineOnHold by viewModel.offlineOnHold.collectAsState()
+    val offlineDropped by viewModel.offlineDropped.collectAsState()
+
+    val localFavorites by viewModel.localFavorites.collectAsState()
 
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
@@ -94,7 +101,17 @@ fun HomeScreen(
     // Track first anime for back navigation
     var firstAnime by remember { mutableStateOf<AnimeMedia?>(null) }
 
-    val allListsEmpty = currentlyWatching.isEmpty() && planningToWatch.isEmpty() && completed.isEmpty() && onHold.isEmpty() && dropped.isEmpty()
+    val effectiveCurrentlyWatching = if (isLoggedIn) currentlyWatching else offlineCurrentlyWatching
+    val effectivePlanningToWatch = if (isLoggedIn) planningToWatch else offlinePlanningToWatch
+    val effectiveCompleted = if (isLoggedIn) completed else offlineCompleted
+    val effectiveOnHold = if (isLoggedIn) onHold else offlineOnHold
+    val effectiveDropped = if (isLoggedIn) dropped else offlineDropped
+
+    val allListsEmpty = effectiveCurrentlyWatching.isEmpty() && effectivePlanningToWatch.isEmpty() && effectiveCompleted.isEmpty() && effectiveOnHold.isEmpty() && effectiveDropped.isEmpty()
+
+    val hasOfflineContent = !isLoggedIn && (localFavorites.isNotEmpty() || viewModel.localAnimeStatus.value.isNotEmpty())
+    val showWelcomeCard = !isLoggedIn && allListsEmpty && !hasOfflineContent
+
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -182,72 +199,94 @@ fun HomeScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp)
-                            .clickable { showOfflineFavoritesDialog = true },
+                            .padding(vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AsyncImage(
-                            model = com.blissless.anime.R.mipmap.ic_launcher_round,
-                            contentDescription = "App",
-                            modifier = Modifier.size(40.dp).clip(CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("My Anime", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                            Text("${localFavorites.size} favorites", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .offset(x = (-4).dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color.Transparent
+                            ),
+                            onClick = { showOfflineFavoritesDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                                    contentDescription = "App",
+                                    modifier = Modifier.size(32.dp).clip(CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("My Anime", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    Text("${localFavorites.size} favorites", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
                         }
                         IconButton(onClick = { showSearchOverlay = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                         }
                     }
-                    // Login Card - centered on screen
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
-                        Box(modifier = Modifier.fillMaxWidth().background(Brush.horizontalGradient(colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)))).padding(24.dp)) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                AsyncImage(model = com.blissless.anime.R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
-                                Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
-                                Spacer(modifier = Modifier.height(8.dp)); Text("Sign in with AniList to sync your anime list and track your progress", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                                Spacer(modifier = Modifier.height(20.dp))
-                                Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data("https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/AniList_logo.svg/960px-AniList_logo.svg.png")
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = "AniList",
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) 
+
+                    if (showWelcomeCard) {
+                        // Login Card - centered on screen
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
+                            Box(modifier = Modifier.fillMaxWidth().background(Brush.horizontalGradient(colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)))).padding(24.dp)) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    AsyncImage(model = com.blissless.anime.R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
+                                    Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+                                    Spacer(modifier = Modifier.height(8.dp)); Text("Sign in with AniList to sync your anime list and track your progress", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data("https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/AniList_logo.svg/960px-AniList_logo.svg.png")
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "AniList",
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) 
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp)); Text("Don't have an account? Sign up for free at anilist.co", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Spacer(modifier = Modifier.height(12.dp)); Text("Don't have an account? Sign up for free at anilist.co", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
+                        }
                     }
-                    }
-                } else if (isLoading && allListsEmpty) {
+                }
+
+                if (isLoading && allListsEmpty) {
                     LoadingSkeleton(isOled)
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                         // Anime Lists - Passing isLoggedIn
-                        if (currentlyWatching.isNotEmpty()) { item(key = "header_current") {
+                        if (effectiveCurrentlyWatching.isNotEmpty()) { item(key = "header_current") {
                             SectionHeader(
                                 title = "Currently Watching",
                                 icon = Icons.Default.PlayArrow,
-                                count = currentlyWatching.size,
+                                count = effectiveCurrentlyWatching.size,
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("CURRENT")
                             )
                         } }
-                        if (currentlyWatching.isNotEmpty()) { item(key = "list_current") {
+                        if (effectiveCurrentlyWatching.isNotEmpty()) { item(key = "list_current") {
                             HomeAnimeHorizontalList(
-                                animeList = currentlyWatching,
+                                animeList = effectiveCurrentlyWatching,
                                 listType = "CURRENT",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
@@ -286,18 +325,18 @@ fun HomeScreen(
                                 })
                         } }
 
-                        if (planningToWatch.isNotEmpty()) { item(key = "header_planning") {
+                        if (effectivePlanningToWatch.isNotEmpty()) { item(key = "header_planning") {
                             SectionHeader(
                                 title = "Planning to Watch",
                                 icon = Icons.Default.Bookmark,
-                                count = planningToWatch.size,
+                                count = effectivePlanningToWatch.size,
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("PLANNING")
                             )
                         } }
-                        if (planningToWatch.isNotEmpty()) { item(key = "list_planning") {
+                        if (effectivePlanningToWatch.isNotEmpty()) { item(key = "list_planning") {
                             HomeAnimeHorizontalList(
-                                animeList = planningToWatch,
+                                animeList = effectivePlanningToWatch,
                                 listType = "PLANNING",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
@@ -322,18 +361,18 @@ fun HomeScreen(
                                 })
                         } }
 
-                        if (completed.isNotEmpty()) { item(key = "header_completed") {
+                        if (effectiveCompleted.isNotEmpty()) { item(key = "header_completed") {
                             SectionHeader(
                                 title = "Completed",
                                 icon = Icons.Default.Check,
-                                count = completed.size,
+                                count = effectiveCompleted.size,
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("COMPLETED")
                             )
                         } }
-                        if (completed.isNotEmpty()) { item(key = "list_completed") {
+                        if (effectiveCompleted.isNotEmpty()) { item(key = "list_completed") {
                             HomeAnimeHorizontalList(
-                                animeList = completed,
+                                animeList = effectiveCompleted,
                                 listType = "COMPLETED",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
@@ -358,18 +397,18 @@ fun HomeScreen(
                                 })
                         } }
 
-                        if (onHold.isNotEmpty()) { item(key = "header_onhold") {
+                        if (effectiveOnHold.isNotEmpty()) { item(key = "header_onhold") {
                             SectionHeader(
                                 title = "On Hold",
                                 icon = Icons.Default.Pause,
-                                count = onHold.size,
+                                count = effectiveOnHold.size,
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("PAUSED")
                             )
                         } }
-                        if (onHold.isNotEmpty()) { item(key = "list_onhold") {
+                        if (effectiveOnHold.isNotEmpty()) { item(key = "list_onhold") {
                             HomeAnimeHorizontalList(
-                                animeList = onHold,
+                                animeList = effectiveOnHold,
                                 listType = "PAUSED",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
@@ -407,18 +446,18 @@ fun HomeScreen(
                                 })
                         } }
 
-                        if (dropped.isNotEmpty()) { item(key = "header_dropped") {
+                        if (effectiveDropped.isNotEmpty()) { item(key = "header_dropped") {
                             SectionHeader(
                                 title = "Dropped",
                                 icon = Icons.Default.Delete,
-                                count = dropped.size,
+                                count = effectiveDropped.size,
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("DROPPED")
                             )
                         } }
-                        if (dropped.isNotEmpty()) { item(key = "list_dropped") {
+                        if (effectiveDropped.isNotEmpty()) { item(key = "list_dropped") {
                             HomeAnimeHorizontalList(
-                                animeList = dropped,
+                                animeList = effectiveDropped,
                                 listType = "DROPPED",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
@@ -450,6 +489,12 @@ fun HomeScreen(
                                         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("Your lists are empty", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                                             Text("Check out the Explore tab to discover anime!", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                            if (!isLoggedIn) {
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                Button(onClick = onLoginClick, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
+                                                    Text("Login with AniList")
+                                                }
+                                            }
                                         }
                                     }
                                 }

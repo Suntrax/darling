@@ -79,6 +79,22 @@ class MainViewModel : ViewModel() {
     private val _dropped = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val dropped: StateFlow<List<AnimeMedia>> = _dropped.asStateFlow()
 
+    // Offline anime lists (for logged-out users)
+    private val _offlineCurrentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val offlineCurrentlyWatching: StateFlow<List<AnimeMedia>> = _offlineCurrentlyWatching.asStateFlow()
+
+    private val _offlinePlanningToWatch = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val offlinePlanningToWatch: StateFlow<List<AnimeMedia>> = _offlinePlanningToWatch.asStateFlow()
+
+    private val _offlineCompleted = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val offlineCompleted: StateFlow<List<AnimeMedia>> = _offlineCompleted.asStateFlow()
+
+    private val _offlineOnHold = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val offlineOnHold: StateFlow<List<AnimeMedia>> = _offlineOnHold.asStateFlow()
+
+    private val _offlineDropped = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val offlineDropped: StateFlow<List<AnimeMedia>> = _offlineDropped.asStateFlow()
+
     // Explore data
     private val _featuredAnime = MutableStateFlow<List<ExploreAnime>>(emptyList())
     val featuredAnime: StateFlow<List<ExploreAnime>> = _featuredAnime.asStateFlow()
@@ -147,7 +163,7 @@ class MainViewModel : ViewModel() {
     val autoPlayNextEpisode: StateFlow<Boolean> get() = userPreferences.autoPlayNextEpisode
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> get() = userPreferences.localFavorites
     val localFavoriteIds: Set<Int> get() = userPreferences.localFavoriteIds
-    val localAnimeStatus: StateFlow<Map<Int, String>> get() = userPreferences.localAnimeStatus
+    val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> get() = userPreferences.localAnimeStatus
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
@@ -168,12 +184,93 @@ class MainViewModel : ViewModel() {
         cacheManager.loadStreamCache()
         cacheManager.loadPlaybackPositions()
         loadAiringScheduleCache()
+        updateOfflineLists()
 
         viewModelScope.launch {
             if (hasToken) loadHomeDataWithCache()
             loadExploreDataWithCache()
             fetchAiringSchedule()
         }
+    }
+
+    fun updateOfflineLists() {
+        val statusMap = userPreferences.getAllLocalAnimeStatus()
+        val cache = cacheManager.detailedAnimeCache.value
+        val favorites = userPreferences.localFavorites.value
+
+        val currentlyWatching = mutableListOf<AnimeMedia>()
+        val planningToWatch = mutableListOf<AnimeMedia>()
+        val completed = mutableListOf<AnimeMedia>()
+        val onHold = mutableListOf<AnimeMedia>()
+        val dropped = mutableListOf<AnimeMedia>()
+
+        statusMap.forEach { (id, entry) ->
+            val cachedAnime = cache[id]
+            val favorite = favorites[id]
+
+            val anime = if (cachedAnime != null) {
+                AnimeMedia(
+                    id = cachedAnime.id,
+                    title = cachedAnime.title,
+                    titleEnglish = cachedAnime.titleEnglish,
+                    cover = cachedAnime.cover,
+                    banner = cachedAnime.banner,
+                    progress = entry.progress,
+                    totalEpisodes = cachedAnime.episodes,
+                    latestEpisode = cachedAnime.nextAiringEpisode,
+                    status = cachedAnime.status ?: "",
+                    averageScore = cachedAnime.averageScore,
+                    genres = cachedAnime.genres,
+                    listStatus = entry.status,
+                    year = cachedAnime.year,
+                    malId = cachedAnime.malId,
+                    format = cachedAnime.format
+                )
+            } else if (favorite != null) {
+                AnimeMedia(
+                    id = favorite.id,
+                    title = favorite.title,
+                    cover = favorite.cover,
+                    banner = favorite.banner,
+                    progress = entry.progress,
+                    totalEpisodes = entry.totalEpisodes,
+                    listStatus = entry.status,
+                    year = favorite.year,
+                    averageScore = favorite.averageScore
+                )
+            } else if (entry.title.isNotEmpty()) {
+                // Use data stored in LocalAnimeEntry itself
+                AnimeMedia(
+                    id = entry.id,
+                    title = entry.title,
+                    cover = entry.cover,
+                    banner = entry.banner,
+                    progress = entry.progress,
+                    totalEpisodes = entry.totalEpisodes,
+                    listStatus = entry.status,
+                    year = entry.year,
+                    averageScore = entry.averageScore
+                )
+            } else {
+                null
+            }
+
+            if (anime != null) {
+                when (entry.status) {
+                    "CURRENT" -> currentlyWatching.add(anime)
+                    "PLANNING" -> planningToWatch.add(anime)
+                    "COMPLETED" -> completed.add(anime)
+                    "PAUSED" -> onHold.add(anime)
+                    "DROPPED" -> dropped.add(anime)
+                }
+            }
+        }
+
+        _offlineCurrentlyWatching.value = currentlyWatching.sortedByDescending { it.averageScore ?: 0 }
+        _offlinePlanningToWatch.value = planningToWatch.sortedByDescending { it.averageScore ?: 0 }
+        _offlineCompleted.value = completed.sortedByDescending { it.averageScore ?: 0 }
+        _offlineOnHold.value = onHold.sortedByDescending { it.averageScore ?: 0 }
+        _offlineDropped.value = dropped.sortedByDescending { it.averageScore ?: 0 }
     }
 
     private suspend fun loadHomeDataWithCache() {
@@ -372,16 +469,36 @@ class MainViewModel : ViewModel() {
 
     fun updateAnimeProgress(mediaId: Int, progress: Int) {
         viewModelScope.launch { if (repository.updateProgress(mediaId, progress)) fetchLists() }
+        val currentEntry = userPreferences.getLocalAnimeStatus(mediaId)
+        if (currentEntry != null) {
+            val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
+            userPreferences.updateLocalAnimeProgress(mediaId, progress, cachedAnime?.episodes ?: currentEntry.totalEpisodes)
+            updateOfflineLists()
+        }
     }
 
     fun updateAnimeStatus(mediaId: Int, status: String, progress: Int? = null) {
         viewModelScope.launch { if (repository.updateStatus(mediaId, status, progress)) fetchLists() }
+        val currentEntry = userPreferences.getLocalAnimeStatus(mediaId)
+        val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
+        setLocalAnimeStatus(
+            mediaId,
+            LocalAnimeEntry(
+                id = mediaId,
+                status = status,
+                progress = progress ?: currentEntry?.progress ?: 0,
+                totalEpisodes = cachedAnime?.episodes ?: currentEntry?.totalEpisodes ?: 0
+            )
+        )
     }
 
     fun removeAnimeFromList(mediaId: Int) {
         val entryId = (currentlyWatching.value + planningToWatch.value + completed.value + onHold.value + dropped.value)
-            .find { it.id == mediaId }?.listEntryId ?: return
-        viewModelScope.launch { if (repository.deleteListEntry(entryId)) fetchLists() }
+            .find { it.id == mediaId }?.listEntryId
+        if (entryId != null) {
+            viewModelScope.launch { if (repository.deleteListEntry(entryId)) fetchLists() }
+        }
+        setLocalAnimeStatus(mediaId, null)
     }
 
     // Settings
@@ -404,18 +521,44 @@ class MainViewModel : ViewModel() {
     fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
 
     // Favorites
-    fun toggleLocalFavorite(mediaId: Int) = userPreferences.toggleLocalFavorite(mediaId)
-    fun toggleLocalFavorite(mediaId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) = userPreferences.toggleLocalFavorite(mediaId, title, cover, banner, year, averageScore)
-    fun toggleLocalFavorite(anime: ExploreAnime) = userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
-    fun toggleLocalFavorite(anime: AnimeMedia) = userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
-    fun toggleLocalFavorite(anime: DetailedAnimeData) = userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
+    fun toggleLocalFavorite(mediaId: Int) {
+        userPreferences.toggleLocalFavorite(mediaId)
+        updateOfflineLists()
+    }
+    fun toggleLocalFavorite(mediaId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) {
+        userPreferences.toggleLocalFavorite(mediaId, title, cover, banner, year, averageScore)
+        updateOfflineLists()
+    }
+    fun toggleLocalFavorite(anime: ExploreAnime) {
+        userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
+        updateOfflineLists()
+    }
+    fun toggleLocalFavorite(anime: AnimeMedia) {
+        userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
+        updateOfflineLists()
+    }
+    fun toggleLocalFavorite(anime: DetailedAnimeData) {
+        userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
+        updateOfflineLists()
+    }
+    fun toggleOfflineFavorite(animeId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) {
+        userPreferences.toggleLocalFavorite(animeId, title, cover, banner, year, averageScore)
+        updateOfflineLists()
+    }
     fun isLocalFavorite(mediaId: Int) = userPreferences.isLocalFavorite(mediaId)
     fun canAddFavorite() = userPreferences.canAddFavorite()
     fun getLocalFavoriteCount() = userPreferences.getLocalFavoriteCount()
 
     // Local Anime Status (for offline users)
-    fun getLocalAnimeStatus(mediaId: Int): String? = userPreferences.getLocalAnimeStatus(mediaId)
-    fun setLocalAnimeStatus(mediaId: Int, status: String?) = userPreferences.setLocalAnimeStatus(mediaId, status)
+    fun getLocalAnimeStatus(mediaId: Int): LocalAnimeEntry? = userPreferences.getLocalAnimeStatus(mediaId)
+    fun setLocalAnimeStatus(mediaId: Int, entry: LocalAnimeEntry?) {
+        userPreferences.setLocalAnimeStatus(mediaId, entry)
+        updateOfflineLists()
+    }
+    fun updateLocalAnimeProgress(mediaId: Int, progress: Int, totalEpisodes: Int) {
+        userPreferences.updateLocalAnimeProgress(mediaId, progress, totalEpisodes)
+        updateOfflineLists()
+    }
 
     // Playback
     fun savePlaybackPosition(animeId: Int, episode: Int, position: Long) = cacheManager.savePlaybackPosition(animeId, episode, position)

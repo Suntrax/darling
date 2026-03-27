@@ -464,13 +464,12 @@ fun ScheduleScreen(
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Schedule,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
+            AsyncImage(
+                model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                contentDescription = "App",
+                modifier = Modifier.size(32.dp).clip(CircleShape)
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
                 text = "Airing Schedule",
                 style = MaterialTheme.typography.headlineMedium,
