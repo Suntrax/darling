@@ -38,6 +38,8 @@ import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.toDetailedAnimeData
+import com.blissless.anime.ui.components.StatusColors
+import com.blissless.anime.ui.components.StatusLabels
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.data.models.DetailedAnimeData
 import kotlinx.coroutines.delay
@@ -74,6 +76,7 @@ fun ScheduleScreen(
     isOled: Boolean = false,
     isVisible: Boolean = false,
     preventAutoSync: Boolean = true,
+    showStatusColors: Boolean = false,
     disableMaterialColors: Boolean = false,
     hideAdultContent: Boolean = false,
     isLoggedIn: Boolean = false,
@@ -85,6 +88,7 @@ fun ScheduleScreen(
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
     val isLoading by viewModel.isLoadingSchedule.collectAsState()
+    val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
 
     // Filter adult content if setting is enabled
     val filteredAiringList = remember(airingList, hideAdultContent) {
@@ -95,7 +99,7 @@ fun ScheduleScreen(
 
     // Get current day of week (0 = Sunday, 6 = Saturday)
     val calendar = Calendar.getInstance()
-    val currentDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
+    var currentDayOfWeek by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_WEEK) - 1) }
 
     // Track current time for updates
     var currentTime by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
@@ -143,13 +147,18 @@ fun ScheduleScreen(
     val onHold by viewModel.onHold.collectAsState()
     val dropped by viewModel.dropped.collectAsState()
     
-    val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+    val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
         planningToWatch.forEach { map[it.id] = "PLANNING" }
         completed.forEach { map[it.id] = "COMPLETED" }
         onHold.forEach { map[it.id] = "PAUSED" }
         dropped.forEach { map[it.id] = "DROPPED" }
+        localAnimeStatus.forEach { (id, entry) ->
+            if (!map.containsKey(id)) {
+                map[id] = entry.status
+            }
+        }
         map
     }
     
@@ -218,6 +227,7 @@ fun ScheduleScreen(
             val newDay = newCalendar.get(Calendar.DAY_OF_WEEK) - 1
             if (newDay != lastKnownDay) {
                 lastKnownDay = newDay
+                currentDayOfWeek = newDay
                 // Auto-switch to new day in By Day mode
                 selectedDay = newDay
                 visibleDayByScroll = newDay
@@ -387,29 +397,20 @@ fun ScheduleScreen(
         derivedStateOf { listStateAllUpcoming.isScrollInProgress }
     }
     
-    LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, listStateAllUpcoming.firstVisibleItemScrollOffset, viewMode, isScrolling) {
+    LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, viewMode, currentDayOfWeek) {
         if (viewMode == 0 && !isProgrammaticScroll) {
             val firstVisibleIndex = listStateAllUpcoming.firstVisibleItemIndex
 
             if (firstVisibleIndex < allUpcomingTimelineItems.size) {
                 var currentDay = currentDayOfWeek
-                for (i in 0..firstVisibleIndex) {
-                    if (allUpcomingTimelineItems.getOrNull(i) is TimelineItem.DayHeader) {
-                        currentDay = (allUpcomingTimelineItems[i] as TimelineItem.DayHeader).dayIndex
+                for (i in firstVisibleIndex downTo 0) {
+                    val item = allUpcomingTimelineItems.getOrNull(i)
+                    if (item is TimelineItem.DayHeader) {
+                        currentDay = item.dayIndex
+                        break
                     }
                 }
-                
-                if (isScrolling) {
-                    // Update instantly during active scroll
-                    visibleDayByScroll = currentDay
-                } else {
-                    // Debounce when scroll settles
-                    scrollJob.value?.cancel()
-                    scrollJob.value = scope.launch {
-                        kotlinx.coroutines.delay(50)
-                        visibleDayByScroll = currentDay
-                    }
-                }
+                visibleDayByScroll = currentDay
             }
         }
     }
@@ -431,7 +432,7 @@ fun ScheduleScreen(
             if (targetIndex >= 0) {
                 isProgrammaticScroll = true
                 isInputLocked = true
-                listState.animateScrollToItem(targetIndex, scrollOffset = -100)
+                listState.scrollToItem(targetIndex, scrollOffset = -100)
             }
         }
     }
@@ -543,7 +544,7 @@ fun ScheduleScreen(
                         isProgrammaticScroll = true
                         isInputLocked = true
                         scope.launch {
-                            listStateAllUpcoming.animateScrollToItem(nowIndicatorIndexAll, scrollOffset = -100)
+                            listStateAllUpcoming.scrollToItem(nowIndicatorIndexAll, scrollOffset = -100)
                         }
                     }
                 },
@@ -570,7 +571,7 @@ fun ScheduleScreen(
                         isProgrammaticScroll = true
                         isInputLocked = true
                         scope.launch {
-                            listStateByDay.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
+                            listStateByDay.scrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
                         }
                     }
                 },
@@ -619,7 +620,7 @@ fun ScheduleScreen(
                             }
 
                             scope.launch {
-                                listStateAllUpcoming.animateScrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0)
+                                listStateAllUpcoming.scrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0)
                             }
                         },
                         label = {
@@ -681,11 +682,11 @@ fun ScheduleScreen(
                             // Instant scroll for By Day mode
                             if (isToday && nowIndicatorIndexByDay >= 0) {
                                 scope.launch {
-                                    listStateByDay.animateScrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
+                                    listStateByDay.scrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
                                 }
                             } else if (wasDifferentDay) {
                                 scope.launch {
-                                    listStateByDay.animateScrollToItem(0)
+                                    listStateByDay.scrollToItem(0)
                                 }
                             }
                         },
@@ -771,6 +772,8 @@ fun ScheduleScreen(
                         currentDayOfWeek = currentDayOfWeek,
                         currentTime = currentTime,
                         isOled = isOled,
+                        showStatusColors = showStatusColors,
+                        animeStatusMap = animeStatusMap,
                         listState = currentListState,
                         onAnimeClick = { anime ->
                             val exploreAnime = ExploreAnime(
@@ -895,6 +898,8 @@ private fun TimelineScheduleList(
     currentDayOfWeek: Int,
     currentTime: Long,
     isOled: Boolean,
+    showStatusColors: Boolean,
+    animeStatusMap: Map<Int, String>,
     listState: LazyListState,
     onAnimeClick: (AiringScheduleAnime) -> Unit
 ) {
@@ -919,12 +924,8 @@ private fun TimelineScheduleList(
             val alphaAnim = remember { Animatable(0.5f) }
 
             LaunchedEffect(item) {
-                launch {
-                    slideInAnim.animateTo(1f, animationSpec = tween(150, easing = FastOutSlowInEasing))
-                }
-                launch {
-                    alphaAnim.animateTo(1f, animationSpec = tween(150))
-                }
+                slideInAnim.snapTo(1f)
+                alphaAnim.snapTo(1f)
             }
 
             Box(
@@ -949,6 +950,8 @@ private fun TimelineScheduleList(
                             anime = item.data,
                             isOled = isOled,
                             isPast = item.isPast,
+                            showStatusColors = showStatusColors,
+                            animeStatus = animeStatusMap[item.data.id],
                             onClick = { onAnimeClick(item.data) }
                         )
                     }
@@ -1027,6 +1030,8 @@ private fun TimelineAnimeItem(
     anime: AiringScheduleAnime,
     isOled: Boolean,
     isPast: Boolean,
+    showStatusColors: Boolean,
+    animeStatus: String?,
     onClick: () -> Unit
 ) {
     val lineColor = if (isPast) {
@@ -1114,17 +1119,39 @@ private fun TimelineAnimeItem(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "Ep ${anime.airingEpisode}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "Ep ${anime.airingEpisode}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        if (animeStatus != null) {
+                            val statusColor = StatusColors[animeStatus] ?: Color.Gray
+                            val statusLabel = StatusLabels[animeStatus] ?: animeStatus
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = statusColor.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = statusLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = statusColor,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
 
                     if (!isPast && anime.timeUntilAiring != null) {

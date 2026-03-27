@@ -1063,6 +1063,7 @@ fun MainScreen(
                             isOled = isOled,
                             isVisible = isScheduleVisible,
                             preventAutoSync = preventScheduleSync,
+                            showStatusColors = showStatusColors,
                             disableMaterialColors = disableMaterialColors,
                             hideAdultContent = hideAdultContent,
                             isLoggedIn = isLoggedIn,
