@@ -41,15 +41,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.core.net.ConnectivityManagerCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import android.net.ConnectivityManager
+import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -102,7 +106,6 @@ fun PlayerScreen(
     isLatestEpisode: Boolean = false,
     disableMaterialColors: Boolean = false,
     showBufferIndicator: Boolean = true,
-    loadFullEpisode: Boolean = false,
     bufferAheadSeconds: Int = 30,
     animekaiIntroStart: Int? = null,
     animekaiIntroEnd: Int? = null,
@@ -117,7 +120,8 @@ fun PlayerScreen(
     onQualityChange: ((qualityUrl: String, qualityName: String) -> Unit)? = null,
     onPlaybackError: (() -> Unit)? = null,
     onPrefetchAdjacent: (() -> Unit)? = null,
-    onInvalidateStreamCache: (() -> Unit)? = null
+    onInvalidateStreamCache: (() -> Unit)? = null,
+    onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null }
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -136,6 +140,8 @@ fun PlayerScreen(
 
     var showControls by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(true) }
+    var isBuffering by remember { mutableStateOf(false) }
+    var isOffline by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var bufferedPosition by remember { mutableLongStateOf(0L) }
@@ -152,6 +158,14 @@ fun PlayerScreen(
     var showSkipIndicator by remember { mutableStateOf(false) }
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
+    
+    // Helper to check if device has internet connection
+    fun isNetworkAvailable(): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
+        return capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }
 
     val animeSkipService = remember { AnimeSkipService(context) }
 
@@ -240,37 +254,35 @@ fun PlayerScreen(
         }
     }
 
-    val exoPlayer = remember(context, loadFullEpisode, bufferAheadSeconds) {
+    val exoPlayer = remember(context, bufferAheadSeconds, referer) {
         val bufferAheadMs = bufferAheadSeconds * 1000
-        val loadControl = if (loadFullEpisode) {
-            DefaultLoadControl.Builder()
-                .setBackBuffer(Integer.MAX_VALUE, true)
-                .setBufferDurationsMs(
-                    Integer.MAX_VALUE, // minBufferMs - buffer at least this much before playing
-                    Integer.MAX_VALUE, // maxBufferMs - buffer as much as possible
-                    0, // bufferForPlaybackMs - start immediately
-                    0  // bufferForPlaybackAfterRebufferMs - restart immediately after rebuffer
-                )
-                .build()
+        // Use a higher max buffer to ensure more content is cached for offline viewing
+        val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000) // At least 3 minutes, or buffer ahead + 1 minute
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                bufferAheadMs, // minBufferMs - buffer this much before playing
+                maxBufferMs, // maxBufferMs - buffer more for caching
+                1500, // bufferForPlaybackMs - start playing after this much
+                3000  // bufferForPlaybackAfterRebufferMs - resume after rebuffer
+            )
+            .build()
+        
+        // Get data source factory - use cache if available
+        val cacheDataSourceFactory = onGetCacheDataSourceFactory(referer)
+        val upstreamFactory = DefaultHttpDataSource.Factory()
+            .setConnectTimeoutMs(20000)
+            .setReadTimeoutMs(20000)
+            .setDefaultRequestProperties(mapOf("Referer" to referer))
+        
+        val dataSourceFactory = if (cacheDataSourceFactory != null) {
+            cacheDataSourceFactory
         } else {
-            DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    bufferAheadMs, // minBufferMs - buffer this much before playing
-                    bufferAheadMs + 30000, // maxBufferMs - buffer a bit more than ahead
-                    1500, // bufferForPlaybackMs - start playing after this much
-                    3000  // bufferForPlaybackAfterRebufferMs - resume after rebuffer
-                )
-                .build()
+            upstreamFactory
         }
         
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(
-                DefaultMediaSourceFactory(context).setDataSourceFactory(
-                    DefaultHttpDataSource.Factory()
-                        .setConnectTimeoutMs(20000)
-                        .setReadTimeoutMs(20000)
-                        .setDefaultRequestProperties(mapOf("Referer" to referer))
-                )
+                DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory)
             )
             .setLoadControl(loadControl)
             .build()
@@ -283,17 +295,33 @@ fun PlayerScreen(
                         }
                     }
 
+                    override fun onPlaybackSuppressionReasonChanged(reason: Int) {
+                        // When playback is suppressed, player is likely waiting for buffer
+                        isBuffering = isPlaying && reason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
+                    }
+
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        hasError = true
-                        playbackError = error.message ?: "Unknown playback error"
-                        showControls = true
+                        // Check if offline - if so, keep buffering state instead of showing error
+                        if (!isNetworkAvailable()) {
+                            isOffline = true
+                            isBuffering = true
+                            hasError = false
+                            playbackError = null
+                            // Don't show controls, keep playing state
+                        } else {
+                            hasError = true
+                            playbackError = error.message ?: "Unknown playback error"
+                            showControls = true
+                        }
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        isBuffering = playbackState == Player.STATE_BUFFERING
                         if (playbackState == Player.STATE_READY) {
                             hasError = false
                             playbackError = null
                             isChangingServer = false
+                            isBuffering = false
                             if (pendingQualityChange != null && savedPositionForQuality > 0) {
                                 seekTo(savedPositionForQuality)
                                 pendingQualityChange = null
@@ -325,6 +353,7 @@ fun PlayerScreen(
         hasPlaybackStarted = false
         bufferedPosition = 0L
         maxBufferedPosition = 0L
+        isOffline = false
 
         val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl)
@@ -954,12 +983,20 @@ fun PlayerScreen(
                             },
                             modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         ) {
-                            Icon(
-                                imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
-                                tint = Color.White,
-                                modifier = Modifier.size(42.dp)
-                            )
+                            if (isBuffering || isOffline) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(42.dp),
+                                    strokeWidth = 3.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(42.dp)
+                                )
+                            }
                         }
 
                         IconButton(

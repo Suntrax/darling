@@ -164,6 +164,17 @@ fun HomeAnimeCard(
             }
         }
         "COMPLETED" -> { if (total > 0) "$total ${if (total == 1) "ep" else "eps"}" else "${anime.progress} ${if (anime.progress == 1) "ep" else "eps"}" }
+        "PAUSED", "DROPPED" -> {
+            // Show user's progress in these lists
+            when {
+                anime.progress > 0 && total > 0 -> "${anime.progress} / $total"
+                anime.progress > 0 && released > 0 -> "${anime.progress} / $released / ??"
+                anime.progress > 0 -> "${anime.progress}"
+                total > 0 -> "0 / $total"
+                released > 0 -> "0 / $released / ??"
+                else -> "??"
+            }
+        }
         else -> {
             when {
                 total > 0 -> "$released / $total"

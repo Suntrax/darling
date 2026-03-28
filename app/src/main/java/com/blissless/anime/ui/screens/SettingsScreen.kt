@@ -76,7 +76,6 @@ fun SettingsScreen(
     val bufferAheadSeconds by viewModel.bufferAheadSeconds.collectAsState(initial = 30)
     val bufferSizeMb by viewModel.bufferSizeMb.collectAsState(initial = 100)
     val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
-    val loadFullEpisode by viewModel.loadFullEpisode.collectAsState(initial = false)
 
     // Track thumbnail preview state for showing info dialog
     var showThumbnailInfoDialog by remember { mutableStateOf(false) }
@@ -462,56 +461,40 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Load Full Episode Toggle
-                    SettingsToggle(
-                        title = "Load Full Episode",
-                        description = "Buffer the entire episode before playing (saves data but uses more storage)",
-                        checked = loadFullEpisode,
-                        onCheckedChange = { viewModel.setLoadFullEpisode(it) },
-                        isOled = isOled
+                    // Buffer Ahead Slider
+                    SettingsSlider(
+                        title = "Buffer Ahead",
+                        description = "Amount of video to buffer ahead of playback",
+                        value = bufferAheadSeconds.toFloat(),
+                        valueRange = 0f..300f,
+                        valueLabel = "${bufferAheadSeconds}s",
+                        onValueChange = { newValue ->
+                            val snapped = round(newValue / 10f) * 10f
+                            viewModel.setBufferAheadSeconds(snapped.toInt())
+                        },
+                        isOled = isOled,
+                        minLabel = "0s",
+                        maxLabel = "300s",
+                        leadingIcon = Icons.Default.PlayArrow
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Buffer Ahead Slider (disabled when Load Full Episode is on)
-                    val isBufferLimited = !loadFullEpisode
-                    Column(
-                        modifier = if (!isBufferLimited) Modifier.alpha(0.4f) else Modifier
-                    ) {
-                        SettingsSlider(
-                            title = "Buffer Ahead",
-                            description = "Amount of video to buffer ahead of playback",
-                            value = bufferAheadSeconds.toFloat(),
-                            valueRange = 15f..120f,
-                            valueLabel = "${bufferAheadSeconds}s",
-                            onValueChange = { newValue ->
-                                val snapped = round(newValue / 5f) * 5f
-                                viewModel.setBufferAheadSeconds(snapped.toInt())
-                            },
-                            isOled = isOled,
-                            minLabel = "15s",
-                            maxLabel = "120s",
-                            leadingIcon = Icons.Default.PlayArrow
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        SettingsSlider(
-                            title = "Max Buffer Size",
-                            description = "Maximum amount of data to buffer (approximate)",
-                            value = bufferSizeMb.toFloat(),
-                            valueRange = 50f..500f,
-                            valueLabel = "${bufferSizeMb}MB",
-                            onValueChange = { newValue ->
-                                val snapped = round(newValue / 25f) * 25f
-                                viewModel.setBufferSizeMb(snapped.toInt())
-                            },
-                            isOled = isOled,
-                            minLabel = "50MB",
-                            maxLabel = "500MB",
-                            leadingIcon = Icons.Default.Settings
-                        )
-                    }
+                    SettingsSlider(
+                        title = "Max Buffer Size",
+                        description = "Maximum amount of data to buffer (approximate)",
+                        value = bufferSizeMb.toFloat(),
+                        valueRange = 50f..500f,
+                        valueLabel = "${bufferSizeMb}MB",
+                        onValueChange = { newValue ->
+                            val snapped = round(newValue / 25f) * 25f
+                            viewModel.setBufferSizeMb(snapped.toInt())
+                        },
+                        isOled = isOled,
+                        minLabel = "50MB",
+                        maxLabel = "500MB",
+                        leadingIcon = Icons.Default.Settings
+                    )
 
                     Spacer(modifier = Modifier.height(8.dp))
 

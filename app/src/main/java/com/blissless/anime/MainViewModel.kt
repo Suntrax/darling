@@ -224,13 +224,21 @@ class MainViewModel : ViewModel() {
     val bufferAheadSeconds: StateFlow<Int> get() = userPreferences.bufferAheadSeconds
     val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
-    val loadFullEpisode: StateFlow<Boolean> get() = userPreferences.loadFullEpisode
 
     // Cache Delegations
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> get() = cacheManager.prefetchedStreams
     val prefetchedEpisodeInfo: StateFlow<Map<String, EpisodeStreams?>> get() = cacheManager.prefetchedEpisodeInfo
     val playbackPositions: StateFlow<Map<String, Long>> get() = cacheManager.playbackPositions
     val detailedAnimeCache: StateFlow<Map<Int, DetailedAnimeData>> get() = cacheManager.detailedAnimeCache
+    
+    // Get cache data source factory for disk caching
+    fun getCacheDataSourceFactory(referer: String) = cacheManager.getCacheDataSourceFactory(referer)
+    
+    // Check if video is fully cached
+    fun isVideoFullyCached(videoUrl: String) = cacheManager.isVideoFullyCached(videoUrl)
+    
+    // Get cache progress
+    fun getCacheProgress(videoUrl: String) = cacheManager.getCacheProgress(videoUrl)
 
     fun init(context: Context, hasToken: Boolean) {
         this.context = context
@@ -758,7 +766,6 @@ class MainViewModel : ViewModel() {
     fun setBufferAheadSeconds(seconds: Int) = userPreferences.setBufferAheadSeconds(seconds)
     fun setBufferSizeMb(sizeMb: Int) = userPreferences.setBufferSizeMb(sizeMb)
     fun setShowBufferIndicator(show: Boolean) = userPreferences.setShowBufferIndicator(show)
-    fun setLoadFullEpisode(enabled: Boolean) = userPreferences.setLoadFullEpisode(enabled)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {

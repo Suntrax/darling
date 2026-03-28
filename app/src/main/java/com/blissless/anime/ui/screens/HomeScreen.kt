@@ -545,16 +545,16 @@ fun HomeScreen(
             onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
             onDismiss = { showStatusDialog = false },
             onRemove = {
-                viewModel.removeAnimeFromList(selectedAnime!!.id); showStatusDialog =
-                false; viewModel.refreshHome()
+                viewModel.removeAnimeFromList(selectedAnime!!.id)
+                showStatusDialog = false
             },
             onUpdate = { status, progress ->
                 if (progress != null) viewModel.updateAnimeStatus(
                     selectedAnime!!.id,
                     status,
                     progress
-                ) else viewModel.updateAnimeStatus(selectedAnime!!.id, status); showStatusDialog =
-                false; viewModel.refreshHome()
+                ) else viewModel.updateAnimeStatus(selectedAnime!!.id, status)
+                showStatusDialog = false
             })
     }
 

@@ -6,8 +6,11 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.datasource.cache.CacheWriter
+import kotlinx.coroutines.*
 import androidx.media3.datasource.DefaultHttpDataSource
 import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.EpisodeStreams
@@ -39,7 +42,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         private const val CACHE_PLAYBACK_POSITIONS = "cache_playback_positions"
         
         // Video cache settings
-        private const val VIDEO_CACHE_SIZE_BYTES = 500L * 1024 * 1024 // 500 MB default
+        private const val VIDEO_CACHE_SIZE_BYTES = 1024L * 1024 * 1024 // 1 GB default - more space for offline content
         private var videoCache: SimpleCache? = null
         private var isCacheInitialized = false
     }
@@ -70,13 +73,13 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setConnectTimeoutMs(20000)
-            .setReadTimeoutMs(20000)
+            .setReadTimeoutMs(60000) // Increased timeout for caching
             .setDefaultRequestProperties(mapOf("Referer" to referer))
         
         return CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(httpDataSourceFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            // Don't use FLAG_IGNORE_CACHE_ON_ERROR - we want to use cache even if there are issues
     }
     
     // Get the raw SimpleCache for direct access if needed
@@ -92,6 +95,144 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             isCacheInitialized = false
         } catch (e: Exception) {
             // Ignore errors during release
+        }
+    }
+    
+    // Preload a video URL to the cache completely
+    @OptIn(UnstableApi::class)
+    fun preloadVideoToCache(
+        context: Context,
+        videoUrl: String,
+        referer: String,
+        onProgress: ((Long, Long) -> Unit)? = null,
+        scope: CoroutineScope
+    ): Job? {
+        val cache = videoCache ?: return null
+        
+        val job = scope.launch(Dispatchers.IO) {
+            try {
+                // Check if already fully cached
+                val key = videoUrl.hashCode().toString()
+                val cachedSpans = cache.getCachedSpans(key)
+                val cachedBytes = cachedSpans.sumOf { it.length }
+                
+                // Get content length from the server
+                val contentLength = getContentLength(videoUrl, referer)
+                
+                if (contentLength > 0 && cachedBytes >= contentLength) {
+                    // Already fully cached
+                    withContext(Dispatchers.Main) {
+                        onProgress?.invoke(contentLength, contentLength)
+                    }
+                    return@launch
+                }
+                
+                // Use CacheDataSource to download the entire video
+                val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+                    .setConnectTimeoutMs(20000)
+                    .setReadTimeoutMs(20000)
+                    .setDefaultRequestProperties(mapOf("Referer" to referer))
+                
+                val cacheDataSourceFactory = CacheDataSource.Factory()
+                    .setCache(cache)
+                    .setUpstreamDataSourceFactory(httpDataSourceFactory)
+                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+                
+                val dataSource = cacheDataSourceFactory.createDataSource()
+                
+                // Read the data to trigger caching
+                val buffer = ByteArray(64 * 1024) // 64KB buffer
+                var totalRead = cachedBytes
+                var lastProgressUpdate = 0L
+                
+                try {
+                    val dataSpec = androidx.media3.datasource.DataSpec.Builder()
+                        .setUri(videoUrl)
+                        .setPosition(cachedBytes)
+                        .build()
+                    
+                    val sourceResponse = dataSource.open(dataSpec)
+                    try {
+                        while (isActive) {
+                            val bytesRead = dataSource.read(buffer, 0, buffer.size)
+                            if (bytesRead == -1) break
+                            totalRead += bytesRead
+                            
+                            // Update progress periodically (every 500ms)
+                            val now = System.currentTimeMillis()
+                            if (contentLength > 0 && now - lastProgressUpdate > 500) {
+                                lastProgressUpdate = now
+                                withContext(Dispatchers.Main) {
+                                    onProgress?.invoke(totalRead, contentLength)
+                                }
+                            }
+                        }
+                    } finally {
+                        dataSource.close()
+                    }
+                } catch (e: Exception) {
+                    // Read failed, but cache may have some data
+                }
+                
+                // Report completion
+                withContext(Dispatchers.Main) {
+                    onProgress?.invoke(totalRead, totalRead)
+                }
+                
+            } catch (e: Exception) {
+                // Preload failed, continue without full cache
+            }
+        }
+        
+        return job
+    }
+    
+    private fun getContentLength(videoUrl: String, referer: String): Long {
+        return try {
+            val connection = java.net.URL(videoUrl).openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "HEAD"
+            connection.setRequestProperty("Referer", referer)
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            val length = connection.contentLengthLong
+            connection.disconnect()
+            length
+        } catch (e: Exception) {
+            -1
+        }
+    }
+    
+    // Check if a video is fully cached
+    @OptIn(UnstableApi::class)
+    fun isVideoFullyCached(videoUrl: String): Boolean {
+        val cache = videoCache ?: return false
+        return try {
+            val key = videoUrl.hashCode().toString()
+            val cachedSpans = cache.getCachedSpans(key)
+            val cachedBytes = cachedSpans.sumOf { it.length }
+            val contentLength = getContentLength(videoUrl, "")
+            contentLength > 0 && cachedBytes >= contentLength
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    // Get cache progress for a video
+    @OptIn(UnstableApi::class)
+    fun getCacheProgress(videoUrl: String): Pair<Long, Long>? {
+        val cache = videoCache ?: return null
+        return try {
+            val key = videoUrl.hashCode().toString()
+            val cachedSpans = cache.getCachedSpans(key)
+            val cachedBytes = cachedSpans.sumOf { it.length }
+            val contentLength = getContentLength(videoUrl, "")
+            if (contentLength > 0) {
+                Pair(cachedBytes, contentLength)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
