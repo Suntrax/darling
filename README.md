@@ -8,22 +8,19 @@ A modern anime tracking and streaming app for Android.
 
 ## Important
 
-**AniList account is required** for streaming and tracking features.
-
 I do not host any content within this app. All anime content is streamed from third-party sources.
 
 ## Features
 
-- **AniList Integration** - Login to sync your anime list
+- **AniList and My Anime List Integration** - Login to sync your anime list
 - **Streaming** - Watch anime with built-in player (ExoPlayer)
 - **Progress Tracking** - Automatically sync watch progress
 - **Explore** - Browse trending, seasonal, and top-rated anime
-- **Video Player** - Gesture controls, skip buttons, quality selection
+- **Video Player** - Opening and ending skip buttons, quality selection, resize button
 
 ## Requirements
 
 - Android 8.0+ (API 26+)
-- AniList account (required for streaming)
 
 ## Installation
 
@@ -54,6 +51,15 @@ app/src/main/java/com/blissless/anime/
 ├── MainViewModel.kt
 └── OverlayState.kt
 ```
+
+## Forking the repository
+
+local.properties file with the following keys needed:
+
+ANIMEKAI_API_BASE_URL (can be adjusted to other providers)
+CLIENT_ID_ANILIST 
+TMDB_API_KEY
+MAL_CLIENT_ID
 
 ## Disclaimer
 
