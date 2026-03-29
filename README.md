@@ -56,10 +56,10 @@ app/src/main/java/com/blissless/anime/
 
 local.properties file with the following keys needed:
 
-ANIMEKAI_API_BASE_URL (can be adjusted to other providers)
-CLIENT_ID_ANILIST 
-TMDB_API_KEY
-MAL_CLIENT_ID
+ANIMEKAI_API_BASE_URL (can be adjusted to other providers)  
+CLIENT_ID_ANILIST  
+TMDB_API_KEY  
+MAL_CLIENT_ID  
 
 ## Disclaimer
 
