@@ -595,6 +595,7 @@ data class DetailedAnimeDataWrapper(val Media: DetailedAnimeMedia)
 @Serializable
 data class DetailedAnimeMedia(
     val id: Int,
+    val idMal: Int? = null,
     val title: DetailedAnimeTitle? = null,
     val coverImage: MediaCoverImage? = null,
     val bannerImage: String? = null,

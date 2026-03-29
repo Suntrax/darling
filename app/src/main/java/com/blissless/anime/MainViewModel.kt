@@ -9,10 +9,18 @@ import com.blissless.anime.api.ZenimeScraper
 import com.blissless.anime.api.AnimekaiScraper
 import com.blissless.anime.data.AnimeRepository
 import com.blissless.anime.data.CacheManager
+import com.blissless.anime.data.LoginProvider
+import com.blissless.anime.data.MalApiService
 import com.blissless.anime.data.UserPreferences
+import com.blissless.anime.data.JikanService
+import com.blissless.anime.data.JikanUserFavorites
+import com.blissless.anime.data.JikanUserHistory
 import com.blissless.anime.data.models.*
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -37,12 +45,17 @@ class MainViewModel : ViewModel() {
     private lateinit var context: Context
 
     // Sync queue for debounced AniList API calls
-    private data class PendingSync(val type: String, val mediaId: Int, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null)
+    private data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null)
     private val pendingSyncs = mutableMapOf<Int, PendingSync>() // mediaId -> pending sync
     private var syncJob: kotlinx.coroutines.Job? = null
 
-    private fun queueSync(mediaId: Int, type: String, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null) {
-        pendingSyncs[mediaId] = PendingSync(type, mediaId, status, progress, score, entryId)
+    private fun queueSync(mediaId: Int, type: String, malId: Int? = null, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null) {
+        val existingSync = pendingSyncs[mediaId]
+        val resolvedMalId = malId ?: existingSync?.malId ?: cacheManager.detailedAnimeCache.value[mediaId]?.malId
+        
+        android.util.Log.d("MAL_DEBUG", "queueSync called: mediaId=$mediaId, type=$type, malId=$malId, resolvedMalId=$resolvedMalId, status=$status")
+        
+        pendingSyncs[mediaId] = PendingSync(type, mediaId, resolvedMalId, status ?: existingSync?.status, progress ?: existingSync?.progress, score ?: existingSync?.score, entryId ?: existingSync?.entryId)
         
         syncJob?.cancel()
         syncJob = viewModelScope.launch {
@@ -59,30 +72,238 @@ class MainViewModel : ViewModel() {
         for ((_, sync) in syncsToExecute) {
             when (sync.type) {
                 "status" -> {
-                    sync.status?.let { repository.updateStatus(sync.mediaId, it, sync.progress) }
+                    sync.status?.let { 
+                        if (_loginProvider.value == LoginProvider.MAL) {
+                            val malId = sync.malId
+                            android.util.Log.d("MAL_DEBUG", "MAL status sync: mediaId=${sync.mediaId}, malId=$malId, status=$it")
+                            if (malId != null) {
+                                val malStatus = mapToMalStatus(it)
+                                android.util.Log.d("MAL_DEBUG", "MAL status mapped: $malStatus")
+                                if (malStatus != null) {
+                                    val result = malApiService.updateAnimeStatus(malId, malStatus, sync.score, sync.progress)
+                                    android.util.Log.d("MAL_DEBUG", "MAL API update result: $result")
+                                }
+                            } else {
+                                android.util.Log.d("MAL_DEBUG", "MAL ID is null, cannot update!")
+                            }
+                        } else {
+                            repository.updateStatus(sync.mediaId, it, sync.progress)
+                        }
+                    }
                 }
                 "progress" -> {
-                    sync.progress?.let { repository.updateProgress(sync.mediaId, it) }
+                    sync.progress?.let { 
+                        if (_loginProvider.value == LoginProvider.MAL) {
+                            val malId = sync.malId
+                            android.util.Log.d("MAL_DEBUG", "MAL progress sync: mediaId=${sync.mediaId}, malId=$malId, progress=$it")
+                            if (malId != null) {
+                                malApiService.updateAnimeStatus(malId, null, null, it)
+                            } else {
+                                android.util.Log.d("MAL_DEBUG", "MAL ID is null, cannot update progress!")
+                            }
+                        } else {
+                            repository.updateProgress(sync.mediaId, it)
+                        }
+                    }
                 }
                 "score" -> {
-                    sync.score?.let { repository.updateScore(sync.mediaId, it) }
+                    sync.score?.let { 
+                        if (_loginProvider.value == LoginProvider.MAL) {
+                            val malId = sync.malId
+                            android.util.Log.d("MAL_DEBUG", "MAL score sync: mediaId=${sync.mediaId}, malId=$malId, score=$it")
+                            if (malId != null) {
+                                malApiService.updateAnimeStatus(malId, null, it, null)
+                            }
+                        } else {
+                            repository.updateScore(sync.mediaId, it)
+                        }
+                    }
                 }
                 "delete" -> {
-                    sync.entryId?.let { repository.deleteListEntry(it) }
+                    sync.entryId?.let { 
+                        if (_loginProvider.value == LoginProvider.MAL) {
+                            val malId = sync.malId
+                            android.util.Log.d("MAL_DEBUG", "MAL delete sync: mediaId=${sync.mediaId}, malId=$malId")
+                            if (malId != null) {
+                                malApiService.deleteAnimeFromList(malId)
+                            }
+                        } else {
+                            repository.deleteListEntry(it)
+                        }
+                    }
                 }
                 "favorite" -> {
-                    repository.toggleAniListFavorite(sync.mediaId)
-                    hasFavoritesSync = true
+                    if (_loginProvider.value == LoginProvider.MAL) {
+                        toggleMalFavoriteById(sync.mediaId)
+                        hasFavoritesSync = true
+                    } else {
+                        repository.toggleAniListFavorite(sync.mediaId)
+                        hasFavoritesSync = true
+                    }
                 }
             }
         }
         
         if (syncsToExecute.isNotEmpty()) {
-            fetchLists()
+            if (_loginProvider.value == LoginProvider.MAL) {
+                fetchMalList()
+            } else {
+                fetchLists()
+            }
         }
         if (hasFavoritesSync) {
             fetchAniListFavorites()
         }
+    }
+    
+    private fun mapToMalStatus(status: String): String? {
+        return when (status) {
+            "CURRENT" -> "watching"
+            "PLANNING" -> "plan_to_watch"
+            "COMPLETED" -> "completed"
+            "PAUSED" -> "on_hold"
+            "DROPPED" -> "dropped"
+            else -> null
+        }
+    }
+    
+    private fun mapFromMalStatus(malStatus: String?): String {
+        return when (malStatus) {
+            "watching" -> "CURRENT"
+            "plan_to_watch" -> "PLANNING"
+            "completed" -> "COMPLETED"
+            "on_hold" -> "PAUSED"
+            "dropped" -> "DROPPED"
+            else -> "PLANNING"
+        }
+    }
+    
+    private suspend fun fetchMalList() {
+        if (_loginProvider.value != LoginProvider.MAL) return
+        
+        val entries = malApiService.getAnimeList()
+        
+        val currentlyWatching = mutableListOf<AnimeMedia>()
+        val planningToWatch = mutableListOf<AnimeMedia>()
+        val completed = mutableListOf<AnimeMedia>()
+        val onHold = mutableListOf<AnimeMedia>()
+        val dropped = mutableListOf<AnimeMedia>()
+        
+        entries.forEach { entry ->
+            val malId = entry.node.id
+            val status = entry.list_status?.status
+            val progress = entry.list_status?.num_episodes_watched ?: 0
+            val score = entry.list_status?.score ?: 0
+            
+            // Find matching anime from cache by MAL ID
+            val cachedAnime = cacheManager.detailedAnimeCache.value.values.find { 
+                it.malId == malId || it.id == malId 
+            }
+            
+            val anime = if (cachedAnime != null) {
+                AnimeMedia(
+                    id = cachedAnime.id,
+                    title = cachedAnime.title,
+                    titleEnglish = cachedAnime.titleEnglish,
+                    cover = cachedAnime.cover,
+                    banner = cachedAnime.banner,
+                    progress = progress,
+                    totalEpisodes = cachedAnime.episodes,
+                    latestEpisode = cachedAnime.nextAiringEpisode,
+                    status = cachedAnime.status ?: "",
+                    averageScore = cachedAnime.averageScore,
+                    genres = cachedAnime.genres,
+                    listStatus = mapFromMalStatus(status),
+                    malId = malId,
+                    format = cachedAnime.format
+                )
+            } else {
+                AnimeMedia(
+                    id = malId,
+                    title = entry.node.title,
+                    titleEnglish = entry.node.title,
+                    cover = entry.node.main_picture?.large ?: entry.node.main_picture?.medium ?: "",
+                    progress = progress,
+                    totalEpisodes = entry.node.num_episodes,
+                    listStatus = mapFromMalStatus(status),
+                    malId = malId
+                )
+            }
+            
+            when (mapFromMalStatus(status)) {
+                "CURRENT" -> currentlyWatching.add(anime)
+                "PLANNING" -> planningToWatch.add(anime)
+                "COMPLETED" -> completed.add(anime)
+                "PAUSED" -> onHold.add(anime)
+                "DROPPED" -> dropped.add(anime)
+                else -> planningToWatch.add(anime) // Default to planning for unknown status
+            }
+        }
+        
+        _currentlyWatching.value = currentlyWatching.sortedByDescending { it.averageScore ?: 0 }
+        _planningToWatch.value = planningToWatch.sortedByDescending { it.averageScore ?: 0 }
+        _completed.value = completed.sortedByDescending { it.averageScore ?: 0 }
+        _onHold.value = onHold.sortedByDescending { it.averageScore ?: 0 }
+        _dropped.value = dropped.sortedByDescending { it.averageScore ?: 0 }
+        
+        loadMalFavoritesFromCache()
+    }
+    
+    fun toggleMalFavorite(anime: AnimeMedia) {
+        val currentFavorites = _malFavorites.value.toMutableList()
+        val existingIndex = currentFavorites.indexOfFirst { it.id == anime.id || it.malId == anime.malId }
+        if (existingIndex >= 0) {
+            currentFavorites.removeAt(existingIndex)
+        } else {
+            currentFavorites.add(anime)
+        }
+        _malFavorites.value = currentFavorites
+        userPreferences.saveMalFavorites(currentFavorites.map { it.id })
+    }
+    
+    private fun toggleMalFavoriteById(mediaId: Int) {
+        val currentFavorites = _malFavorites.value.toMutableList()
+        val existingIndex = currentFavorites.indexOfFirst { it.id == mediaId || it.malId == mediaId }
+        if (existingIndex >= 0) {
+            currentFavorites.removeAt(existingIndex)
+        } else {
+            // Try to find the anime in existing lists
+            val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+            val anime = allAnime.find { it.id == mediaId || it.malId == mediaId }
+            if (anime != null) {
+                currentFavorites.add(anime)
+            }
+        }
+        _malFavorites.value = currentFavorites
+        userPreferences.saveMalFavorites(currentFavorites.map { it.id })
+    }
+    
+    fun isMalFavorite(mediaId: Int): Boolean {
+        return _malFavorites.value.any { it.id == mediaId || it.malId == mediaId }
+    }
+    
+    fun getMalFavoriteAnime(): List<AnimeMedia> {
+        return _malFavorites.value
+    }
+    
+    fun removeMalFavorite(mediaId: Int) {
+        val currentFavorites = _malFavorites.value.toMutableList()
+        currentFavorites.removeAll { it.id == mediaId || it.malId == mediaId }
+        _malFavorites.value = currentFavorites
+        userPreferences.saveMalFavorites(currentFavorites.map { it.id })
+    }
+    
+    private fun loadMalFavoritesFromCache() {
+        val favoriteIds = userPreferences.getMalFavorites()
+        val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+        val favoriteAnimeList = mutableListOf<AnimeMedia>()
+        for (id in favoriteIds) {
+            val anime = allAnime.find { it.id == id || it.malId == id }
+            if (anime != null) {
+                favoriteAnimeList.add(anime)
+            }
+        }
+        _malFavorites.value = favoriteAnimeList
     }
 
     // Track last refresh time to prevent rapid re-fetches (persisted to survive app restarts)
@@ -188,6 +409,16 @@ class MainViewModel : ViewModel() {
     private val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
     val aniListFavorites: StateFlow<List<UserFavoriteAnime>> = _aniListFavorites.asStateFlow()
     
+    // Jikan (MAL) Favorites and History
+    private val _jikanFavorites = MutableStateFlow<JikanUserFavorites?>(null)
+    val jikanFavorites: StateFlow<JikanUserFavorites?> = _jikanFavorites.asStateFlow()
+    
+    private val _jikanHistory = MutableStateFlow<JikanUserHistory?>(null)
+    val jikanHistory: StateFlow<JikanUserHistory?> = _jikanHistory.asStateFlow()
+    
+    private var jikanService: JikanService? = null
+    private var malUsername: String? = null
+    
     private var lastFavoriteToggleTime = 0L
     private val favoriteToggleCooldownMs = 3000L // 3 second cooldown
     private val _isFavoriteRateLimited = MutableStateFlow(false)
@@ -239,12 +470,35 @@ class MainViewModel : ViewModel() {
     
     // Get cache progress
     fun getCacheProgress(videoUrl: String) = cacheManager.getCacheProgress(videoUrl)
+    
+    // MAL API Service
+    private lateinit var malApiService: MalApiService
+    
+    // Login provider tracking
+    private val _loginProvider = MutableStateFlow(LoginProvider.NONE)
+    val loginProvider: StateFlow<LoginProvider> = _loginProvider.asStateFlow()
+    
+    // MAL favorites (stored locally with full anime data)
+    private val _malFavorites = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    val malFavorites: StateFlow<List<AnimeMedia>> = _malFavorites.asStateFlow()
+    
+    // Toast messages for UI feedback
+    private val _toastMessage = MutableSharedFlow<String>()
+    val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
+    
+    private val _logoutEvent = MutableSharedFlow<Unit>()
+    val logoutEvent: SharedFlow<Unit> = _logoutEvent.asSharedFlow()
+    
+    // Is logged in (either AniList or MAL)
+    val isLoggedIn: Boolean get() = _loginProvider.value != LoginProvider.NONE
 
     fun init(context: Context, hasToken: Boolean) {
         this.context = context
         userPreferences = UserPreferences(context)
         cacheManager = CacheManager(userPreferences.getSharedPreferences())
         repository = AnimeRepository(userPreferences, cacheManager)
+        malApiService = MalApiService(context)
+        jikanService = JikanService(context)
 
         // Initialize video cache for offline playback
         cacheManager.initializeVideoCache(context)
@@ -254,15 +508,166 @@ class MainViewModel : ViewModel() {
         cacheManager.loadPlaybackPositions()
         loadAiringScheduleCache()
         updateOfflineLists()
+        
+        // Check login provider
+        if (hasToken) {
+            _loginProvider.value = LoginProvider.ANILIST
+        } else if (malApiService.getAuthManager().isLoggedIn) {
+            _loginProvider.value = LoginProvider.MAL
+            loadMalUserData()
+        }
 
         viewModelScope.launch {
-            if (hasToken) {
+            if (hasToken || _loginProvider.value != LoginProvider.NONE) {
                 loadHomeDataWithCache()
             } else {
                 prefetchOfflineWatchingStreams()
             }
             loadExploreDataWithCache()
             fetchAiringSchedule()
+        }
+    }
+    
+    private fun loadMalUserData() {
+        val malAuth = malApiService.getAuthManager()
+        val userInfo = malAuth.userInfo.value
+        if (userInfo != null) {
+            _userName.value = userInfo.name
+            _userAvatar.value = userInfo.picture
+            malUsername = userInfo.name
+            fetchJikanUserData()
+        }
+    }
+    
+    private fun fetchJikanUserData() {
+        android.util.Log.d("JIKAN_DEBUG", "fetchJikanUserData called")
+        val username = malUsername
+        android.util.Log.d("JIKAN_DEBUG", "malUsername: $username, jikanService: ${jikanService != null}")
+        if (username == null) {
+            android.util.Log.e("JIKAN_DEBUG", "malUsername is null, cannot fetch Jikan data")
+            return
+        }
+        viewModelScope.launch {
+            android.util.Log.d("JIKAN_DEBUG", "Fetching Jikan data for username: $username")
+            _jikanFavorites.value = jikanService?.getUserFavorites(username)
+            android.util.Log.d("JIKAN_DEBUG", "Favorites fetched: ${_jikanFavorites.value?.anime?.size ?: 0} anime")
+            _jikanHistory.value = jikanService?.getUserHistory(username)
+            android.util.Log.d("JIKAN_DEBUG", "History fetched: ${_jikanHistory.value?.anime?.size ?: 0} entries")
+        }
+    }
+    
+    fun loginWithMal() {
+        android.util.Log.d("MAL_LOGIN", "loginWithMal called")
+        if (BuildConfig.MAL_CLIENT_ID.isBlank()) {
+            android.util.Log.e("MAL_LOGIN", "MAL_CLIENT_ID is blank!")
+            return
+        }
+        val uri = malApiService.getAuthUrl(BuildConfig.MAL_CLIENT_ID)
+        android.util.Log.d("MAL_LOGIN", "Generated auth URL: $uri")
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        context.startActivity(intent)
+    }
+    
+    fun handleMalAuthRedirect(intent: Intent?) {
+        android.util.Log.d("MAL_LOGIN", "handleMalAuthRedirect called, data: ${intent?.dataString}")
+        handleMalAuthAuthCode(intent?.dataString ?: "")
+    }
+    
+    fun handleMalAuthAuthCode(uriString: String) {
+        android.util.Log.d("MAL_LOGIN", "handleMalAuthAuthCode called with: $uriString")
+        
+        if (uriString.isEmpty()) {
+            android.util.Log.e("MAL_LOGIN", "URI string is empty!")
+            return
+        }
+        
+        if (!uriString.startsWith("animescraper://success?code=") && !uriString.startsWith("animescraper://success")) {
+            android.util.Log.e("MAL_LOGIN", "URI doesn't match expected format!")
+            return
+        }
+        
+        val code = uriString.substringAfter("code=").substringBefore("&")
+        android.util.Log.d("MAL_LOGIN", "Extracted code: ${code.take(20)}...")
+        
+        if (code.isEmpty()) {
+            android.util.Log.e("MAL_LOGIN", "Code is empty!")
+            viewModelScope.launch { _toastMessage.emit("MAL login failed: No auth code received") }
+            return
+        }
+        
+        viewModelScope.launch {
+            _toastMessage.emit("Completing MAL login...")
+            android.util.Log.d("MAL_LOGIN", "Calling exchangeCodeForToken...")
+            val success = malApiService.exchangeCodeForToken(code, BuildConfig.MAL_CLIENT_ID, null)
+            android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken result: $success")
+            if (success) {
+                userPreferences.clearToken()
+                _loginProvider.value = LoginProvider.MAL
+                loadMalUserData()
+                fetchMalList()
+                prefetchOfflineWatchingStreams()
+                _toastMessage.emit("Successfully logged into MyAnimeList!")
+            } else {
+                _toastMessage.emit("MAL login failed: Token exchange error")
+            }
+        }
+    }
+    
+    fun loginWithAniList() {
+        // Clear MAL data if switching
+        if (_loginProvider.value == LoginProvider.MAL) {
+            malApiService.getAuthManager().clearToken()
+            _malFavorites.value = emptyList()
+        }
+        
+        val url = "https://anilist.co/api/v2/oauth/authorize?client_id=$CLIENT_ID&response_type=token"
+        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+    }
+    
+    fun handleAuthRedirect(intent: Intent?) {
+        intent?.dataString?.takeIf { it.startsWith("animescraper://success") }?.let { uri ->
+            uri.replace("#", "?").toUri().getQueryParameter("access_token")?.let { token ->
+                userPreferences.saveToken(token)
+                _loginProvider.value = LoginProvider.ANILIST
+                viewModelScope.launch {
+                    _isLoadingHome.value = true
+                    fetchUser()
+                    fetchLists()
+                    _isLoadingHome.value = false
+                    prefetchContinueWatchingStreams()
+                }
+            }
+        }
+    }
+    
+    fun logout() {
+        when (_loginProvider.value) {
+            LoginProvider.ANILIST -> {
+                userPreferences.clearAllUserData()
+                userPreferences.clearToken()
+            }
+            LoginProvider.MAL -> {
+                malApiService.getAuthManager().clearToken()
+                userPreferences.clearMalFavorites()
+                _malFavorites.value = emptyList()
+                _jikanFavorites.value = null
+                _jikanHistory.value = null
+                malUsername = null
+            }
+            LoginProvider.NONE -> {}
+        }
+        
+        cacheManager.clearAllCaches()
+        _loginProvider.value = LoginProvider.NONE
+        _userId.value = null; _userName.value = null; _userAvatar.value = null
+        _currentlyWatching.value = emptyList(); _planningToWatch.value = emptyList(); _completed.value = emptyList(); _onHold.value = emptyList(); _dropped.value = emptyList()
+        _aniListFavorites.value = emptyList()
+        _isLoadingHome.value = false
+        
+        viewModelScope.launch {
+            _logoutEvent.emit(Unit)
         }
     }
 
@@ -350,11 +755,12 @@ class MainViewModel : ViewModel() {
     }
 
     private suspend fun loadHomeDataWithCache() {
-        cacheManager.loadHomeDataFromCache()?.let { updateHomeState(it) }
+        cacheManager.loadHomeDataFromCache()?.let {
+            updateHomeState(it)
+        }
         
         val now = System.currentTimeMillis()
         if (now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
-            // Skip API fetch, use cached data
             _isLoadingHome.value = false
             refreshReleasingAnimeProgress()
             prefetchContinueWatchingStreams()
@@ -386,8 +792,12 @@ class MainViewModel : ViewModel() {
     }
 
     private suspend fun loadExploreDataWithCache() {
-        cacheManager.loadExploreDataFromCache()?.let { updateExploreState(it) }
-        fetchExploreData() // Uses cooldown internally
+        val cachedData = cacheManager.loadExploreDataFromCache()
+        if (cachedData != null) {
+            updateExploreState(cachedData)
+        } else {
+            fetchExploreData(force = true)
+        }
     }
 
     private fun updateExploreState(data: ExploreCacheData) {
@@ -421,8 +831,14 @@ class MainViewModel : ViewModel() {
     }
 
     suspend fun fetchLists(): Boolean {
-        val userId = _userId.value ?: return false
-        val response = repository.fetchMediaLists(userId) ?: return false
+        val userId = _userId.value
+        if (userId == null) {
+            return false
+        }
+        val response = repository.fetchMediaLists(userId)
+        if (response == null) {
+            return false
+        }
 
         val grouped = response.data.MediaListCollection.lists.flatMap { list ->
             list.entries.map { entry ->
@@ -459,14 +875,19 @@ class MainViewModel : ViewModel() {
     fun fetchExploreData(force: Boolean = false) {
         val now = System.currentTimeMillis()
         
-        // Skip if recently refreshed (unless forced)
         if (!force && now - lastExploreRefreshTime < MIN_REFRESH_INTERVAL_MS) {
             return
         }
         
         viewModelScope.launch {
             _isLoadingExplore.value = true
-            val success = repository.fetchBatchedExplore()?.let { response ->
+            val (response, error) = repository.fetchBatchedExploreWithError()
+            if (response == null) {
+                _isLoadingExplore.value = false
+                return@launch
+            }
+            
+            val success = try {
                 _featuredAnime.value = response.data.featured.media.map { mapExploreMedia(it) }
                 _seasonalAnime.value = response.data.seasonal.media.map { mapExploreMedia(it) }
                 _topSeries.value = response.data.topSeries.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 70 }
@@ -478,9 +899,10 @@ class MainViewModel : ViewModel() {
                 _scifiAnime.value = response.data.scifi.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 60 }
                 saveExploreDataToCache()
                 true
-            } ?: false
+            } catch (e: Exception) {
+                false
+            }
             _isLoadingExplore.value = false
-            // Only save timestamp if API call succeeded
             if (success) {
                 lastExploreRefreshTime = System.currentTimeMillis()
             }
@@ -505,14 +927,17 @@ class MainViewModel : ViewModel() {
     fun fetchAiringSchedule(force: Boolean = false) {
         val now = System.currentTimeMillis()
         
-        // Skip if recently refreshed (unless forced)
-        if (!force && now - lastExploreRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+        val cached = cacheManager.loadAiringScheduleCache()
+        if (cached != null && !force && now - lastExploreRefreshTime < MIN_REFRESH_INTERVAL_MS) {
             return
         }
+        
+        val shouldForce = force || cached == null
         
         viewModelScope.launch {
             _isLoadingSchedule.value = true
             val schedules = repository.fetchAiringSchedule()
+            
             val airingList = schedules.filter { it.media != null }.map { schedule ->
                 AiringScheduleAnime(
                     id = schedule.media!!.id,
@@ -554,7 +979,34 @@ class MainViewModel : ViewModel() {
         // Immediately update progress in logged-in lists
         updateProgressInLists(mediaId, progress)
         
-        queueSync(mediaId, "progress", progress = progress)
+        val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
+        val malId = cachedAnime?.malId
+        
+        if (_loginProvider.value == LoginProvider.MAL && malId == null) {
+            android.util.Log.d("MAL_DEBUG", "MAL ID not in cache for progress update, fetching anime details for mediaId=$mediaId")
+            viewModelScope.launch {
+                cacheManager.clearDetailedAnimeCache(mediaId)
+                val details = fetchDetailedAnimeData(mediaId)
+                var resolvedMalId = details?.malId
+                android.util.Log.d("MAL_DEBUG", "Fetched from AniList: malId=$resolvedMalId")
+                
+                if (resolvedMalId == null && details == null) {
+                    val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+                    val animeFromList = allAnime.find { it.id == mediaId }
+                    if (animeFromList != null) {
+                        resolvedMalId = jikanService?.searchAnimeByTitle(animeFromList.title)
+                        android.util.Log.d("MAL_DEBUG", "Jikan search by list title returned: malId=$resolvedMalId")
+                    }
+                }
+                
+                if (resolvedMalId != null) {
+                    queueSync(mediaId, "progress", malId = resolvedMalId, progress = progress)
+                }
+            }
+            return
+        }
+        
+        queueSync(mediaId, "progress", malId = malId, progress = progress)
     }
     
     private fun updateProgressInLists(mediaId: Int, progress: Int) {
@@ -572,6 +1024,49 @@ class MainViewModel : ViewModel() {
     fun updateAnimeStatus(mediaId: Int, status: String, progress: Int? = null) {
         val currentEntry = userPreferences.getLocalAnimeStatus(mediaId)
         val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
+        val malId = cachedAnime?.malId
+        
+        if (_loginProvider.value == LoginProvider.MAL && malId == null) {
+            android.util.Log.d("MAL_DEBUG", "MAL ID not in cache, fetching fresh anime details for mediaId=$mediaId")
+            viewModelScope.launch {
+                cacheManager.clearDetailedAnimeCache(mediaId)
+                val details = fetchDetailedAnimeData(mediaId)
+                var resolvedMalId = details?.malId
+                android.util.Log.d("MAL_DEBUG", "Fetched from AniList: malId=$resolvedMalId, details=${if(details != null) details.title else "null"}")
+                
+                if (resolvedMalId == null && details == null) {
+                    val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+                    val animeFromList = allAnime.find { it.id == mediaId }
+                    if (animeFromList != null) {
+                        android.util.Log.d("MAL_DEBUG", "Found anime in user's list: ${animeFromList.title}")
+                        resolvedMalId = jikanService?.searchAnimeByTitle(animeFromList.title)
+                        android.util.Log.d("MAL_DEBUG", "Jikan search by list title returned: malId=$resolvedMalId")
+                    }
+                } else if (resolvedMalId == null && details != null) {
+                    android.util.Log.d("MAL_DEBUG", "Trying Jikan API fallback for: ${details.title}")
+                    resolvedMalId = jikanService?.searchAnimeByTitle(details.title)
+                    android.util.Log.d("MAL_DEBUG", "Jikan returned: malId=$resolvedMalId")
+                }
+                
+                if (resolvedMalId == null) {
+                    android.util.Log.d("MAL_DEBUG", "Could not find MAL ID for this anime!")
+                }
+                
+                setLocalAnimeStatus(
+                    mediaId,
+                    LocalAnimeEntry(
+                        id = mediaId,
+                        status = status,
+                        progress = progress ?: currentEntry?.progress ?: 0,
+                        totalEpisodes = details?.episodes ?: currentEntry?.totalEpisodes ?: 0
+                    )
+                )
+                moveAnimeBetweenLists(mediaId, status, progress)
+                queueSync(mediaId, "status", malId = resolvedMalId, status = status, progress = progress)
+            }
+            return
+        }
+        
         setLocalAnimeStatus(
             mediaId,
             LocalAnimeEntry(
@@ -585,7 +1080,7 @@ class MainViewModel : ViewModel() {
         // Immediately update logged-in lists for instant visual feedback
         moveAnimeBetweenLists(mediaId, status, progress)
         
-        queueSync(mediaId, "status", status = status, progress = progress)
+        queueSync(mediaId, "status", malId = malId, status = status, progress = progress)
     }
     
     private fun moveAnimeBetweenLists(mediaId: Int, newStatus: String, newProgress: Int?) {
@@ -949,8 +1444,18 @@ class MainViewModel : ViewModel() {
     }
 
     suspend fun fetchDetailedAnimeData(animeId: Int): DetailedAnimeData? {
-        cacheManager.getCachedDetailedAnime(animeId)?.let { return it }
-        val media = repository.fetchDetailedAnime(animeId) ?: return null
+        android.util.Log.d("MAL_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId")
+        cacheManager.getCachedDetailedAnime(animeId)?.let { 
+            android.util.Log.d("MAL_DEBUG", "Found in cache: ${it.title}, malId=${it.malId}")
+            return it 
+        }
+        android.util.Log.d("MAL_DEBUG", "Not in cache, fetching from AniList API...")
+        val media = repository.fetchDetailedAnime(animeId)
+        if (media == null) {
+            android.util.Log.e("MAL_DEBUG", "AniList API returned null for animeId=$animeId")
+            return null
+        }
+        android.util.Log.d("MAL_DEBUG", "AniList API returned: id=${media.id}, idMal=${media.idMal}, title=${media.title?.romaji}")
         val relationsList = media.relations?.edges?.mapNotNull { edge ->
             edge.node?.let { node ->
                 AnimeRelation(
@@ -967,6 +1472,7 @@ class MainViewModel : ViewModel() {
         } ?: emptyList()
         val detailedData = DetailedAnimeData(
             id = media.id,
+            malId = media.idMal,
             title = media.title?.romaji ?: media.title?.english ?: "Unknown",
             titleRomaji = media.title?.romaji, titleEnglish = media.title?.english, titleNative = media.title?.native,
             cover = media.coverImage?.large ?: "", banner = media.bannerImage, description = media.description,
@@ -1021,9 +1527,15 @@ class MainViewModel : ViewModel() {
         _isFavoriteRateLimited.value = false
         
         // Immediately update local state for instant feedback
-        val isFavorite = _aniListFavorites.value.any { it.id == mediaId }
-        if (isFavorite) {
-            _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
+        if (_loginProvider.value == LoginProvider.MAL) {
+            // Toggle MAL favorite using the ID-based method
+            toggleMalFavoriteById(mediaId)
+        } else {
+            // Toggle AniList favorite
+            val isFavorite = _aniListFavorites.value.any { it.id == mediaId }
+            if (isFavorite) {
+                _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
+            }
         }
         
         // Queue the API call for debounced sync
@@ -1198,6 +1710,10 @@ class MainViewModel : ViewModel() {
     }
 
     private suspend fun refreshReleasingAnimeProgress() {
+        if (_loginProvider.value == LoginProvider.MAL) {
+            return
+        }
+        
         val releasing = _currentlyWatching.value.filter { it.status == "RELEASING" }
         if (releasing.isEmpty()) return
         releasing.chunked(3).forEach { chunk ->
@@ -1231,7 +1747,12 @@ class MainViewModel : ViewModel() {
         cacheManager.invalidateUserCache()
         viewModelScope.launch {
             _isLoadingHome.value = true
-            fetchLists()
+            if (_loginProvider.value == LoginProvider.MAL) {
+                fetchMalList()
+                fetchJikanUserData()
+            } else {
+                fetchLists()
+            }
             _isLoadingHome.value = false
             prefetchContinueWatchingStreams()
         }
@@ -1239,36 +1760,11 @@ class MainViewModel : ViewModel() {
 
     fun forceRefreshExplore() = fetchExploreData()
 
-    fun loginWithAniList() {
-        val url = "https://anilist.co/api/v2/oauth/authorize?client_id=$CLIENT_ID&response_type=token"
-        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-    }
-
-    fun handleAuthRedirect(intent: Intent?) {
-        intent?.dataString?.takeIf { it.startsWith("animescraper://success") }?.let { uri ->
-            uri.replace("#", "?").toUri().getQueryParameter("access_token")?.let { token ->
-                userPreferences.saveToken(token)
-                viewModelScope.launch {
-                    _isLoadingHome.value = true
-                    fetchUser()
-                    fetchLists()
-                    _isLoadingHome.value = false
-                    // Prefetch streams for continue watching after login
-                    prefetchContinueWatchingStreams()
-                }
-            }
-        }
-    }
-
-    fun logout() {
-        userPreferences.clearAllUserData()
-        userPreferences.clearToken()
-        cacheManager.clearAllCaches()
-        _userId.value = null; _userName.value = null; _userAvatar.value = null
-        _currentlyWatching.value = emptyList(); _planningToWatch.value = emptyList(); _completed.value = emptyList(); _onHold.value = emptyList(); _dropped.value = emptyList()
-        _isLoadingHome.value = false
-    }
-
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
-    fun addExploreAnimeToList(anime: ExploreAnime, status: String) = updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
+    
+    fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
+        android.util.Log.d("MAL_DEBUG", "addExploreAnimeToList: anime.id=${anime.id}, malId=${anime.malId}, status=$status")
+        queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null)
+        updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
+    }
 }

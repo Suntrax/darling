@@ -332,6 +332,190 @@ class AnimeRepository(
         }
     }
 
+    data class ExploreResult(val response: BatchedExploreResponse?, val error: String?)
+
+    suspend fun fetchBatchedExploreWithError(): ExploreResult {
+        val query = """
+            query {
+                featured: Page(page: 1, perPage: 10) {
+                    media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                seasonal: Page(page: 1, perPage: 20) {
+                    media(type: ANIME, sort: POPULARITY_DESC, status: RELEASING) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                topSeries: Page(page: 1, perPage: 20) {
+                    media(type: ANIME, format: TV, sort: SCORE_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                topMovies: Page(page: 1, perPage: 20) {
+                    media(type: ANIME, format: MOVIE, sort: SCORE_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                action: Page(page: 1, perPage: 15) {
+                    media(type: ANIME, genre: "Action", sort: POPULARITY_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                romance: Page(page: 1, perPage: 15) {
+                    media(type: ANIME, genre: "Romance", sort: POPULARITY_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                comedy: Page(page: 1, perPage: 15) {
+                    media(type: ANIME, genre: "Comedy", sort: POPULARITY_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                fantasy: Page(page: 1, perPage: 15) {
+                    media(type: ANIME, genre: "Fantasy", sort: POPULARITY_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+                scifi: Page(page: 1, perPage: 15) {
+                    media(type: ANIME, genre: "Sci-Fi", sort: POPULARITY_DESC) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        startDate { year }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        val rawResult = publicGraphqlRequestWithError(query, emptyMap())
+        return if (rawResult.data != null) {
+            try {
+                val response = json.decodeFromString<BatchedExploreResponse>(rawResult.data)
+                ExploreResult(response, null)
+            } catch (e: Exception) {
+                ExploreResult(null, "JSON parse error: ${e.message}")
+            }
+        } else {
+            ExploreResult(null, rawResult.error ?: "Unknown error")
+        }
+    }
+
+    suspend fun publicGraphqlRequestWithError(query: String, variables: Map<String, Any?>): PublicGraphqlResult {
+        val result = graphQLClient.execute(
+            query = query,
+            variables = variables,
+            requiresAuth = false,
+            clientIds = CLIENT_IDS,
+            useCache = true,
+            parser = { it }
+        )
+
+        return if (result.data != null) {
+            PublicGraphqlResult(result.data, null)
+        } else {
+            PublicGraphqlResult(null, result.error?.message ?: "Unknown GraphQL error")
+        }
+    }
+
+    data class PublicGraphqlResult(val data: String?, val error: String?)
+
     // ============================================
     // Airing Schedule
     // ============================================
@@ -372,15 +556,17 @@ class AnimeRepository(
         var hasMore = true
 
         while (hasMore && page <= 5) {
-            val response = publicGraphqlRequest(
+            val result = publicGraphqlRequestWithError(
                 query,
                 mapOf("page" to page, "startTime" to startTime, "endTime" to endTime)
             )
 
-            if (response == null) break
+            if (result.data == null) {
+                break
+            }
 
             try {
-                val data = json.decodeFromString<AiringScheduleResponse>(response)
+                val data = json.decodeFromString<AiringScheduleResponse>(result.data)
                 val pageSchedules = data.data.Page.airingSchedules
 
                 if (pageSchedules.isEmpty()) {
@@ -446,6 +632,7 @@ class AnimeRepository(
             query (${'$'}id: Int) {
                 Media(id: ${'$'}id, type: ANIME) {
                     id
+                    idMal
                     title { romaji english native }
                     coverImage { large }
                     bannerImage

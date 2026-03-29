@@ -662,10 +662,7 @@ fun HomeScreen(
             viewModel = viewModel,
             isOled = isOled,
             onDismiss = { showUserProfileDialog = false },
-            onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) },
-            planningToWatch = planningToWatch,
-            onHold = onHold,
-            dropped = dropped
+            onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) }
         )
     }
 

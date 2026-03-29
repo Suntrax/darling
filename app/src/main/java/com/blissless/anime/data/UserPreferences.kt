@@ -47,6 +47,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LAST_HOME_REFRESH = "last_home_refresh_time"
         private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
         private const val KEY_LOCAL_ANIME_STATUS = "local_anime_status"
+        private const val KEY_MAL_FAVORITES = "mal_favorites"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -519,6 +520,24 @@ class UserPreferences(private val context: Context) {
             } catch (e: Exception) {
                 _localAnimeStatus.value = emptyMap()
             }
+        }
+    }
+    
+    // MAL Favorites
+    fun getMalFavorites(): Set<Int> {
+        val saved = sharedPreferences.getStringSet(KEY_MAL_FAVORITES, emptySet()) ?: emptySet()
+        return saved.mapNotNull { it.toIntOrNull() }.toSet()
+    }
+    
+    fun saveMalFavorites(favorites: List<Int>) {
+        sharedPreferences.edit {
+            putStringSet(KEY_MAL_FAVORITES, favorites.map { it.toString() }.toSet())
+        }
+    }
+    
+    fun clearMalFavorites() {
+        sharedPreferences.edit {
+            remove(KEY_MAL_FAVORITES)
         }
     }
 }

@@ -4,7 +4,6 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -17,7 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 
@@ -32,14 +30,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.data.JikanFavoriteAnime
+import com.blissless.anime.data.JikanHistoryEntry
+import com.blissless.anime.data.JikanUserFavorites
+import com.blissless.anime.data.JikanUserHistory
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.UserFavoriteAnime
 import com.blissless.anime.MainViewModel
@@ -53,10 +53,7 @@ fun UserProfileDialog(
     viewModel: MainViewModel,
     isOled: Boolean,
     onDismiss: () -> Unit,
-    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit,
-    planningToWatch: List<AnimeMedia> = emptyList(),
-    onHold: List<AnimeMedia> = emptyList(),
-    dropped: List<AnimeMedia> = emptyList()
+    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -65,11 +62,16 @@ fun UserProfileDialog(
     val userId by viewModel.userId.collectAsState()
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val userActivity by viewModel.userActivity.collectAsState()
-    val currentlyWatching by viewModel.currentlyWatching.collectAsState()
-    val completed by viewModel.completed.collectAsState()
+    val loginProvider by viewModel.loginProvider.collectAsState()
+    val jikanFavorites by viewModel.jikanFavorites.collectAsState()
+    val jikanHistory by viewModel.jikanHistory.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Favorites", "History")
+    val tabs = if (loginProvider == com.blissless.anime.data.LoginProvider.MAL) {
+        listOf("Favorites", "History")
+    } else {
+        listOf("Favorites", "History")
+    }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
     
@@ -84,10 +86,12 @@ fun UserProfileDialog(
         }
     }
     
-    LaunchedEffect(userId) {
+    LaunchedEffect(userId, loginProvider) {
         if (userId != null) {
-            viewModel.fetchUserActivity()
-            viewModel.fetchAniListFavorites()
+            if (loginProvider == com.blissless.anime.data.LoginProvider.ANILIST) {
+                viewModel.fetchUserActivity()
+                viewModel.fetchAniListFavorites()
+            }
         }
     }
 
@@ -136,7 +140,7 @@ fun UserProfileDialog(
                             color = Color.White
                         )
                         Text(
-                            "AniList Profile",
+                            if (loginProvider == com.blissless.anime.data.LoginProvider.MAL) "MyAnimeList Profile" else "AniList Profile",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.6f)
                         )
@@ -271,12 +275,26 @@ fun UserProfileDialog(
                                 )
                             }
                             
-                            if (tab == 0) {
+                            if (loginProvider == com.blissless.anime.data.LoginProvider.MAL) {
+                                if (tab == 0) {
+                                    JikanFavoritesTab(
+                                        favorites = jikanFavorites,
+                                        isOled = isOled,
+                                        onAnimeClick = { anime ->
+                                            onShowAnimeDialog(anime, null)
+                                        }
+                                    )
+                                } else {
+                                    JikanHistoryTab(
+                                        history = jikanHistory,
+                                        isOled = isOled
+                                    )
+                                }
+                            } else if (tab == 0) {
                                 FavoritesTab(
                                     viewModel = viewModel,
                                     favorites = aniListFavorites,
                                     isOled = isOled,
-                                    currentlyWatching = currentlyWatching,
                                     onAnimeClick = { anime ->
                                         onShowAnimeDialog(anime, null)
                                     }
@@ -298,7 +316,7 @@ fun UserProfileDialog(
         AlertDialog(
             onDismissRequest = { showLogoutConfirmation = false },
             title = { Text("Logout") },
-            text = { Text("Are you sure you want to logout from AniList?") },
+            text = { Text("Are you sure you want to logout from ${if (loginProvider == com.blissless.anime.data.LoginProvider.MAL) "MyAnimeList" else "AniList"}?") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -324,14 +342,9 @@ private fun FavoritesTab(
     viewModel: MainViewModel,
     favorites: List<UserFavoriteAnime>,
     isOled: Boolean,
-    currentlyWatching: List<AnimeMedia>,
     onAnimeClick: (ExploreAnime) -> Unit
 ) {
     val context = LocalContext.current
-
-    val animeMap = remember(currentlyWatching) {
-        currentlyWatching.associateBy { it.id }
-    }
 
     Column {
         Row(
@@ -372,7 +385,6 @@ private fun FavoritesTab(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(favorites) { fav ->
-                    val animeFromList = animeMap[fav.id]
                     AniListFavoriteItem(
                         favorite = fav,
                         isOled = isOled,
@@ -381,13 +393,13 @@ private fun FavoritesTab(
                                 id = fav.id,
                                 title = fav.title.romaji ?: fav.title.english ?: "Anime",
                                 cover = fav.coverImage?.large ?: "",
-                                banner = animeFromList?.banner,
-                                episodes = animeFromList?.totalEpisodes ?: fav.episodes ?: 0,
-                                latestEpisode = animeFromList?.latestEpisode,
-                                averageScore = animeFromList?.averageScore ?: fav.averageScore,
-                                genres = animeFromList?.genres ?: fav.genres ?: emptyList(),
-                                year = animeFromList?.year ?: fav.seasonYear,
-                                format = animeFromList?.format
+                                banner = null,
+                                episodes = fav.episodes ?: 0,
+                                latestEpisode = null,
+                                averageScore = fav.averageScore,
+                                genres = fav.genres ?: emptyList(),
+                                year = fav.seasonYear,
+                                format = null
                             )
                             onAnimeClick(exploreAnime)
                         },
@@ -621,6 +633,254 @@ private fun ActivityItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.5f)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun JikanFavoritesTab(
+    favorites: JikanUserFavorites?,
+    isOled: Boolean,
+    onAnimeClick: (ExploreAnime) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "My Favorites",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    "${favorites?.anime?.size ?: 0} anime",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (favorites == null || favorites.anime.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.FavoriteBorder,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("No favorites yet", color = Color.White.copy(alpha = 0.7f))
+                    Text("Heart an anime to add it here", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(favorites.anime) { anime ->
+                    JikanFavoriteItem(
+                        anime = anime,
+                        isOled = isOled,
+                        onClick = {
+                            val exploreAnime = ExploreAnime(
+                                id = anime.malId,
+                                title = anime.title,
+                                cover = anime.images.jpg?.imageUrl ?: "",
+                                banner = null,
+                                episodes = 0,
+                                latestEpisode = null,
+                                averageScore = null,
+                                genres = emptyList(),
+                                year = null,
+                                format = null
+                            )
+                            onAnimeClick(exploreAnime)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JikanFavoriteItem(
+    anime: JikanFavoriteAnime,
+    isOled: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(50.dp)
+                    .height(70.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Gray.copy(alpha = 0.3f))
+            ) {
+                anime.images.jpg?.imageUrl?.let { url ->
+                    if (url.isNotEmpty()) {
+                        AsyncImage(
+                            model = url,
+                            contentDescription = anime.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    anime.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.Filled.Favorite,
+                contentDescription = "MAL Favorite",
+                tint = Color(0xFFFF1744),
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun JikanHistoryTab(
+    history: JikanUserHistory?,
+    isOled: Boolean
+) {
+    Column {
+        Text(
+            "Recent Activity",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        if (history == null || history.anime.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("No recent activity", color = Color.White.copy(alpha = 0.7f))
+                    Text("Watch some anime to see your history", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(history.anime.take(20)) { entry ->
+                    JikanHistoryItem(
+                        entry = entry,
+                        isOled = isOled
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JikanHistoryItem(
+    entry: JikanHistoryEntry,
+    isOled: Boolean
+) {
+    val actionText = when {
+        entry.increment != null -> entry.increment
+        entry.episodesWatched != null -> "Episode ${entry.episodesWatched}"
+        entry.chaptersRead != null -> "Chapter ${entry.chaptersRead}"
+        else -> "Viewed"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(50.dp)
+                    .height(70.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Blue.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                entry.images.jpg?.imageUrl?.let { url ->
+                    if (url.isNotEmpty()) {
+                        AsyncImage(
+                            model = url,
+                            contentDescription = entry.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } ?: Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.Blue,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    entry.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color(0xFF2196F3),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        actionText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF2196F3)
+                    )
+                }
             }
         }
     }

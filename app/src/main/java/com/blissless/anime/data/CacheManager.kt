@@ -584,7 +584,12 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     fun cacheDetailedAnime(animeId: Int, data: DetailedAnimeData) {
         _detailedAnimeCache.value = _detailedAnimeCache.value + (animeId to data)
     }
-
+    fun clearDetailedAnimeCache(animeId: Int) {
+        val updated = _detailedAnimeCache.value.toMutableMap()
+        updated.remove(animeId)
+        _detailedAnimeCache.value = updated
+    }
+    
     fun clearAllCaches() {
         _prefetchedStreams.value = emptyMap()
         _prefetchedEpisodeInfo.value = emptyMap()

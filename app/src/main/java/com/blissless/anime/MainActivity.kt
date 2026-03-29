@@ -46,6 +46,7 @@ import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.OverlayState
 import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
 
@@ -79,19 +80,36 @@ class MainActivity : ComponentActivity() {
 
             var isLoggedIn by remember { mutableStateOf(savedToken != null) }
             val token by mainViewModel.authToken.collectAsState()
+            val loginProvider by mainViewModel.loginProvider.collectAsState()
             var showLocalSyncDialog by remember { mutableStateOf(false) }
             val localAnimeStatus by mainViewModel.localAnimeStatus.collectAsState()
             
-            LaunchedEffect(token) {
-                if (token != null && !isLoggedIn && localAnimeStatus.isNotEmpty()) {
+            LaunchedEffect(token, loginProvider) {
+                val isAnyLoggedIn = token != null || loginProvider != com.blissless.anime.data.LoginProvider.NONE
+                if (isAnyLoggedIn && !isLoggedIn && localAnimeStatus.isNotEmpty()) {
                     showLocalSyncDialog = true
                 }
-                isLoggedIn = token != null
+                isLoggedIn = isAnyLoggedIn
             }
 
             // Always enable high refresh rate on supported devices
             LaunchedEffect(Unit) {
                 enableHighRefreshRate()
+            }
+            
+            // Observe toast messages
+            val toastContext = LocalContext.current
+            LaunchedEffect(Unit) {
+                mainViewModel.toastMessage.collect { message ->
+                    Toast.makeText(toastContext, message, Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Observe logout events to reset auth flags
+            LaunchedEffect(Unit) {
+                mainViewModel.logoutEvent.collect {
+                    (toastContext as? MainActivity)?.resetAuthFlags()
+                }
             }
 
             if (showLocalSyncDialog) {
@@ -287,12 +305,40 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Check for any pending auth callback when returning to the app
+        handleAuthCallback(intent)
+    }
+
+    private var isMalAuthHandled = false
+    private var isAniListAuthHandled = false
+    
     private fun handleAuthCallback(intent: Intent?) {
-        intent?.data?.let { uri ->
-            if (uri.scheme == "animescraper" && uri.host == "success") {
-                mainViewModel.handleAuthRedirect(intent)
-            }
+        if (intent == null) {
+            return
         }
+        
+        val uriString = intent.dataString
+        if (uriString == null) {
+            return
+        }
+        
+        // Check if it's MAL auth (contains code= parameter)
+        if (!isMalAuthHandled && uriString.contains("code=") && uriString.startsWith("animescraper://success")) {
+            isMalAuthHandled = true
+            mainViewModel.handleMalAuthAuthCode(uriString)
+        }
+        // Check if it's AniList auth (contains access_token=)
+        else if (!isAniListAuthHandled && uriString.contains("access_token=") && uriString.startsWith("animescraper://success")) {
+            isAniListAuthHandled = true
+            mainViewModel.handleAuthRedirect(intent)
+        }
+    }
+    
+    fun resetAuthFlags() {
+        isMalAuthHandled = false
+        isAniListAuthHandled = false
     }
 }
 
@@ -339,6 +385,7 @@ fun MainScreen(
 
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val aniListFavoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
+    val malFavorites by viewModel.malFavorites.collectAsState()
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -977,7 +1024,28 @@ fun MainScreen(
                 viewModel.removeAnimeFromList(exploreDialog.anime.id)
             },
             onToggleFavorite = { _ ->
-                viewModel.toggleAniListFavorite(exploreDialog.anime.id)
+                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                    val animeMedia = AnimeMedia(
+                        id = exploreDialog.anime.id,
+                        title = exploreDialog.anime.title,
+                        titleEnglish = exploreDialog.anime.titleEnglish,
+                        cover = exploreDialog.anime.cover,
+                        banner = exploreDialog.anime.banner,
+                        progress = 0,
+                        totalEpisodes = exploreDialog.anime.episodes,
+                        latestEpisode = exploreDialog.anime.latestEpisode,
+                        status = "",
+                        averageScore = exploreDialog.anime.averageScore,
+                        genres = exploreDialog.anime.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = exploreDialog.anime.year,
+                        malId = exploreDialog.anime.malId
+                    )
+                    viewModel.toggleMalFavorite(animeMedia)
+                } else {
+                    viewModel.toggleAniListFavorite(exploreDialog.anime.id)
+                }
             },
             localStatus = localAnimeStatus[exploreDialog.anime.id]?.status,
             isLocalFavorite = localFavoriteIds.contains(exploreDialog.anime.id),
@@ -1191,8 +1259,31 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             showAnimeCardButtons = showAnimeCardButtons,
-                            favoriteIds = aniListFavoriteIds,
-                            onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
+                            favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                            onToggleFavorite = { anime -> 
+                                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                                    val animeMedia = AnimeMedia(
+                                        id = anime.id,
+                                        title = anime.title,
+                                        titleEnglish = anime.titleEnglish,
+                                        cover = anime.cover,
+                                        banner = anime.banner,
+                                        progress = 0,
+                                        totalEpisodes = anime.episodes,
+                                        latestEpisode = anime.latestEpisode,
+                                        status = "",
+                                        averageScore = anime.averageScore,
+                                        genres = anime.genres,
+                                        listStatus = "",
+                                        listEntryId = 0,
+                                        year = anime.year,
+                                        malId = anime.malId
+                                    )
+                                    viewModel.toggleMalFavorite(animeMedia)
+                                } else {
+                                    viewModel.toggleAniListFavorite(anime.id)
+                                }
+                            },
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
                             planningToWatch = planningToWatch,
@@ -1210,9 +1301,15 @@ fun MainScreen(
                             showStatusColors = showStatusColors,
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
                             hideAdultContent = hideAdultContent,
-                            favoriteIds = aniListFavoriteIds,
+                            favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
-                            onToggleFavorite = { anime -> viewModel.toggleAniListFavorite(anime.id) },
+                            onToggleFavorite = { anime -> 
+                                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                                    viewModel.toggleMalFavorite(anime)
+                                } else {
+                                    viewModel.toggleAniListFavorite(anime.id)
+                                }
+                            },
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,

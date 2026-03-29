@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,12 +33,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.data.LoginProvider
 import kotlin.math.round
 
 @Composable
@@ -54,7 +53,6 @@ fun SettingsScreen(
     autoPlayNextEpisode: Boolean = true,
     disableMaterialColors: Boolean = false,
     preferredCategory: String = "sub",
-    simplifyEpisodeMenu: Boolean = false,
     preferredScraper: String = "Animekai"
 ) {
     val context = LocalContext.current
@@ -79,6 +77,9 @@ fun SettingsScreen(
 
     // Track thumbnail preview state for showing info dialog
     var showThumbnailInfoDialog by remember { mutableStateOf(false) }
+
+    // Login provider
+    val loginProvider by viewModel.loginProvider.collectAsState(initial = LoginProvider.NONE)
 
     Column(
         modifier = Modifier
@@ -109,9 +110,14 @@ fun SettingsScreen(
             icon = Icons.Default.Person,
             isOled = isOled
         ) {
-            if (isLoggedIn) {
+            if (loginProvider != LoginProvider.NONE) {
                 val userName by viewModel.userName.collectAsState()
                 val userAvatar by viewModel.userAvatar.collectAsState()
+                val providerName = when (loginProvider) {
+                    LoginProvider.ANILIST -> "AniList"
+                    LoginProvider.MAL -> "MyAnimeList"
+                    LoginProvider.NONE -> ""
+                }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -135,11 +141,18 @@ fun SettingsScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        userName ?: "Logged In",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text(
+                            userName ?: "Logged In",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "via $providerName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -148,9 +161,19 @@ fun SettingsScreen(
                     onClick = { showLogoutConfirmation = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Log Out From AniList")
+                    Text("Log Out")
                 }
             } else {
+                // Login header for AniList
+                Text(
+                    "Login with AniList",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Button(
                     onClick = { viewModel.loginWithAniList() },
                     modifier = Modifier.fillMaxWidth()
@@ -165,6 +188,34 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Login with AniList")
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Login header for MAL
+                Text(
+                    "Login with MyAnimeList",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = { viewModel.loginWithMal() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data("https://cdn.myanimelist.net/images/favicon.ico")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "MyAnimeList",
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Login with MyAnimeList")
                 }
             }
         }
@@ -309,7 +360,7 @@ fun SettingsScreen(
             icon = Icons.Default.Subtitles,
             isOled = isOled
         ) {
-            // Preferred Scraper Selection
+            """// Preferred Scraper Selection
             Text(
                 "Preferred Anime Scraper",
                 style = MaterialTheme.typography.titleSmall,
@@ -380,6 +431,8 @@ fun SettingsScreen(
                     disableMaterialColors = disableMaterialColors
                 )
             }
+            
+            """
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -646,10 +699,15 @@ fun SettingsScreen(
     }
 
     if (showLogoutConfirmation) {
+        val providerName = when (loginProvider) {
+            LoginProvider.ANILIST -> "AniList"
+            LoginProvider.MAL -> "MyAnimeList"
+            LoginProvider.NONE -> ""
+        }
         AlertDialog(
             onDismissRequest = { showLogoutConfirmation = false },
             title = { Text("Logout") },
-            text = { Text("Are you sure you want to logout from AniList?") },
+            text = { Text("Are you sure you want to logout from $providerName?") },
             confirmButton = {
                 TextButton(
                     onClick = {

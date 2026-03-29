@@ -772,6 +772,12 @@ fun ScheduleScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Swipe down to refresh",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
                         }
                     }
                 } else {
