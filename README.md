@@ -6,10 +6,6 @@ A modern anime tracking and streaming app for Android.
 ![Language](https://img.shields.io/badge/Language-Kotlin-blue.svg)
 ![MinSDK](https://img.shields.io/badge/MinSDK-26-orange.svg)
 
-## Important
-
-I do not host any content within this app. All anime content is streamed from third-party sources.
-
 ## Features
 
 - **AniList and My Anime List Integration** - Login to sync your anime list
