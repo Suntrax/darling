@@ -2,6 +2,9 @@ package com.blissless.anime
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -43,6 +47,36 @@ class MainViewModel : ViewModel() {
     private lateinit var cacheManager: CacheManager
     private lateinit var repository: AnimeRepository
     private lateinit var context: Context
+    private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: android.net.Network) {
+            _isOffline.value = false
+        }
+
+        override fun onLost(network: android.net.Network) {
+            _isOffline.value = true
+        }
+
+        override fun onCapabilitiesChanged(network: android.net.Network, capabilities: android.net.NetworkCapabilities) {
+            val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            _isOffline.value = !hasInternet
+        }
+    }
+    
+    private var apiRetryJob: Job? = null
+    
+    private fun startApiRetryLoop() {
+        apiRetryJob?.cancel()
+        apiRetryJob = viewModelScope.launch {
+            while (true) {
+                delay(MIN_REFRESH_INTERVAL_MS)
+                if (!_isOffline.value && _apiError.value != null) {
+                    fetchExploreData(force = true)
+                }
+            }
+        }
+    }
 
     // Sync queue for debounced AniList API calls
     private data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null)
@@ -327,6 +361,12 @@ class MainViewModel : ViewModel() {
 
     private val _isLoadingExplore = MutableStateFlow(false)
     val isLoadingExplore: StateFlow<Boolean> = _isLoadingExplore.asStateFlow()
+    
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+    
+    private val _apiError = MutableStateFlow<String?>(null)
+    val apiError: StateFlow<String?> = _apiError.asStateFlow()
 
     private val _isLoadingHome = MutableStateFlow(false)
     val isLoadingHome: StateFlow<Boolean> = _isLoadingHome.asStateFlow()
@@ -502,6 +542,11 @@ class MainViewModel : ViewModel() {
 
         // Initialize video cache for offline playback
         cacheManager.initializeVideoCache(context)
+        
+        // Check connectivity and register callback for auto-detection
+        checkConnectivity()
+        registerConnectivityCallback()
+        startApiRetryLoop()
 
         userPreferences.loadPreferences(hasToken)
         cacheManager.loadStreamCache()
@@ -525,6 +570,35 @@ class MainViewModel : ViewModel() {
             }
             loadExploreDataWithCache()
             fetchAiringSchedule()
+        }
+    }
+    
+    private fun checkConnectivity() {
+        try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val network = connectivityManager?.activeNetwork
+            val capabilities = connectivityManager?.getNetworkCapabilities(network)
+            val isConnected = capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            _isOffline.value = !isConnected
+        } catch (e: Exception) {
+            _isOffline.value = false
+        }
+    }
+    
+    fun refreshConnectivity() {
+        checkConnectivity()
+    }
+    
+    private fun registerConnectivityCallback() {
+        try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val networkRequest = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityCallback = networkCallback
+            connectivityManager?.registerNetworkCallback(networkRequest, networkCallback)
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to register connectivity callback: ${e.message}")
         }
     }
     
@@ -881,9 +955,10 @@ class MainViewModel : ViewModel() {
         
         viewModelScope.launch {
             _isLoadingExplore.value = true
-            val (response, error) = repository.fetchBatchedExploreWithError()
+            val (response, error) = repository.fetchBatchedExploreWithError(useCache = !force)
             if (response == null) {
                 _isLoadingExplore.value = false
+                _apiError.value = error ?: "Failed to load content"
                 return@launch
             }
             
@@ -898,8 +973,10 @@ class MainViewModel : ViewModel() {
                 _fantasyAnime.value = response.data.fantasy.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 60 }
                 _scifiAnime.value = response.data.scifi.media.map { mapExploreMedia(it) }.filter { (it.averageScore ?: 0) >= 60 }
                 saveExploreDataToCache()
+                _apiError.value = null
                 true
             } catch (e: Exception) {
+                _apiError.value = e.message ?: "Failed to load content"
                 false
             }
             _isLoadingExplore.value = false
@@ -1782,7 +1859,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun forceRefreshExplore() = fetchExploreData()
+    fun forceRefreshExplore() = fetchExploreData(force = true)
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
     
@@ -1790,5 +1867,17 @@ class MainViewModel : ViewModel() {
         android.util.Log.d("MAL_DEBUG", "addExploreAnimeToList: anime.id=${anime.id}, malId=${anime.malId}, status=$status")
         queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null)
         updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        connectivityCallback?.let { callback ->
+            try {
+                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                connectivityManager?.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Failed to unregister connectivity callback: ${e.message}")
+            }
+        }
     }
 }

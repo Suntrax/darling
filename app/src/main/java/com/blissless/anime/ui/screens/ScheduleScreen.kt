@@ -14,7 +14,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -89,6 +91,8 @@ fun ScheduleScreen(
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
     val isLoading by viewModel.isLoadingSchedule.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
+    val apiError by viewModel.apiError.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
 
     // Filter adult content if setting is enabled
     val filteredAiringList = remember(airingList, hideAdultContent) {
@@ -470,6 +474,36 @@ fun ScheduleScreen(
             .fillMaxSize()
             .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
     ) {
+        // Error/Offline Banner - always visible at top
+        if (apiError != null || isOffline) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                tonalElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
+                        color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
         // Header
         Row(
             modifier = Modifier

@@ -334,7 +334,7 @@ class AnimeRepository(
 
     data class ExploreResult(val response: BatchedExploreResponse?, val error: String?)
 
-    suspend fun fetchBatchedExploreWithError(): ExploreResult {
+    suspend fun fetchBatchedExploreWithError(useCache: Boolean = true): ExploreResult {
         val query = """
             query {
                 featured: Page(page: 1, perPage: 10) {
@@ -484,7 +484,7 @@ class AnimeRepository(
             }
         """.trimIndent()
 
-        val rawResult = publicGraphqlRequestWithError(query, emptyMap())
+        val rawResult = publicGraphqlRequestWithError(query, emptyMap(), useCache)
         return if (rawResult.data != null) {
             try {
                 val response = json.decodeFromString<BatchedExploreResponse>(rawResult.data)
@@ -497,13 +497,13 @@ class AnimeRepository(
         }
     }
 
-    suspend fun publicGraphqlRequestWithError(query: String, variables: Map<String, Any?>): PublicGraphqlResult {
+    suspend fun publicGraphqlRequestWithError(query: String, variables: Map<String, Any?> = emptyMap(), useCache: Boolean = true): PublicGraphqlResult {
         val result = graphQLClient.execute(
             query = query,
             variables = variables,
             requiresAuth = false,
             clientIds = CLIENT_IDS,
-            useCache = true,
+            useCache = useCache,
             parser = { it }
         )
 

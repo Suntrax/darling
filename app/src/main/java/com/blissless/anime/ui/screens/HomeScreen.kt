@@ -127,6 +127,9 @@ fun HomeScreen(
 
     val authToken by viewModel.authToken.collectAsState()
     val actuallyLoggedIn = authToken != null
+    
+    val apiError by viewModel.apiError.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
 
     LaunchedEffect(currentScreenIndex) {
         if (currentScreenIndex != previousScreenIndex) {
@@ -144,6 +147,36 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Column(modifier = Modifier.fillMaxSize().background(if (isOled) Color.Black else MaterialTheme.colorScheme.background).padding(horizontal = 16.dp)) {
+                // Error/Offline Banner
+                if (apiError != null || isOffline) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                        tonalElevation = 4.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
+                                contentDescription = null,
+                                tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
+                                color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                
                 if (isLoggedIn) {
                     // Header - profile area in rounded card, search button separate
                     Row(

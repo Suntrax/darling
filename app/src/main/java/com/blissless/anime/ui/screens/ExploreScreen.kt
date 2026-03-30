@@ -4,11 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.blissless.anime.data.models.AnimeMedia
@@ -58,6 +62,8 @@ fun ExploreScreen(
     val fantasyAnime by viewModel.fantasyAnime.collectAsState()
     val scifiAnime by viewModel.scifiAnime.collectAsState()
     val isLoading by viewModel.isLoadingExplore.collectAsState()
+    val apiError by viewModel.apiError.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -246,6 +252,36 @@ fun ExploreScreen(
                 .verticalScroll(scrollState)
                 .padding(bottom = 80.dp)
         ) {
+            // Error/Offline Banner
+            if (apiError != null || isOffline) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                    tonalElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
+                            color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+            
             // Featured Carousel with HorizontalPager
             if (filteredFeaturedAnime.isNotEmpty()) {
                 FeaturedCarousel(
@@ -253,7 +289,7 @@ fun ExploreScreen(
                     onAnimeClick = onAnimeClickStable,
                     autoScrollEnabled = isVisible && !showDialog
                 )
-            } else {
+            } else if (apiError == null && !isOffline) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -547,10 +583,11 @@ fun ExploreScreen(
     }
 
     // Stop refreshing when loading completes or after timeout
-    LaunchedEffect(isLoading, isRefreshing) {
+    LaunchedEffect(isLoading, isRefreshing, isOffline) {
         if (isRefreshing) {
-            // Use a timeout to ensure refreshing stops even if loading state gets stuck
-            kotlinx.coroutines.delay(15000)
+            // Use a much shorter timeout when offline to avoid long spinner
+            val timeout = if (isOffline) 2000L else 15000L
+            kotlinx.coroutines.delay(timeout)
             isRefreshing = false
         }
         if (!isLoading && isRefreshing) {
