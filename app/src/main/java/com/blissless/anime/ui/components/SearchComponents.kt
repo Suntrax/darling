@@ -145,7 +145,7 @@ fun SearchOverlay(
     // Filter adult content if setting is enabled
     val filteredSearchResults = remember(searchResults, hideAdultContent) {
         if (hideAdultContent) {
-            searchResults.filter { !it.isAdult }
+            searchResults.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } }
         } else {
             searchResults
         }
@@ -165,9 +165,9 @@ fun SearchOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
-            // Search bar
+            // Search bar - taller and positioned higher
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -178,7 +178,7 @@ fun SearchOverlay(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -227,13 +227,12 @@ fun SearchOverlay(
                         }
                     )
 
-                    // Only show close button
                     IconButton(
                         onClick = {
-                            keyboardController?.hide() // Hide keyboard immediately
+                            keyboardController?.hide()
                             onClose()
                         },
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
                             Icons.Default.Close,

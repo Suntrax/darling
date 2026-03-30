@@ -580,20 +580,164 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         saveStreamCache()
     }
 
-    fun getCachedDetailedAnime(animeId: Int): DetailedAnimeData? = _detailedAnimeCache.value[animeId]
+    // Time-based expiration for detailed anime cache
+    private val _detailedAnimeCacheTimestamps = mutableMapOf<Int, Long>()
+    private val DETAILED_ANIME_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000L // 24 hours
+    private val MAX_DETAILED_ANIME_CACHE_SIZE = 50
+
+    fun getCachedDetailedAnime(animeId: Int): DetailedAnimeData? {
+        val data = _detailedAnimeCache.value[animeId]
+        val timestamp = _detailedAnimeCacheTimestamps[animeId]
+
+        if (data != null && timestamp != null) {
+            val age = System.currentTimeMillis() - timestamp
+            if (age > DETAILED_ANIME_CACHE_MAX_AGE_MS) {
+                clearDetailedAnimeCache(animeId)
+                return null
+            }
+        }
+        return data
+    }
+
     fun cacheDetailedAnime(animeId: Int, data: DetailedAnimeData) {
         _detailedAnimeCache.value = _detailedAnimeCache.value + (animeId to data)
+        _detailedAnimeCacheTimestamps[animeId] = System.currentTimeMillis()
+        trimDetailedAnimeCacheToLimit()
     }
+
     fun clearDetailedAnimeCache(animeId: Int) {
         val updated = _detailedAnimeCache.value.toMutableMap()
         updated.remove(animeId)
         _detailedAnimeCache.value = updated
+        _detailedAnimeCacheTimestamps.remove(animeId)
     }
-    
+
+    fun clearExpiredDetailedAnimeCache() {
+        val now = System.currentTimeMillis()
+        val expiredKeys = _detailedAnimeCacheTimestamps.filter { (_, timestamp) ->
+            (now - timestamp) > DETAILED_ANIME_CACHE_MAX_AGE_MS
+        }.keys
+
+        if (expiredKeys.isNotEmpty()) {
+            val updated = _detailedAnimeCache.value.toMutableMap()
+            expiredKeys.forEach { key ->
+                updated.remove(key)
+                _detailedAnimeCacheTimestamps.remove(key)
+            }
+            _detailedAnimeCache.value = updated
+        }
+    }
+
+    private fun trimDetailedAnimeCacheToLimit() {
+        if (_detailedAnimeCache.value.size > MAX_DETAILED_ANIME_CACHE_SIZE) {
+            val sortedByTime = _detailedAnimeCacheTimestamps.entries.sortedBy { it.value }
+            val keysToRemove = sortedByTime.take(_detailedAnimeCache.value.size - MAX_DETAILED_ANIME_CACHE_SIZE).map { it.key }
+
+            val updated = _detailedAnimeCache.value.toMutableMap()
+            keysToRemove.forEach { key ->
+                updated.remove(key)
+                _detailedAnimeCacheTimestamps.remove(key)
+            }
+            _detailedAnimeCache.value = updated
+        }
+    }
+
     fun clearAllCaches() {
         _prefetchedStreams.value = emptyMap()
         _prefetchedEpisodeInfo.value = emptyMap()
         _detailedAnimeCache.value = emptyMap()
+        _detailedAnimeCacheTimestamps.clear()
         sharedPreferences.edit { clear() }
+    }
+
+    // ExoPlayer video cache management
+    @OptIn(UnstableApi::class)
+    fun clearVideoCache(context: Context): Long {
+        var bytesCleared = 0L
+
+        // First release the cache if it exists
+        val cache = videoCache
+        if (cache != null) {
+            try {
+                cache.release()
+                videoCache = null
+                isCacheInitialized = false
+            } catch (e: Exception) {
+                // Cache release failed
+            }
+        }
+
+        // Clear from disk
+        try {
+            val cacheDir = File(context.cacheDir, "video_cache")
+            if (cacheDir.exists()) {
+                cacheDir.listFiles()?.forEach { file ->
+                    bytesCleared += file.length()
+                    file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            // Disk cleanup failed
+        }
+
+        return bytesCleared
+    }
+
+    @OptIn(UnstableApi::class)
+    fun getVideoCacheSize(context: Context): Long {
+        val cache = videoCache
+        if (cache != null) {
+            try {
+                val cacheDir = File(context.cacheDir, "video_cache")
+                if (cacheDir.exists()) {
+                    return cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+                }
+            } catch (e: Exception) {
+                // Error getting cache size
+            }
+        }
+
+        // Fallback to disk calculation
+        try {
+            val cacheDir = File(context.cacheDir, "video_cache")
+            if (cacheDir.exists()) {
+                return cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+            }
+        } catch (e: Exception) {
+            // Error getting disk cache size
+        }
+        return 0L
+    }
+
+    // Get total cache size for settings display
+    fun getTotalCacheSize(context: Context): Long {
+        var total = 0L
+
+        // Video cache
+        total += getVideoCacheSize(context)
+
+        // Stream cache (approximate)
+        try {
+            val streamData = sharedPreferences.getString(CACHE_STREAM_DATA, null)
+            if (streamData != null) {
+                total += streamData.toByteArray().size.toLong()
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        return total
+    }
+
+    // Clear all non-essential caches (for settings "Clear Cache" button)
+    fun clearNonEssentialCaches(context: Context) {
+        clearVideoCache(context)
+        clearExpiredDetailedAnimeCache()
+        trimDetailedAnimeCacheToLimit()
+
+        // Clear stream cache but keep playback positions
+        _prefetchedStreams.value = emptyMap()
+        _prefetchedEpisodeInfo.value = emptyMap()
+        sharedPreferences.edit { remove(CACHE_STREAM_DATA) }
     }
 }

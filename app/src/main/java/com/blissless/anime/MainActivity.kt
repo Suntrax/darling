@@ -1044,7 +1044,24 @@ fun MainScreen(
                     )
                     viewModel.toggleMalFavorite(animeMedia)
                 } else {
-                    viewModel.toggleAniListFavorite(exploreDialog.anime.id)
+                    val animeMedia = AnimeMedia(
+                        id = exploreDialog.anime.id,
+                        title = exploreDialog.anime.title,
+                        titleEnglish = exploreDialog.anime.titleEnglish,
+                        cover = exploreDialog.anime.cover,
+                        banner = exploreDialog.anime.banner,
+                        progress = 0,
+                        totalEpisodes = exploreDialog.anime.episodes,
+                        latestEpisode = exploreDialog.anime.latestEpisode,
+                        status = "",
+                        averageScore = exploreDialog.anime.averageScore,
+                        genres = exploreDialog.anime.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = exploreDialog.anime.year,
+                        malId = exploreDialog.anime.malId
+                    )
+                    viewModel.toggleAniListFavorite(exploreDialog.anime.id, animeMedia)
                 }
             },
             localStatus = localAnimeStatus[exploreDialog.anime.id]?.status,
@@ -1259,29 +1276,30 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             showAnimeCardButtons = showAnimeCardButtons,
+                            hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleFavorite = { anime -> 
+                                val animeMedia = AnimeMedia(
+                                    id = anime.id,
+                                    title = anime.title,
+                                    titleEnglish = anime.titleEnglish,
+                                    cover = anime.cover,
+                                    banner = anime.banner,
+                                    progress = 0,
+                                    totalEpisodes = anime.episodes,
+                                    latestEpisode = anime.latestEpisode,
+                                    status = "",
+                                    averageScore = anime.averageScore,
+                                    genres = anime.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = anime.year,
+                                    malId = anime.malId
+                                )
                                 if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
-                                    val animeMedia = AnimeMedia(
-                                        id = anime.id,
-                                        title = anime.title,
-                                        titleEnglish = anime.titleEnglish,
-                                        cover = anime.cover,
-                                        banner = anime.banner,
-                                        progress = 0,
-                                        totalEpisodes = anime.episodes,
-                                        latestEpisode = anime.latestEpisode,
-                                        status = "",
-                                        averageScore = anime.averageScore,
-                                        genres = anime.genres,
-                                        listStatus = "",
-                                        listEntryId = 0,
-                                        year = anime.year,
-                                        malId = anime.malId
-                                    )
                                     viewModel.toggleMalFavorite(animeMedia)
                                 } else {
-                                    viewModel.toggleAniListFavorite(anime.id)
+                                    viewModel.toggleAniListFavorite(anime.id, animeMedia)
                                 }
                             },
                             onPlayEpisode = onPlayEpisode,
@@ -1307,7 +1325,7 @@ fun MainScreen(
                                 if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
                                     viewModel.toggleMalFavorite(anime)
                                 } else {
-                                    viewModel.toggleAniListFavorite(anime.id)
+                                    viewModel.toggleAniListFavorite(anime.id, anime)
                                 }
                             },
                             onPlayEpisode = onPlayEpisode,

@@ -4,7 +4,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -91,17 +94,17 @@ fun FeaturedCarousel(
     LaunchedEffect(autoScrollEnabled, isVisible, isHeaderSwiping, timerResetSignal) {
         if (autoScrollEnabled && isVisible && !isHeaderSwiping) {
             while (true) {
-                delay(4000)
+                delay(5000)
                 if (isHeaderSwiping) continue
 
-                val currentPage = pagerState.currentPage
                 headerVisible = false
                 delay(80)
                 headerVisible = true
                 
                 autoScrollJob = scope.launch {
                     try {
-                        pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        val targetPage = pagerState.currentPage + 1
+                        pagerState.animateScrollToPage(targetPage)
                     } catch (_: Exception) {}
                 }
                 autoScrollJob?.join()
@@ -120,7 +123,8 @@ fun FeaturedCarousel(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             pageSpacing = 0.dp,
-            userScrollEnabled = true
+            userScrollEnabled = true,
+            beyondViewportPageCount = 0
         ) { page ->
             val anime = animeList[page % actualCount]
             

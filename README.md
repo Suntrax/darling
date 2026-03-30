@@ -8,7 +8,7 @@ A modern anime tracking and streaming app for Android.
 
 ## Features
 
-- **AniList and My Anime List Integration** - Login to sync your anime list
+- **AniList and MyAnimeList Integration** - Login to sync your anime list
 - **Streaming** - Watch anime with built-in player (ExoPlayer)
 - **Progress Tracking** - Automatically sync watch progress
 - **Explore** - Browse trending, seasonal, and top-rated anime

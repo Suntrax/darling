@@ -34,6 +34,7 @@ fun ExploreScreen(
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
     showAnimeCardButtons: Boolean = true,
+    hideAdultContent: Boolean = true,
     favoriteIds: Set<Int> = emptySet(),
     onToggleFavorite: (ExploreAnime) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
@@ -60,6 +61,20 @@ fun ExploreScreen(
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
+    
+    val filteredFeaturedAnime = remember(featuredAnime, hideAdultContent) {
+        if (hideAdultContent) featuredAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else featuredAnime
+    }
+    val filteredSeasonalAnime = remember(seasonalAnime, hideAdultContent) {
+        if (hideAdultContent) seasonalAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else seasonalAnime
+    }
+    val filteredTopSeries = remember(topSeries, hideAdultContent) { if (hideAdultContent) topSeries.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else topSeries }
+    val filteredTopMovies = remember(topMovies, hideAdultContent) { if (hideAdultContent) topMovies.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else topMovies }
+    val filteredActionAnime = remember(actionAnime, hideAdultContent) { if (hideAdultContent) actionAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else actionAnime }
+    val filteredRomanceAnime = remember(romanceAnime, hideAdultContent) { if (hideAdultContent) romanceAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else romanceAnime }
+    val filteredComedyAnime = remember(comedyAnime, hideAdultContent) { if (hideAdultContent) comedyAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else comedyAnime }
+    val filteredFantasyAnime = remember(fantasyAnime, hideAdultContent) { if (hideAdultContent) fantasyAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else fantasyAnime }
+    val filteredScifiAnime = remember(scifiAnime, hideAdultContent) { if (hideAdultContent) scifiAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else scifiAnime }
 
     // Create a map of animeId -> status for quick lookup
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
@@ -232,9 +247,9 @@ fun ExploreScreen(
                 .padding(bottom = 80.dp)
         ) {
             // Featured Carousel with HorizontalPager
-            if (featuredAnime.isNotEmpty()) {
+            if (filteredFeaturedAnime.isNotEmpty()) {
                 FeaturedCarousel(
-                    animeList = featuredAnime,
+                    animeList = filteredFeaturedAnime,
                     onAnimeClick = onAnimeClickStable,
                     autoScrollEnabled = isVisible && !showDialog
                 )
@@ -251,10 +266,10 @@ fun ExploreScreen(
             }
 
             // This Season
-            SectionTitle("This Season", isOled)
-            if (seasonalAnime.isNotEmpty()) {
+            SectionTitle("This Season", filteredSeasonalAnime.size, isOled)
+            if (filteredSeasonalAnime.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
-                    animeList = seasonalAnime,
+                    animeList = filteredSeasonalAnime,
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
@@ -288,10 +303,10 @@ fun ExploreScreen(
             }
 
             // Top Rated Series
-            SectionTitle("Top Rated Series", isOled)
-            if (topSeries.isNotEmpty()) {
+            SectionTitle("Top Rated Series", filteredTopSeries.size, isOled)
+            if (filteredTopSeries.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
-                    animeList = topSeries,
+                    animeList = filteredTopSeries,
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
@@ -325,10 +340,10 @@ fun ExploreScreen(
             }
 
             // Top Rated Movies
-            SectionTitle("Top Rated Movies", isOled)
-            if (topMovies.isNotEmpty()) {
+            SectionTitle("Top Rated Movies", filteredTopMovies.size, isOled)
+            if (filteredTopMovies.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
-                    animeList = topMovies,
+                    animeList = filteredTopMovies,
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
@@ -364,7 +379,7 @@ fun ExploreScreen(
             // Genre Sections
             GenreSection(
                 title = "Action",
-                animeList = actionAnime,
+                animeList = filteredActionAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
                 showAnimeCardButtons = showAnimeCardButtons,
@@ -397,7 +412,7 @@ fun ExploreScreen(
 
             GenreSection(
                 title = "Romance",
-                animeList = romanceAnime,
+                animeList = filteredRomanceAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
                 showAnimeCardButtons = showAnimeCardButtons,
@@ -430,7 +445,7 @@ fun ExploreScreen(
 
             GenreSection(
                 title = "Comedy",
-                animeList = comedyAnime,
+                animeList = filteredComedyAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
                 showAnimeCardButtons = showAnimeCardButtons,
@@ -463,7 +478,7 @@ fun ExploreScreen(
 
             GenreSection(
                 title = "Fantasy",
-                animeList = fantasyAnime,
+                animeList = filteredFantasyAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
                 showAnimeCardButtons = showAnimeCardButtons,
@@ -496,7 +511,7 @@ fun ExploreScreen(
 
             GenreSection(
                 title = "Sci-Fi",
-                animeList = scifiAnime,
+                animeList = filteredScifiAnime,
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
                 showAnimeCardButtons = showAnimeCardButtons,
@@ -563,7 +578,7 @@ private fun GenreSection(
     if (animeList.isEmpty() && !isLoading) return
 
     Column {
-        SectionTitle(title, isOled)
+        SectionTitle(title, animeList.size, isOled)
         if (animeList.isNotEmpty()) {
             ExploreAnimeHorizontalList(
                 animeList = animeList,

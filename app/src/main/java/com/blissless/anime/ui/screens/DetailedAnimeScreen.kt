@@ -6,7 +6,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -92,6 +94,7 @@ fun DetailedAnimeScreen(
     var isTransitioning by remember { mutableStateOf(false) }
 
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
+    var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
 
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -268,7 +271,9 @@ fun DetailedAnimeScreen(
                     model = displayData.banner ?: displayData.cover,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(280.dp)
+                    modifier = Modifier.fillMaxWidth().height(280.dp).clickable {
+                        fullscreenImageUrl = displayData.banner ?: displayData.cover
+                    }
                 )
                 Box(
                     modifier = Modifier.fillMaxWidth().height(280.dp).background(
@@ -314,16 +319,22 @@ fun DetailedAnimeScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-40).dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
-                        Surface(
-                            modifier = Modifier.width(120.dp).height(175.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            shadowElevation = 12.dp,
-                            color = Color.Transparent
-                        ) {
-                            AsyncImage(
-                                model = displayData.cover, contentDescription = displayData.title,
-                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
-                            )
+                        Box {
+                            Surface(
+                                modifier = Modifier.width(120.dp).height(175.dp).clickable {
+                                    fullscreenImageUrl = displayData.cover
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                shadowElevation = 12.dp,
+                                color = Color.Transparent
+                            ) {
+                                AsyncImage(
+                                    model = displayData.cover, contentDescription = displayData.title,
+                                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clickable {
+                                        fullscreenImageUrl = displayData.cover
+                                    }
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -850,6 +861,20 @@ fun DetailedAnimeScreen(
                                                         modifier = Modifier.fillMaxSize()
                                                     )
                                                 }
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .padding(6.dp)
+                                                        .align(Alignment.TopStart),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = Color.Black.copy(alpha = 0.8f)
+                                                ) {
+                                                    Text(
+                                                        relation.relationType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color.White,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
                                                 // Episode badge
                                                 val episodeText = when {
                                                     relation.episodes != null && relation.episodes > 0 -> "${relation.episodes} ${if (relation.episodes == 1) "ep" else "eps"}"
@@ -963,6 +988,27 @@ fun DetailedAnimeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 24.sp
+                )
+            }
+        }
+    }
+    
+    if (fullscreenImageUrl != null) {
+        Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                        detectTapGestures { fullscreenImageUrl = null }
+                    }
+                )
+                AsyncImage(
+                    model = fullscreenImageUrl,
+                    contentDescription = "Fullscreen image",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
                 )
             }
         }

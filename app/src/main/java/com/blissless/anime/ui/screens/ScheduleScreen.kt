@@ -92,7 +92,7 @@ fun ScheduleScreen(
 
     // Filter adult content if setting is enabled
     val filteredAiringList = remember(airingList, hideAdultContent) {
-        if (hideAdultContent) airingList.filter { !it.isAdult } else airingList
+        if (hideAdultContent) airingList.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else airingList
     }
 
     val scope = rememberCoroutineScope()

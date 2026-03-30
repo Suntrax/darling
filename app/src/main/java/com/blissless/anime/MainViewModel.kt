@@ -909,49 +909,66 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun mapExploreMedia(media: ExploreMedia): ExploreAnime = ExploreAnime(
-        id = media.id,
-        title = media.title.romaji ?: media.title.english ?: "Unknown",
-        titleEnglish = media.title.english,
-        cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
-        banner = media.bannerImage,
-        episodes = media.episodes ?: 0,
-        latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
-        averageScore = media.averageScore,
-        genres = media.genres ?: emptyList(),
-        year = media.startDate?.year ?: media.seasonYear,
-        malId = media.idMal,
-        isAdult = media.isAdult
-    )
+    private fun mapExploreMedia(media: ExploreMedia): ExploreAnime {
+        val title = media.title.romaji ?: media.title.english ?: "Unknown"
+        val episodes = media.episodes ?: 0
+        val latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 }
+
+        return ExploreAnime(
+            id = media.id,
+            title = title,
+            titleEnglish = media.title.english,
+            cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
+            banner = media.bannerImage,
+            episodes = episodes,
+            latestEpisode = latestEpisode,
+            averageScore = media.averageScore,
+            genres = media.genres ?: emptyList(),
+            year = media.startDate?.year ?: media.seasonYear,
+            malId = media.idMal,
+            isAdult = media.isAdult
+        )
+    }
 
     fun fetchAiringSchedule(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        
+
         val cached = cacheManager.loadAiringScheduleCache()
         if (cached != null && !force && now - lastExploreRefreshTime < MIN_REFRESH_INTERVAL_MS) {
             return
         }
-        
+
         val shouldForce = force || cached == null
-        
+
         viewModelScope.launch {
             _isLoadingSchedule.value = true
             val schedules = repository.fetchAiringSchedule()
-            
+
             val airingList = schedules.filter { it.media != null }.map { schedule ->
+                val media = schedule.media!!
+                val title = media.title.romaji ?: media.title.english ?: "Unknown"
+                val episodes = media.episodes ?: 0
+
+                if (title.contains("JoJo", ignoreCase = true) || title.contains("jojo", ignoreCase = true)) {
+                    android.util.Log.d("JOJO_DEBUG", "JoJo in airing schedule: $title")
+                    android.util.Log.d("JOJO_DEBUG", "  - episodes: $episodes")
+                    android.util.Log.d("JOJO_DEBUG", "  - airingEpisode: ${schedule.episode}")
+                    android.util.Log.d("JOJO_DEBUG", "  - status: ${media.status}")
+                }
+
                 AiringScheduleAnime(
-                    id = schedule.media!!.id,
-                    title = schedule.media.title.romaji ?: schedule.media.title.english ?: "Unknown",
+                    id = media.id,
+                    title = title,
                     cover = schedule.media.coverImage?.large ?: "",
-                    episodes = schedule.media.episodes ?: 0,
+                    episodes = episodes,
                     airingEpisode = schedule.episode,
                     airingAt = schedule.airingAt,
                     timeUntilAiring = schedule.timeUntilAiring,
-                    averageScore = schedule.media.averageScore,
-                    genres = schedule.media.genres ?: emptyList(),
-                    year = schedule.media.seasonYear,
-                    malId = schedule.media.idMal,
-                    isAdult = schedule.media.isAdult
+                    averageScore = media.averageScore,
+                    genres = media.genres ?: emptyList(),
+                    year = media.seasonYear,
+                    malId = media.idMal,
+                    isAdult = media.isAdult
                 )
             }.sortedBy { it.airingAt }
 
@@ -1313,6 +1330,11 @@ class MainViewModel : ViewModel() {
         cacheManager.invalidateStreamCache(animeId, episode, category)
     }
 
+    // Cache management
+    fun getVideoCacheSize(context: Context): Long = cacheManager.getVideoCacheSize(context)
+    fun clearVideoCache(context: Context): Long = cacheManager.clearVideoCache(context)
+    fun clearNonEssentialCaches(context: Context) = cacheManager.clearNonEssentialCaches(context)
+
     /**
      * Get the best title for Animekai scraping.
      * Prefers English title for better search results on Animekai.
@@ -1513,28 +1535,30 @@ class MainViewModel : ViewModel() {
             }
         }
     }
-    fun toggleAniListFavorite(mediaId: Int): Boolean {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastFavoriteToggleTime < favoriteToggleCooldownMs) {
-            _isFavoriteRateLimited.value = true
-            viewModelScope.launch {
-                kotlinx.coroutines.delay(favoriteToggleCooldownMs)
-                _isFavoriteRateLimited.value = false
-            }
-            return false // Rate limited
-        }
-        lastFavoriteToggleTime = currentTime
-        _isFavoriteRateLimited.value = false
-        
-        // Immediately update local state for instant feedback
+    fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null): Boolean {
         if (_loginProvider.value == LoginProvider.MAL) {
             // Toggle MAL favorite using the ID-based method
             toggleMalFavoriteById(mediaId)
         } else {
-            // Toggle AniList favorite
+            // Toggle AniList favorite - local-first
             val isFavorite = _aniListFavorites.value.any { it.id == mediaId }
             if (isFavorite) {
+                // Remove from favorites
                 _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
+            } else {
+                // Add to favorites immediately
+                if (anime != null) {
+                    val userFavorite = UserFavoriteAnime(
+                        id = anime.id,
+                        title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
+                        coverImage = MediaCoverImage(large = anime.cover, medium = anime.cover),
+                        episodes = anime.totalEpisodes,
+                        averageScore = anime.averageScore,
+                        genres = anime.genres,
+                        seasonYear = anime.year
+                    )
+                    _aniListFavorites.value = _aniListFavorites.value + userFavorite
+                }
             }
         }
         

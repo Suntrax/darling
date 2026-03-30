@@ -326,12 +326,30 @@ internal fun LoadingPlaceholder(isOled: Boolean = false) {
 }
 
 @Composable
-internal fun SectionTitle(title: String, isOled: Boolean = false) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
-    )
+internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = false) {
+    Row(
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+        )
+        count?.let {
+            Spacer(modifier = Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isOled) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            ) {
+                Text(
+                    "$it",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
 }

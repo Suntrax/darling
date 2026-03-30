@@ -3,6 +3,7 @@ package com.blissless.anime.ui.screens
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -487,8 +488,31 @@ fun HomeScreen(
 
         AnimatedVisibility(
             visible = showSearchOverlay,
-            enter = slideInVertically(animationSpec = tween(durationMillis = 250), initialOffsetY = { -it }) + fadeIn(animationSpec = tween(250)),
-            exit = slideOutVertically(animationSpec = tween(durationMillis = 250), targetOffsetY = { -it }) + fadeOut(animationSpec = tween(250))
+            enter = slideInVertically(
+                animationSpec = tween(
+                    durationMillis = 300,
+                    easing = FastOutSlowInEasing
+                ),
+                initialOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+            ) + fadeIn(
+                animationSpec = tween(
+                    durationMillis = 300,
+                    delayMillis = 0,
+                    easing = FastOutSlowInEasing
+                )
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(
+                    durationMillis = 250,
+                    easing = FastOutSlowInEasing
+                ),
+                targetOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+            ) + fadeOut(
+                animationSpec = tween(
+                    durationMillis = 250,
+                    easing = FastOutSlowInEasing
+                )
+            )
         ) {
             SearchOverlay(
                 viewModel = viewModel,

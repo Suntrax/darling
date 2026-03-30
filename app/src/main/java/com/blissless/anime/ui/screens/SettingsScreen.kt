@@ -432,10 +432,10 @@ fun SettingsScreen(
                 )
             }
             
-            """
+            
 
             Spacer(modifier = Modifier.height(16.dp))
-
+            """
             // Preferred Category Selection
             // Animekai supports both SUB and DUB
             Column {
@@ -576,7 +576,7 @@ fun SettingsScreen(
         ) {
             SettingsSlider(
                 title = "Episode Tracking",
-                description = "Auto-update AniList progress when you've watched this percentage",
+                description = "Auto-update Episode progress when you've watched this percentage",
                 value = trackingPercentage.toFloat(),
                 valueRange = 50f..100f,
                 valueLabel = "${trackingPercentage}%",
@@ -629,7 +629,7 @@ fun SettingsScreen(
 
             SettingsToggle(
                 title = "Auto Skip Opening",
-                description = "Automatically skip anime openings when detected",
+                description = "Automatically skip anime openings",
                 checked = autoSkipOpening,
                 onCheckedChange = { viewModel.setAutoSkipOpening(it) },
                 isOled = isOled
@@ -639,7 +639,7 @@ fun SettingsScreen(
 
             SettingsToggle(
                 title = "Auto Skip Ending",
-                description = "Automatically skip to next episode during credits",
+                description = "Automatically skip anime endings",
                 checked = autoSkipEnding,
                 onCheckedChange = { viewModel.setAutoSkipEnding(it) },
                 isOled = isOled
@@ -696,6 +696,77 @@ fun SettingsScreen(
                 }
             )
         }
+
+        // Cache Management Section
+        var cacheSize by remember { mutableLongStateOf(0L) }
+        var showClearCacheConfirmation by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            cacheSize = viewModel.getVideoCacheSize(context)
+        }
+
+        SettingsSection(
+            title = "Cache Management",
+            icon = Icons.Default.Memory,
+            isOled = isOled
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Video Cache",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        formatFileSize(cacheSize),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Button(
+                    onClick = { showClearCacheConfirmation = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("Clear")
+                }
+            }
+        }
+
+        if (showClearCacheConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showClearCacheConfirmation = false },
+                title = { Text("Clear Cache") },
+                text = { Text("This will clear all video cache and temporary data. Your playback positions will be preserved. Continue?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.clearNonEssentialCaches(context)
+                            cacheSize = 0L
+                            showClearCacheConfirmation = false
+                            Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Clear")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearCacheConfirmation = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 
     if (showLogoutConfirmation) {
@@ -738,7 +809,7 @@ private fun SettingsSection(
     var expanded by remember { mutableStateOf(initiallyExpanded) }
     
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
         colors = CardDefaults.cardColors(
             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
         ),
@@ -753,8 +824,6 @@ private fun SettingsSection(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { expanded = !expanded }
                     .padding(8.dp)
             ) {
                 Icon(
@@ -947,4 +1016,13 @@ private fun CategoryChip(
         ),
         modifier = if (!enabled) Modifier.alpha(0.5f) else Modifier
     )
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    }
 }

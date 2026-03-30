@@ -14,7 +14,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -33,11 +35,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.core.net.ConnectivityManagerCompat
@@ -147,6 +151,7 @@ fun PlayerScreen(
     var maxBufferedPosition by remember { mutableLongStateOf(0L) }
     var showServerMenu by remember { mutableStateOf(false) }
     var showQualityMenu by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
 
     var selectedQuality by remember { mutableStateOf(currentQuality) }
 
@@ -407,6 +412,9 @@ fun PlayerScreen(
     fun seekBy(milliseconds: Long, isForward: Boolean) {
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
+        // Immediately update slider position for instant feedback
+        currentPosition = newPosition
+        sliderValue = newPosition.toFloat()
         // Don't autoplay when user is manually skipping
         val seconds = abs(milliseconds / 1000)
         skipIndicatorText = if (milliseconds > 0) "+${seconds}s" else "-${seconds}s"
@@ -538,8 +546,8 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu) {
-        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu) {
+    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu) {
+        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu) {
             delay(3000)
             if (!isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu) {
                 showControls = false
@@ -587,6 +595,7 @@ fun PlayerScreen(
         onSavePosition?.invoke(exoPlayer.currentPosition)
         onPositionSaved?.invoke(exoPlayer.currentPosition)
         exoPlayer.stop()
+        exoPlayer.clearMediaItems()
         onServerChange?.invoke(serverName, category)
     }
 
@@ -1105,113 +1114,191 @@ fun PlayerScreen(
                         .navigationBarsPadding()
                         .padding(16.dp)
                 ) {
-                    Slider(
-                        value = sliderValue,
-                        valueRange = 0f..(if (duration > 0) duration.toFloat() else 1000f),
-                        onValueChange = { newValue ->
-                            isDragging = true
-                            wasPlayingBeforeScrub = isPlaying
-                            sliderValue = newValue
-                            currentPosition = newValue.toLong()
-                        },
-                        onValueChangeFinished = {
-                            isDragging = false
-                            exoPlayer.seekTo(sliderValue.toLong())
-                            if (wasPlayingBeforeScrub) {
-                                exoPlayer.play()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .drawBehind {
-                                val sliderWidth = size.width
-                                val trackHeight = 8.dp.toPx()
-                                val trackTop = (size.height - trackHeight) / 2f
-                                val cornerRadius = 4.dp.toPx()
-                                val thumbRadius = 8.dp.toPx()
-
-                                if (duration > 0) {
-                                    val progressRatio = currentPosition.toFloat() / duration
-                                    val bufferedRatio = maxBufferedPosition.toFloat() / duration
-                                    
-                                    // Draw inactive track (entire track background)
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.3f),
-                                        topLeft = Offset(0f, trackTop),
-                                        size = Size(sliderWidth, trackHeight),
-                                        cornerRadius = CornerRadius(cornerRadius)
-                                    )
-                                    
-                                    // Draw buffer indicator (if enabled and has buffered content) - darker white
-                                    if (showBufferIndicator && maxBufferedPosition > currentPosition) {
-                                        val bufferStartX = progressRatio * sliderWidth
-                                        val bufferEndX = bufferedRatio * sliderWidth
-                                        drawRoundRect(
-                                            color = Color.White.copy(alpha = 0.5f),
-                                            topLeft = Offset(bufferStartX, trackTop),
-                                            size = Size(bufferEndX - bufferStartX, trackHeight),
-                                            cornerRadius = CornerRadius(2.dp.toPx())
-                                        )
-                                    }
-                                    
-                                    // Draw active track (played portion) first
-                                    val progressX = progressRatio * sliderWidth
-                                    drawRoundRect(
-                                        color = Color.White,
-                                        topLeft = Offset(0f, trackTop),
-                                        size = Size(progressX.coerceAtLeast(thumbRadius), trackHeight),
-                                        cornerRadius = CornerRadius(cornerRadius)
-                                    )
-                                    
-                                    // Draw intro/credits overlay ON TOP using BlendMode.Multiply to show through white
-                                    if (introStartRatio != null && introEndRatio != null) {
-                                        val introStartX = introStartRatio * sliderWidth
-                                        val introEndX = introEndRatio * sliderWidth
-                                        val introWidth = introEndX - introStartX
-                                        if (introWidth > 0) {
-                                            val leftRadius = if (introStartX < 10f) cornerRadius else 2.dp.toPx()
-                                            val rightRadius = if (introEndX > sliderWidth - 10f) cornerRadius else 2.dp.toPx()
-                                            drawRoundRect(
-                                                color = Color(0xFFFF9800), // Full opacity, BlendMode.Multiply will show through
-                                                topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
-                                                size = Size(
-                                                    introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
-                                                    trackHeight
-                                                ),
-                                                cornerRadius = CornerRadius(leftRadius, rightRadius),
-                                                blendMode = BlendMode.Multiply
-                                            )
-                                        }
-                                    }
-
-                                    if (creditsStartRatio != null) {
-                                        val creditsStartX = creditsStartRatio * sliderWidth
-                                        val creditsWidth = sliderWidth - creditsStartX
-                                        if (creditsStartX < sliderWidth && creditsWidth > 0) {
-                                            drawRoundRect(
-                                                color = Color(0xFFFF9800),
-                                                topLeft = Offset(creditsStartX, trackTop),
-                                                size = Size(creditsWidth.coerceAtLeast(0f), trackHeight),
-                                                cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius),
-                                                blendMode = BlendMode.Multiply
-                                            )
-                                        }
-                                    }
-                                }
-                            },
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color.White,
-                            activeTrackColor = Color.Transparent,
-                            inactiveTrackColor = Color.Transparent
-                        )
-                    )
-
+                    // Timer above progress bar
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(formatTime(currentPosition), color = Color.White, style = MaterialTheme.typography.labelMedium)
                         Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp)
+                            .pointerInput(Unit) {
+                                detectHorizontalDragGestures(
+                                    onDragStart = { offset ->
+                                        isDragging = true
+                                        wasPlayingBeforeScrub = isPlaying
+                                        val ratio = (offset.x / size.width).coerceIn(0f, 1f)
+                                        sliderValue = ratio * (if (duration > 0) duration.toFloat() else 1000f)
+                                        currentPosition = sliderValue.toLong()
+                                    },
+                                    onDragEnd = {
+                                        isDragging = false
+                                        exoPlayer.seekTo(sliderValue.toLong())
+                                        if (wasPlayingBeforeScrub) {
+                                            exoPlayer.play()
+                                        }
+                                    },
+                                    onHorizontalDrag = { _, dragAmount ->
+                                        val currentRatio = sliderValue / (if (duration > 0) duration.toFloat() else 1000f)
+                                        val newRatio = (currentRatio + dragAmount / size.width).coerceIn(0f, 1f)
+                                        sliderValue = newRatio * (if (duration > 0) duration.toFloat() else 1000f)
+                                        currentPosition = sliderValue.toLong()
+                                    }
+                                )
+                            }
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val sliderWidth = size.width
+                            val trackHeight = 8.dp.toPx()
+                            val trackTop = (size.height - trackHeight) / 2f
+                            val cornerRadius = 4.dp.toPx()
+                            val thumbRadiusPx = 8.dp.toPx()
+
+                            if (duration > 0) {
+                                val progressRatio = currentPosition.toFloat() / duration
+                                val bufferedRatio = maxBufferedPosition.toFloat() / duration
+
+                                // Draw inactive track background
+                                drawRoundRect(
+                                    color = Color.White.copy(alpha = 0.3f),
+                                    topLeft = Offset(0f, trackTop),
+                                    size = Size(sliderWidth, trackHeight),
+                                    cornerRadius = CornerRadius(cornerRadius)
+                                )
+
+                                // Draw buffer indicator
+                                if (showBufferIndicator && maxBufferedPosition > currentPosition) {
+                                    val bufferStartX = progressRatio * sliderWidth
+                                    val bufferEndX = bufferedRatio * sliderWidth
+                                    drawRoundRect(
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        topLeft = Offset(bufferStartX, trackTop),
+                                        size = Size(bufferEndX - bufferStartX, trackHeight),
+                                        cornerRadius = CornerRadius(2.dp.toPx())
+                                    )
+                                }
+
+                                // Draw active track (played portion)
+                                val progressX = progressRatio * sliderWidth
+                                drawRoundRect(
+                                    color = Color.White,
+                                    topLeft = Offset(0f, trackTop),
+                                    size = Size(progressX.coerceAtLeast(thumbRadiusPx), trackHeight),
+                                    cornerRadius = CornerRadius(cornerRadius)
+                                )
+
+                                // Draw intro/credits overlay ON TOP using BlendMode.Multiply
+                                if (introStartRatio != null && introEndRatio != null) {
+                                    val introStartX = introStartRatio * sliderWidth
+                                    val introEndX = introEndRatio * sliderWidth
+                                    val introWidth = introEndX - introStartX
+                                    if (introWidth > 0) {
+                                        val leftRadius = if (introStartX < 10f) cornerRadius else 2.dp.toPx()
+                                        val rightRadius = if (introEndX > sliderWidth - 10f) cornerRadius else 2.dp.toPx()
+                                        drawRoundRect(
+                                            color = Color(0xFFFF9800),
+                                            topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
+                                            size = Size(
+                                                introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
+                                                trackHeight
+                                            ),
+                                            cornerRadius = CornerRadius(leftRadius, rightRadius),
+                                            blendMode = BlendMode.Multiply
+                                        )
+                                    }
+                                }
+
+                                if (creditsStartRatio != null) {
+                                    val creditsStartX = creditsStartRatio * sliderWidth
+                                    val creditsWidth = sliderWidth - creditsStartX
+                                    if (creditsStartX < sliderWidth && creditsWidth > 0) {
+                                        drawRoundRect(
+                                            color = Color(0xFFFF9800),
+                                            topLeft = Offset(creditsStartX, trackTop),
+                                            size = Size(creditsWidth.coerceAtLeast(0f), trackHeight),
+                                            cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius),
+                                            blendMode = BlendMode.Multiply
+                                        )
+                                    }
+                                }
+
+                                // Draw the thumb as a circle
+                                drawCircle(
+                                    color = Color.White,
+                                    radius = thumbRadiusPx,
+                                    center = Offset(progressX, size.height / 2)
+                                )
+                            }
+                        }
+                    }
+
+                    // Bottom row with speed selector on left and time on right
+                    var currentSpeed by remember { mutableFloatStateOf(1f) }
+                    val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Playback speed selector on the left
+                        Box {
+                            IconButton(
+                                onClick = { showSpeedMenu = true },
+                                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.small)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = "Playback speed",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "${currentSpeed}x",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showSpeedMenu,
+                                onDismissRequest = { showSpeedMenu = false }
+                            ) {
+                                speedOptions.forEach { speed ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "${speed}x",
+                                                color = if (currentSpeed == speed) MaterialTheme.colorScheme.primary else Color.White
+                                            )
+                                        },
+                                        onClick = {
+                                            currentSpeed = speed
+                                            exoPlayer.setPlaybackSpeed(speed)
+                                            showSpeedMenu = false
+                                        },
+                                        leadingIcon = if (currentSpeed == speed) {
+                                            { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                                        } else null
+                                    )
+                                }
+                            }
+                        }
+
+                        // Time on the right (already showing in Row above, this is spacer)
+                        Spacer(modifier = Modifier.width(1.dp))
                     }
                 }
             }
