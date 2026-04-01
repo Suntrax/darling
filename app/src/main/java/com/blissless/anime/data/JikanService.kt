@@ -52,7 +52,9 @@ data class JikanHistoryEntry(
     val images: JikanImages,
     val episodesWatched: Int?,
     val chaptersRead: Int?,
-    val increment: String?
+    val increment: String?,
+    val date: String?,
+    val status: String? = null
 )
 
 class JikanService(private val context: Context) {
@@ -84,6 +86,34 @@ class JikanService(private val context: Context) {
             }
         } catch (e: Exception) {
             android.util.Log.e("JIKAN_SEARCH", "Error searching anime: ${e.message}")
+            null
+        }
+    }
+    
+    suspend fun getAnimeCover(malId: Int): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$JIKAN_API_BASE/anime/$malId")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = TIMEOUT_MS
+            conn.readTimeout = TIMEOUT_MS
+            
+            val responseCode = conn.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                val response = reader.readText()
+                reader.close()
+                
+                val imageMatch = Regex("\"large_image_url\"\\s*:\\s*\"([^\"]+)\"").find(response)
+                val imageUrl = imageMatch?.groupValues?.get(1)
+                android.util.Log.d("JIKAN_DEBUG", "Fetched cover for $malId: $imageUrl")
+                imageUrl
+            } else {
+                android.util.Log.e("JIKAN_DEBUG", "Failed to fetch cover for $malId: $responseCode")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("JIKAN_DEBUG", "Error fetching cover for $malId: ${e.message}")
             null
         }
     }
@@ -198,26 +228,30 @@ class JikanService(private val context: Context) {
             val end = if (i + 1 < entryStarts.size) entryStarts[i + 1].range.first else content.length
             
             val entryBlock = content.substring(start, end)
+            android.util.Log.d("JIKAN_DEBUG", "Entry block: ${entryBlock.take(200)}")
             
             val malIdMatch = Regex("\"mal_id\"\\s*:\\s*(\\d+)").find(entryBlock)
             val id = malIdMatch?.groupValues?.get(1)?.toIntOrNull() ?: continue
             
-            val titleMatch = Regex("\"title\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
+            val titleMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
             val title = titleMatch?.groupValues?.get(1) ?: "Unknown"
+            android.util.Log.d("JIKAN_DEBUG", "Title: $title")
+            
+            val typeMatch = Regex("\"type\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
+            val entryType = typeMatch?.groupValues?.get(1) ?: "anime"
+            android.util.Log.d("JIKAN_DEBUG", "Entry type: $entryType")
             
             val imageMatch = Regex("\"image_url\"\\s*:\\s*\"([^\"]*)\"").find(entryBlock)
             val imageUrl = imageMatch?.groupValues?.get(1)?.takeIf { it.isNotEmpty() && it != "null" }
             
-            val incrementMatch = Regex("\"increment\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
+            val incrementMatch = Regex("\"increment\"\\s*:\\s*(\\d+)").find(entryBlock)
             val increment = incrementMatch?.groupValues?.get(1)
+            android.util.Log.d("JIKAN_DEBUG", "Increment: $increment")
             
-            val type = if (entryBlock.contains("\"episodes_watched\"")) "anime" else "manga"
+            val dateMatch = Regex("\"date\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
+            val date = dateMatch?.groupValues?.get(1)
             
-            val episodesMatch = Regex("\"episodes_watched\"\\s*:\\s*(\\d+)").find(entryBlock)
-            val episodes = episodesMatch?.groupValues?.get(1)?.toIntOrNull()
-            
-            val chaptersMatch = Regex("\"chapters_read\"\\s*:\\s*(\\d+)").find(entryBlock)
-            val chapters = chaptersMatch?.groupValues?.get(1)?.toIntOrNull()
+            val type = if (entryType == "anime") "anime" else "manga"
             
             val images = JikanImages(jpg = JikanImageUrls(imageUrl = imageUrl))
             
@@ -225,12 +259,14 @@ class JikanService(private val context: Context) {
                 malId = id,
                 title = title,
                 images = images,
-                episodesWatched = episodes,
-                chaptersRead = chapters,
-                increment = increment
+                episodesWatched = if (type == "anime") increment?.toIntOrNull() else null,
+                chaptersRead = if (type == "manga") increment?.toIntOrNull() else null,
+                increment = increment,
+                date = date
             )
             
             entries.add(Pair(entry, type))
+            android.util.Log.d("JIKAN_DEBUG", "Added entry: $title, type: $type, increment: $increment")
         }
         
         return entries
@@ -252,9 +288,13 @@ class JikanService(private val context: Context) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 val response = reader.readText()
                 reader.close()
-                android.util.Log.d("JIKAN_DEBUG", "History response length: ${response.length}, first 500 chars: ${response.take(500)}")
+                android.util.Log.d("JIKAN_DEBUG", "History response length: ${response.length}")
+                android.util.Log.d("JIKAN_DEBUG", "History response sample (first 1000 chars): ${response.take(1000)}")
                 val result = parseUserHistory(response)
                 android.util.Log.d("JIKAN_DEBUG", "Parsed history: ${result.anime.size} anime entries, ${result.manga.size} manga entries")
+                result.anime.take(3).forEach { entry ->
+                    android.util.Log.d("JIKAN_DEBUG", "History entry: ${entry.title} - ${entry.increment} - ${entry.date}")
+                }
                 result
             } else {
                 android.util.Log.e("JIKAN_DEBUG", "Failed to fetch history: $responseCode")
@@ -272,11 +312,14 @@ class JikanService(private val context: Context) {
         val mangaHistory = mutableListOf<JikanHistoryEntry>()
         
         try {
+            android.util.Log.d("JIKAN_DEBUG", "parseUserHistory: Checking for 'data' key...")
             if (jsonStr.contains("\"data\":")) {
+                android.util.Log.d("JIKAN_DEBUG", "Found 'data' key in response")
                 val dataMatch = Regex("\"data\"\\s*:\\s*\\[(.*?)]\\s*\\}", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
                 dataMatch?.let { match ->
                     android.util.Log.d("JIKAN_DEBUG", "Found data array format, content length: ${match.groupValues[1].length}")
                     val entries = parseHistoryDataEntries(match.groupValues[1])
+                    android.util.Log.d("JIKAN_DEBUG", "Parsed ${entries.size} entries from data array")
                     entries.forEach { entry ->
                         if (entry.second == "anime") {
                             animeHistory.add(entry.first)
@@ -334,6 +377,9 @@ class JikanService(private val context: Context) {
             val incrementMatch = Regex("\"increment\"\\s*:\\s*\"([^\"]+)\"").find(entryContent)
             val increment = incrementMatch?.groupValues?.get(1)
             
+            val dateMatch = Regex("\"date\"\\s*:\\s*\"([^\"]+)\"").find(entryContent)
+            val date = dateMatch?.groupValues?.get(1)
+            
             val images = JikanImages(jpg = JikanImageUrls(imageUrl = imageUrl))
             
             if (type == "anime") {
@@ -346,7 +392,8 @@ class JikanService(private val context: Context) {
                     images = images,
                     episodesWatched = episodes,
                     chaptersRead = null,
-                    increment = increment
+                    increment = increment,
+                    date = date
                 ))
             } else {
                 val chaptersMatch = Regex("\"chapters_read\"\\s*:\\s*(\\d+)").find(entryContent)
@@ -358,7 +405,8 @@ class JikanService(private val context: Context) {
                     images = images,
                     episodesWatched = null,
                     chaptersRead = chapters,
-                    increment = increment
+                    increment = increment,
+                    date = date
                 ))
             }
         }

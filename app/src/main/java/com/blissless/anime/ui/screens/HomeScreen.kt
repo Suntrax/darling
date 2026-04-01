@@ -65,6 +65,7 @@ fun HomeScreen(
     onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
     onLoginClick: () -> Unit = {},
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
+    onShowDetailedAnimeFromMal: (Int) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap()
 ) {
@@ -681,7 +682,8 @@ fun HomeScreen(
             viewModel = viewModel,
             isOled = isOled,
             onDismiss = { showUserProfileDialog = false },
-            onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) }
+            onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) },
+            onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal
         )
     }
 

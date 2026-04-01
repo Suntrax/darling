@@ -29,6 +29,7 @@ import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.CachedStream
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.AnimeRelation
+import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.ui.screens.DetailedAnimeScreen
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.screens.ExploreScreen
@@ -40,6 +41,7 @@ import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.MainScope
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import com.blissless.anime.data.models.AnimeMedia
@@ -477,6 +479,16 @@ fun MainScreen(
     var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     
     var scheduleDialogOpen by remember { mutableStateOf(false) }
+    
+    var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
+    
+    // Callback to show detailed anime from MAL history using AniList API
+    val onShowDetailedAnimeFromMal: (Int) -> Unit = { malId ->
+        kotlinx.coroutines.MainScope().launch {
+            val detailedData = viewModel.fetchDetailedAnimeDataByMalId(malId)
+            detailedAnimeFromMal = detailedData
+        }
+    }
     
     // Animekai timestamps (PRIMARY source)
     var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
@@ -1125,6 +1137,161 @@ fun MainScreen(
             }
         )
     }
+    
+    detailedAnimeFromMal?.let { detailedData ->
+        val isAnimeFavorite = aniListFavoriteIds.contains(detailedData.id)
+        DetailedAnimeScreen(
+            anime = detailedData,
+            viewModel = viewModel,
+            isOled = isOled,
+            currentStatus = animeStatusMap[detailedData.id],
+            isFavorite = isAnimeFavorite,
+            onDismiss = { detailedAnimeFromMal = null },
+            onSwipeToClose = { detailedAnimeFromMal = null },
+            onPlayEpisode = { episode ->
+                val animeMedia = AnimeMedia(
+                    id = detailedData.id,
+                    title = detailedData.title,
+                    titleEnglish = detailedData.titleEnglish,
+                    cover = detailedData.cover,
+                    banner = detailedData.banner,
+                    progress = 0,
+                    totalEpisodes = detailedData.episodes,
+                    latestEpisode = detailedData.latestEpisode,
+                    status = "",
+                    averageScore = detailedData.averageScore,
+                    genres = detailedData.genres,
+                    listStatus = "",
+                    listEntryId = 0,
+                    year = detailedData.year,
+                    malId = detailedData.malId
+                )
+                viewModel.addExploreAnimeToList(ExploreAnime(
+                    id = detailedData.id,
+                    title = detailedData.title,
+                    titleEnglish = detailedData.titleEnglish,
+                    cover = detailedData.cover,
+                    banner = detailedData.banner,
+                    episodes = detailedData.episodes,
+                    latestEpisode = detailedData.latestEpisode,
+                    averageScore = detailedData.averageScore,
+                    genres = detailedData.genres,
+                    year = detailedData.year,
+                    format = detailedData.format,
+                    malId = detailedData.malId
+                ), "CURRENT")
+                onPlayEpisode(animeMedia, episode)
+                detailedAnimeFromMal = null
+            },
+            onUpdateStatus = { status ->
+                if (status != null) {
+                    viewModel.addExploreAnimeToList(ExploreAnime(
+                        id = detailedData.id,
+                        title = detailedData.title,
+                        titleEnglish = detailedData.titleEnglish,
+                        cover = detailedData.cover,
+                        banner = detailedData.banner,
+                        episodes = detailedData.episodes,
+                        latestEpisode = detailedData.latestEpisode,
+                        averageScore = detailedData.averageScore,
+                        genres = detailedData.genres,
+                        year = detailedData.year,
+                        format = detailedData.format,
+                        malId = detailedData.malId
+                    ), status)
+                }
+            },
+            onRemove = {
+                viewModel.removeAnimeFromList(detailedData.id)
+            },
+            onToggleFavorite = { _ ->
+                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                    val animeMedia = AnimeMedia(
+                        id = detailedData.id,
+                        title = detailedData.title,
+                        titleEnglish = detailedData.titleEnglish,
+                        cover = detailedData.cover,
+                        banner = detailedData.banner,
+                        progress = 0,
+                        totalEpisodes = detailedData.episodes,
+                        latestEpisode = detailedData.latestEpisode,
+                        status = "",
+                        averageScore = detailedData.averageScore,
+                        genres = detailedData.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = detailedData.year,
+                        malId = detailedData.malId
+                    )
+                    viewModel.toggleMalFavorite(animeMedia)
+                } else {
+                    val animeMedia = AnimeMedia(
+                        id = detailedData.id,
+                        title = detailedData.title,
+                        titleEnglish = detailedData.titleEnglish,
+                        cover = detailedData.cover,
+                        banner = detailedData.banner,
+                        progress = 0,
+                        totalEpisodes = detailedData.episodes,
+                        latestEpisode = detailedData.latestEpisode,
+                        status = "",
+                        averageScore = detailedData.averageScore,
+                        genres = detailedData.genres,
+                        listStatus = "",
+                        listEntryId = 0,
+                        year = detailedData.year,
+                        malId = detailedData.malId
+                    )
+                    viewModel.toggleAniListFavorite(detailedData.id, animeMedia)
+                }
+            },
+            localStatus = localAnimeStatus[detailedData.id]?.status,
+            isLocalFavorite = localFavoriteIds.contains(detailedData.id),
+            onToggleLocalFavorite = { id ->
+                viewModel.toggleLocalFavorite(id, detailedData.title, detailedData.cover, detailedData.banner, detailedData.year, detailedData.averageScore)
+            },
+            onUpdateLocalStatus = { status ->
+                val currentEntry = localAnimeStatus[detailedData.id]
+                if (status != null) {
+                    viewModel.setLocalAnimeStatus(
+                        detailedData.id,
+                        LocalAnimeEntry(
+                            id = detailedData.id,
+                            status = status,
+                            progress = currentEntry?.progress ?: 0,
+                            totalEpisodes = detailedData.episodes
+                        )
+                    )
+                } else {
+                    viewModel.setLocalAnimeStatus(detailedData.id, null)
+                }
+            },
+            onRemoveLocalStatus = {
+                viewModel.setLocalAnimeStatus(detailedData.id, null)
+            },
+            isLoggedIn = isLoggedIn,
+            onLoginClick = { viewModel.loginWithAniList() },
+            onRelationClick = { relation ->
+                try {
+                    scope.launch {
+                        try {
+                            delay(100)
+                            val detailedAnimeData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedAnimeData != null) {
+                                detailedAnimeFromMal = detailedAnimeData
+                            } else {
+                                Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
 
 
     if (showPlayer && currentVideoUrl != null) {
@@ -1331,6 +1498,7 @@ fun MainScreen(
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
+                            onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
                             currentScreenIndex = committedPage,
                             playbackPositions = playbackPositions
                         )

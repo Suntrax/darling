@@ -622,6 +622,41 @@ class AnimeRepository(
             }
         } ?: emptyList()
     }
+    
+    suspend fun findAnimeByMalId(malId: Int): ExploreMedia? {
+        val query = """
+            query (${'$'}malId: Int) {
+                Page(page: 1, perPage: 1) {
+                    media(type: ANIME, idMal: ${'$'}malId) {
+                        id
+                        idMal
+                        title { romaji english native }
+                        coverImage { large medium }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        isAdult
+                        startDate { year }
+                        format
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("malId" to malId))?.let {
+            try {
+                val data = json.decodeFromString<ExploreResponse>(it)
+                data.data.Page.media.firstOrNull()
+            } catch (e: Exception) {
+                android.util.Log.e("ANILIST_DEBUG", "Error finding anime by MAL ID: ${e.message}")
+                null
+            }
+        }
+    }
 
     // ============================================
     // Detailed Anime

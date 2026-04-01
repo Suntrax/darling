@@ -290,8 +290,10 @@ class MainViewModel : ViewModel() {
         val existingIndex = currentFavorites.indexOfFirst { it.id == anime.id || it.malId == anime.malId }
         if (existingIndex >= 0) {
             currentFavorites.removeAt(existingIndex)
+            userPreferences.toggleLocalFavorite(anime.id)
         } else {
             currentFavorites.add(anime)
+            userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
         }
         _malFavorites.value = currentFavorites
         userPreferences.saveMalFavorites(currentFavorites.map { it.id })
@@ -461,6 +463,8 @@ class MainViewModel : ViewModel() {
     private var jikanService: JikanService? = null
     private var malUsername: String? = null
     
+    suspend fun getJikanAnimeCover(malId: Int): String? = jikanService?.getAnimeCover(malId)
+    
     private var lastFavoriteToggleTime = 0L
     private val favoriteToggleCooldownMs = 3000L // 3 second cooldown
     private val _isFavoriteRateLimited = MutableStateFlow(false)
@@ -615,7 +619,7 @@ class MainViewModel : ViewModel() {
         }
     }
     
-    private fun fetchJikanUserData() {
+    fun fetchJikanUserData() {
         android.util.Log.d("JIKAN_DEBUG", "fetchJikanUserData called")
         val username = malUsername
         android.util.Log.d("JIKAN_DEBUG", "malUsername: $username, jikanService: ${jikanService != null}")
@@ -1594,6 +1598,17 @@ class MainViewModel : ViewModel() {
 
     suspend fun fetchAnimeRelations(animeId: Int): List<AnimeRelation>? {
         return repository.fetchAnimeRelationsList(animeId)
+    }
+    
+    suspend fun fetchDetailedAnimeDataByMalId(malId: Int): DetailedAnimeData? {
+        android.util.Log.d("MAL_DEBUG", "fetchDetailedAnimeDataByMalId called for malId=$malId")
+        val media = repository.findAnimeByMalId(malId)
+        if (media == null) {
+            android.util.Log.e("MAL_DEBUG", "Could not find anime with MAL ID=$malId on AniList")
+            return null
+        }
+        android.util.Log.d("MAL_DEBUG", "Found anime on AniList: id=${media.id}, title=${media.title?.romaji ?: media.title?.english}")
+        return fetchDetailedAnimeData(media.id)
     }
 
     // Search & Activity
