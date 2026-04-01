@@ -79,17 +79,17 @@ class MainViewModel : ViewModel() {
     }
 
     // Sync queue for debounced AniList API calls
-    private data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null)
+    private data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null, val favoriteAdded: Boolean? = null)
     private val pendingSyncs = mutableMapOf<Int, PendingSync>() // mediaId -> pending sync
     private var syncJob: kotlinx.coroutines.Job? = null
 
-    private fun queueSync(mediaId: Int, type: String, malId: Int? = null, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null) {
+    private fun queueSync(mediaId: Int, type: String, malId: Int? = null, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null, favoriteAdded: Boolean? = null) {
         val existingSync = pendingSyncs[mediaId]
         val resolvedMalId = malId ?: existingSync?.malId ?: cacheManager.detailedAnimeCache.value[mediaId]?.malId
         
         android.util.Log.d("MAL_DEBUG", "queueSync called: mediaId=$mediaId, type=$type, malId=$malId, resolvedMalId=$resolvedMalId, status=$status")
         
-        pendingSyncs[mediaId] = PendingSync(type, mediaId, resolvedMalId, status ?: existingSync?.status, progress ?: existingSync?.progress, score ?: existingSync?.score, entryId ?: existingSync?.entryId)
+        pendingSyncs[mediaId] = PendingSync(type, mediaId, resolvedMalId, status ?: existingSync?.status, progress ?: existingSync?.progress, score ?: existingSync?.score, entryId ?: existingSync?.entryId, favoriteAdded ?: existingSync?.favoriteAdded)
         
         syncJob?.cancel()
         syncJob = viewModelScope.launch {
@@ -167,13 +167,15 @@ class MainViewModel : ViewModel() {
                     }
                 }
                 "favorite" -> {
-                    if (_loginProvider.value == LoginProvider.MAL) {
-                        toggleMalFavoriteById(sync.mediaId)
-                        hasFavoritesSync = true
-                    } else {
-                        repository.toggleAniListFavorite(sync.mediaId)
-                        hasFavoritesSync = true
+                    // Set the desired favorite state instead of toggling
+                    val shouldBeFavorited = sync.favoriteAdded == true
+                    val currentlyFavorited = _aniListFavorites.value.any { it.id == sync.mediaId }
+                    if (shouldBeFavorited && !currentlyFavorited) {
+                        repository.addAniListFavorite(sync.mediaId)
+                    } else if (!shouldBeFavorited && currentlyFavorited) {
+                        repository.removeAniListFavorite(sync.mediaId)
                     }
+                    hasFavoritesSync = true
                 }
             }
         }
@@ -1619,6 +1621,7 @@ class MainViewModel : ViewModel() {
         } else {
             // Toggle AniList favorite - local-first
             val isFavorite = _aniListFavorites.value.any { it.id == mediaId }
+            val willBeAdded = !isFavorite
             if (isFavorite) {
                 // Remove from favorites
                 _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
@@ -1635,12 +1638,25 @@ class MainViewModel : ViewModel() {
                         seasonYear = anime.year
                     )
                     _aniListFavorites.value = _aniListFavorites.value + userFavorite
+                } else {
+                    // Add a placeholder favorite - will be updated when API responds
+                    val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
+                    val placeholder = UserFavoriteAnime(
+                        id = mediaId,
+                        title = MediaTitle(romaji = cachedAnime?.title ?: "Loading...", english = cachedAnime?.titleEnglish),
+                        coverImage = MediaCoverImage(large = cachedAnime?.cover ?: "", medium = cachedAnime?.cover ?: ""),
+                        episodes = cachedAnime?.episodes,
+                        averageScore = cachedAnime?.averageScore,
+                        genres = cachedAnime?.genres ?: emptyList(),
+                        seasonYear = cachedAnime?.year
+                    )
+                    _aniListFavorites.value = _aniListFavorites.value + placeholder
                 }
             }
+            // Queue the API call for debounced sync with the desired state
+            queueSync(mediaId, "favorite", favoriteAdded = willBeAdded)
+            return true
         }
-        
-        // Queue the API call for debounced sync
-        queueSync(mediaId, "favorite")
         return true
     }
     fun updateAnimeRating(mediaId: Int, score: Int) {

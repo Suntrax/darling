@@ -2,11 +2,13 @@ package com.blissless.anime.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,9 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,28 +94,30 @@ fun SettingsScreen(
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            AsyncImage(
-                model = com.blissless.anime.R.mipmap.ic_launcher_round,
-                contentDescription = "App",
-                modifier = Modifier.size(32.dp).clip(CircleShape)
-            )
-            Text(
-                "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AsyncImage(
+                    model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                    contentDescription = "App",
+                    modifier = Modifier.size(32.dp).clip(CircleShape)
+                )
+                Text(
+                    "Settings",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
-        // Account Section
-        SettingsSection(
-            title = "Account",
-            icon = Icons.Default.Person,
-            isOled = isOled
-        ) {
+            // Account Section
+            SettingsSection(
+                title = "Account",
+                icon = Icons.Default.Person,
+                isOled = isOled,
+                scrollState = scrollState,
+                estimatedItemCount = 3
+            ) {
             if (loginProvider != LoginProvider.NONE) {
                 val userName by viewModel.userName.collectAsState()
                 val userAvatar by viewModel.userAvatar.collectAsState()
@@ -224,7 +232,9 @@ fun SettingsScreen(
         SettingsSection(
             title = "Appearance",
             icon = Icons.Default.Palette,
-            isOled = isOled
+            isOled = isOled,
+            scrollState = scrollState,
+            estimatedItemCount = 5
         ) {
             SettingsToggle(
                 title = "OLED Mode",
@@ -292,7 +302,9 @@ fun SettingsScreen(
         SettingsSection(
             title = "Content",
             icon = Icons.Default.FilterAlt,
-            isOled = isOled
+            isOled = isOled,
+            scrollState = scrollState,
+            estimatedItemCount = 1
         ) {
             SettingsToggle(
                 title = "Hide Adult Content",
@@ -309,7 +321,9 @@ fun SettingsScreen(
         SettingsSection(
             title = "General",
             icon = Icons.Default.Settings,
-            isOled = isOled
+            isOled = isOled,
+            scrollState = scrollState,
+            estimatedItemCount = 2
         ) {
             Text(
                 "Startup Screen",
@@ -358,7 +372,9 @@ fun SettingsScreen(
         SettingsSection(
             title = "Stream Settings",
             icon = Icons.Default.Subtitles,
-            isOled = isOled
+            isOled = isOled,
+            scrollState = scrollState,
+            estimatedItemCount = 5
         ) {
             """// Preferred Scraper Selection
             Text(
@@ -572,7 +588,9 @@ fun SettingsScreen(
         SettingsSection(
             title = "Player Settings",
             icon = Icons.Default.PlayArrow,
-            isOled = isOled
+            isOled = isOled,
+            scrollState = scrollState,
+            estimatedItemCount = 6
         ) {
             SettingsSlider(
                 title = "Episode Tracking",
@@ -708,7 +726,9 @@ fun SettingsScreen(
         SettingsSection(
             title = "Cache Management",
             icon = Icons.Default.Memory,
-            isOled = isOled
+            isOled = isOled,
+            scrollState = scrollState,
+            estimatedItemCount = 1
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -804,12 +824,37 @@ private fun SettingsSection(
     icon: ImageVector,
     isOled: Boolean,
     initiallyExpanded: Boolean = false,
+    scrollState: androidx.compose.foundation.ScrollState? = null,
+    estimatedItemCount: Int = 1,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var expanded by remember { mutableStateOf(initiallyExpanded) }
+    var shouldScroll by remember { mutableStateOf(false) }
+    var sectionTop by remember { mutableFloatStateOf(0f) }
+    
+    LaunchedEffect(shouldScroll) {
+        if (shouldScroll && scrollState != null) {
+            kotlinx.coroutines.delay(250)
+            val scrollTarget = sectionTop - 80f
+            if (scrollTarget > 0) {
+                scrollState.animateScrollTo(scrollTarget.toInt())
+            }
+            shouldScroll = false
+        }
+    }
+    
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "arrowRotation"
+    )
     
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                sectionTop = coordinates.positionInParent().y
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
         ),
@@ -824,6 +869,14 @@ private fun SettingsSection(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable {
+                        val wasExpanded = expanded
+                        expanded = !expanded
+                        if (!wasExpanded) {
+                            shouldScroll = true
+                        }
+                    }
                     .padding(8.dp)
             ) {
                 Icon(
@@ -841,34 +894,35 @@ private fun SettingsSection(
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier
+                        .size(20.dp)
+                        .graphicsLayer {
+                            rotationZ = arrowRotation
+                        }
                 )
             }
 
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ) + fadeIn(animationSpec = tween(150)),
-                exit = shrinkVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                ) + fadeOut(animationSpec = tween(150))
-            ) {
-                Column {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        color = if (isOled) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-                    content()
+            AnimatedContent(
+                targetState = expanded,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(200, delayMillis = 100)) togetherWith
+                    fadeOut(animationSpec = tween(150))
+                },
+                label = "settingsContent"
+            ) { isExpanded ->
+                if (isExpanded) {
+                    Column {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = if (isOled) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        )
+                        content()
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(1.dp))
                 }
             }
         }

@@ -65,7 +65,7 @@ fun SectionHeader(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(bottom = 8.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -75,10 +75,10 @@ fun SectionHeader(
             fontWeight = FontWeight.Bold,
             color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(6.dp))
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
+            color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
         ) {
             Text(
                 "$count",
@@ -198,9 +198,39 @@ fun HomeAnimeCard(
                 Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(70.dp)
                     .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)))))
 
-                // Status indicator bar at top
+                // Top Row: Episode Counter (left) + Status/Edit Button (right)
+                Row(
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // Episode Counter with background
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.7f)
+                    ) {
+                        Text(
+                            text = progressText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    // Status/Edit Button
+                    FilledTonalIconButton(
+                        onClick = onStatusClick,
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.6f), contentColor = Color.White)
+                    ) { Icon(imageVector = Icons.Outlined.Edit, contentDescription = "Edit Status", modifier = Modifier.size(18.dp)) }
+                }
+
+                // Status indicator bar at top (under the text/buttons)
                 if (showStatusColors) {
-                    Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(3.dp).background(statusColor))
+                    Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(3.dp).padding(top = 44.dp).background(statusColor))
                 }
 
                 // Progress bar at bottom (continue watching indicator)
@@ -211,13 +241,11 @@ fun HomeAnimeCard(
                             .fillMaxWidth()
                             .height(4.dp)
                     ) {
-                        // Background
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(Color.Black.copy(alpha = 0.3f))
                         )
-                        // Progress on top
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
@@ -227,36 +255,12 @@ fun HomeAnimeCard(
                     }
                 }
 
-                // TOP START: Episode Counter
-                Surface(
-                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color.Black.copy(alpha = 0.7f)
-                ) {
-                    Text(
-                        text = progressText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
-                }
-
-                // TOP END: Status/Edit Button
-                FilledTonalIconButton(
-                    onClick = onStatusClick,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(32.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.6f), contentColor = Color.White)
-                ) { Icon(imageVector = Icons.Outlined.Edit, contentDescription = "Edit Status", modifier = Modifier.size(18.dp)) }
-
                 // Bottom Row
                 Row(
                     modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 6.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // BOTTOM START: Info Button
+                    // Info Button
                     FilledTonalIconButton(
                         onClick = onInfoClick,
                         modifier = Modifier.size(32.dp),
@@ -269,13 +273,13 @@ fun HomeAnimeCard(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // BOTTOM END: Play Button
+                    // Play Button
                     FilledTonalIconButton(
                         onClick = {
                             if (listType == "CURRENT" || listType == "PAUSED") {
-                                onPlayClick() // Plays next episode
+                                onPlayClick()
                             } else {
-                                onClick() // Opens Episode Dialogue
+                                onClick()
                             }
                         },
                         modifier = Modifier.size(32.dp),

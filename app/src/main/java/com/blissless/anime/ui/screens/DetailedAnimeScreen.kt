@@ -317,7 +317,7 @@ fun DetailedAnimeScreen(
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-40).dp),
-                        verticalAlignment = Alignment.Bottom
+                        verticalAlignment = Alignment.Top
                     ) {
                         Box {
                             Surface(
@@ -337,17 +337,44 @@ fun DetailedAnimeScreen(
                             }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = displayData.title, style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
-                            )
-                            if (!displayData.titleEnglish.isNullOrEmpty() && displayData.titleEnglish != displayData.title) {
+                        Column(modifier = Modifier.weight(1f).offset(y = 30.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anime Title", displayData.title))
+                            }.padding(vertical = 4.dp)) {
                                 Text(
-                                    text = displayData.titleEnglish, style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = displayData.title, style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold, maxLines = 4, overflow = TextOverflow.Ellipsis,
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp).padding(start = 4.dp), tint = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (!displayData.titleEnglish.isNullOrEmpty() && displayData.titleEnglish != displayData.title) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anime Title", displayData.titleEnglish))
+                                }.padding(vertical = 4.dp)) {
+                                    Text(
+                                        text = displayData.titleEnglish!!, style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                            if (!displayData.titleNative.isNullOrEmpty()) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anime Title", displayData.titleNative))
+                                }.padding(vertical = 4.dp)) {
+                                    Text(
+                                        text = displayData.titleNative!!, style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(

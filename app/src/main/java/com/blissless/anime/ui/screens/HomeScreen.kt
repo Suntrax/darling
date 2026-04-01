@@ -9,11 +9,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.*
@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -83,6 +82,7 @@ fun HomeScreen(
     val offlineDropped by viewModel.offlineDropped.collectAsState()
 
     val localFavorites by viewModel.localFavorites.collectAsState()
+    val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
 
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
@@ -119,9 +119,11 @@ fun HomeScreen(
     var listVersion by remember { mutableIntStateOf(0) }
     
     // Update listVersion when lists change to trigger recomposition
-    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         listVersion++
     }
+
+    val homeScrollState = rememberScrollState()
 
     val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
 
@@ -146,7 +148,7 @@ fun HomeScreen(
             onRefresh = { isRefreshing = true; viewModel.refreshHome() },
             modifier = Modifier.fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize().background(if (isOled) Color.Black else MaterialTheme.colorScheme.background).padding(horizontal = 16.dp)) {
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 // Error/Offline Banner
                 if (apiError != null || isOffline) {
                     Surface(
@@ -191,7 +193,7 @@ fun HomeScreen(
                                 .offset(x = (-4).dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color.Transparent
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
                             ),
                             onClick = { if (isLoggedIn) showUserProfileDialog = true },
                             enabled = isLoggedIn
@@ -226,9 +228,16 @@ fun HomeScreen(
                         }
                         if (isLoggedIn) { 
                             Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(onClick = { showSearchOverlay = true }) { 
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground) 
-                            } 
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                                )
+                            ) {
+                                IconButton(onClick = { showSearchOverlay = true }) { 
+                                    Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground) 
+                                } 
+                            }
                         }
                     }
                 }
@@ -247,7 +256,7 @@ fun HomeScreen(
                                 .offset(x = (-4).dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color.Transparent
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
                             ),
                             onClick = { showOfflineFavoritesDialog = true }
                         ) {
@@ -269,20 +278,27 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        IconButton(onClick = { showSearchOverlay = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                            )
+                        ) {
+                            IconButton(onClick = { showSearchOverlay = true }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            }
                         }
                     }
+                }
 
-                    if (showWelcomeCard) {
-                        // Login Card - centered on screen
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
+                if (showWelcomeCard) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))) {
                             Box(modifier = Modifier.fillMaxWidth().background(Brush.horizontalGradient(colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)))).padding(24.dp)) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     AsyncImage(model = com.blissless.anime.R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
@@ -305,16 +321,40 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        }
                     }
                 }
 
                 if (isLoading && allListsEmpty) {
                     LoadingSkeleton(isOled)
                 } else {
-                    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                        // Anime Lists - Passing isLoggedIn
-                        if (effectiveCurrentlyWatching.isNotEmpty()) { item(key = "header_current") {
+                    val onAnimeClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showEpisodeSheet = true }
+                    val onPlayClick: (AnimeMedia, String) -> Unit = { anime, listType ->
+                        if (listType == "CURRENT") {
+                            val nextEp = anime.progress + 1
+                            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                            if (anime.latestEpisode != null && nextEp > released) {
+                                Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onPlayEpisode(anime, nextEp)
+                            }
+                        } else {
+                            onPlayEpisode(anime, 1)
+                        }
+                    }
+                    val onStatusClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showStatusDialog = true }
+                    val onInfoClick: (AnimeMedia) -> Unit = { anime ->
+                        selectedAnime = anime
+                        if (firstAnime == null) firstAnime = anime
+                        showDetailedAnimeScreen = true
+                    }
+                    
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(homeScrollState),
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        if (effectiveCurrentlyWatching.isNotEmpty()) {
                             SectionHeader(
                                 title = "Currently Watching",
                                 icon = Icons.Default.PlayArrow,
@@ -322,8 +362,6 @@ fun HomeScreen(
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("CURRENT")
                             )
-                        } }
-                        if (effectiveCurrentlyWatching.isNotEmpty()) { item(key = "list_current") {
                             HomeAnimeHorizontalList(
                                 animeList = effectiveCurrentlyWatching,
                                 listType = "CURRENT",
@@ -332,35 +370,13 @@ fun HomeScreen(
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime; showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    // Logic to check if episode has aired
-                                    val nextEp = anime.progress + 1
-                                    val released =
-                                        anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
-                                    if (anime.latestEpisode != null && nextEp > released) {
-                                        Toast.makeText(
-                                            context,
-                                            "Episode not aired yet",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        onPlayEpisode(anime, nextEp)
-                                    }
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime; showStatusDialog = true
-                                },
-                                onInfoClick = { anime ->
-                                    selectedAnime = anime
-                                    if (firstAnime == null) firstAnime = anime
-                                    showDetailedAnimeScreen = true
-                                })
-                        } }
+                                onAnimeClick = onAnimeClick,
+                                onPlayClick = { anime -> onPlayClick(anime, "CURRENT") },
+                                onStatusClick = onStatusClick,
+                                onInfoClick = onInfoClick)
+                        }
 
-                        if (effectivePlanningToWatch.isNotEmpty()) { item(key = "header_planning") {
+                        if (effectivePlanningToWatch.isNotEmpty()) {
                             SectionHeader(
                                 title = "Planning to Watch",
                                 icon = Icons.Default.Bookmark,
@@ -368,8 +384,6 @@ fun HomeScreen(
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("PLANNING")
                             )
-                        } }
-                        if (effectivePlanningToWatch.isNotEmpty()) { item(key = "list_planning") {
                             HomeAnimeHorizontalList(
                                 animeList = effectivePlanningToWatch,
                                 listType = "PLANNING",
@@ -378,21 +392,13 @@ fun HomeScreen(
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime; showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime -> onPlayEpisode(anime, 1) },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime; showStatusDialog = true
-                                },
-                                onInfoClick = { anime ->
-                                    selectedAnime = anime
-                                    if (firstAnime == null) firstAnime = anime
-                                    showDetailedAnimeScreen = true
-                                })
-                        } }
+                                onAnimeClick = onAnimeClick,
+                                onPlayClick = { anime -> onPlayClick(anime, "PLANNING") },
+                                onStatusClick = onStatusClick,
+                                onInfoClick = onInfoClick)
+                        }
 
-                        if (effectiveCompleted.isNotEmpty()) { item(key = "header_completed") {
+                        if (effectiveCompleted.isNotEmpty()) {
                             SectionHeader(
                                 title = "Completed",
                                 icon = Icons.Default.Check,
@@ -400,8 +406,6 @@ fun HomeScreen(
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("COMPLETED")
                             )
-                        } }
-                        if (effectiveCompleted.isNotEmpty()) { item(key = "list_completed") {
                             HomeAnimeHorizontalList(
                                 animeList = effectiveCompleted,
                                 listType = "COMPLETED",
@@ -410,21 +414,13 @@ fun HomeScreen(
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime; showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime -> onPlayEpisode(anime, 1) },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime; showStatusDialog = true
-                                },
-                                onInfoClick = { anime ->
-                                    selectedAnime = anime
-                                    if (firstAnime == null) firstAnime = anime
-                                    showDetailedAnimeScreen = true
-                                })
-                        } }
+                                onAnimeClick = onAnimeClick,
+                                onPlayClick = { anime -> onPlayClick(anime, "COMPLETED") },
+                                onStatusClick = onStatusClick,
+                                onInfoClick = onInfoClick)
+                        }
 
-                        if (effectiveOnHold.isNotEmpty()) { item(key = "header_onhold") {
+                        if (effectiveOnHold.isNotEmpty()) {
                             SectionHeader(
                                 title = "On Hold",
                                 icon = Icons.Default.Pause,
@@ -432,8 +428,6 @@ fun HomeScreen(
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("PAUSED")
                             )
-                        } }
-                        if (effectiveOnHold.isNotEmpty()) { item(key = "list_onhold") {
                             HomeAnimeHorizontalList(
                                 animeList = effectiveOnHold,
                                 listType = "PAUSED",
@@ -442,34 +436,13 @@ fun HomeScreen(
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime; showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime ->
-                                    // Logic to check if episode has aired
-                                    val nextEp = anime.progress + 1
-                                    val released =
-                                        anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
-                                    if (anime.latestEpisode != null && nextEp > released) {
-                                        Toast.makeText(
-                                            context,
-                                            "Episode not aired yet",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        onPlayEpisode(anime, nextEp)
-                                    }
-                                },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime; showStatusDialog = true
-                                },
-                                onInfoClick = { anime ->
-                                    selectedAnime = anime
-                                    showDetailedAnimeScreen = true
-                                })
-                        } }
+                                onAnimeClick = onAnimeClick,
+                                onPlayClick = { anime -> onPlayClick(anime, "PAUSED") },
+                                onStatusClick = onStatusClick,
+                                onInfoClick = onInfoClick)
+                        }
 
-                        if (effectiveDropped.isNotEmpty()) { item(key = "header_dropped") {
+                        if (effectiveDropped.isNotEmpty()) {
                             SectionHeader(
                                 title = "Dropped",
                                 icon = Icons.Default.Delete,
@@ -477,8 +450,6 @@ fun HomeScreen(
                                 isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("DROPPED")
                             )
-                        } }
-                        if (effectiveDropped.isNotEmpty()) { item(key = "list_dropped") {
                             HomeAnimeHorizontalList(
                                 animeList = effectiveDropped,
                                 listType = "DROPPED",
@@ -487,33 +458,23 @@ fun HomeScreen(
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
-                                onAnimeClick = { anime ->
-                                    selectedAnime = anime; showEpisodeSheet = true
-                                },
-                                onPlayClick = { anime -> onPlayEpisode(anime, 1) },
-                                onStatusClick = { anime ->
-                                    selectedAnime = anime; showStatusDialog = true
-                                },
-                                onInfoClick = { anime ->
-                                    selectedAnime = anime
-                                    if (firstAnime == null) firstAnime = anime
-                                    showDetailedAnimeScreen = true
-                                })
-                        } }
+                                onAnimeClick = onAnimeClick,
+                                onPlayClick = { anime -> onPlayClick(anime, "DROPPED") },
+                                onStatusClick = onStatusClick,
+                                onInfoClick = onInfoClick)
+                        }
 
                         if (allListsEmpty && !showWelcomeCard) {
-                            item(key = "empty_state") {
-                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                    Card(colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant)) {
-                                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("Your lists are empty", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
-                                            Text("Check out the Explore tab to discover anime!", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                Card(colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))) {
+                                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Your lists are empty", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+                                        Text("Check out the Explore tab to discover anime!", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
                         }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
@@ -556,6 +517,7 @@ fun HomeScreen(
                 completed = completed,
                 onHold = onHold,
                 dropped = dropped,
+                localAnimeStatus = viewModel.localAnimeStatus.value,
                 favoriteIds = favoriteIds,
                 onToggleFavorite = onToggleFavorite,
                 onClose = { showSearchOverlay = false },

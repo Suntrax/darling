@@ -94,7 +94,7 @@ fun FeaturedCarousel(
     LaunchedEffect(autoScrollEnabled, isVisible, isHeaderSwiping, timerResetSignal) {
         if (autoScrollEnabled && isVisible && !isHeaderSwiping) {
             while (true) {
-                delay(5000)
+                delay(4500)
                 if (isHeaderSwiping) continue
 
                 headerVisible = false

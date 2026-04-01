@@ -166,14 +166,15 @@ fun ScheduleScreen(
         map
     }
     
-    val favoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     
     // Force recomposition when lists change by tracking a version counter
     var listVersion by remember { mutableIntStateOf(0) }
     
+    val favoriteIds = remember(listVersion, aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
+    
     // Update listVersion when lists change to trigger recomposition
-    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped, aniListFavorites) {
         listVersion++
     }
     
@@ -834,7 +835,8 @@ fun ScheduleScreen(
                                 averageScore = anime.averageScore,
                                 genres = anime.genres,
                                 year = anime.year,
-                                format = null
+                                format = null,
+                                malId = anime.malId
                             )
                             firstOpenedAnime = exploreAnime
                             selectedAnime = exploreAnime
@@ -852,13 +854,16 @@ fun ScheduleScreen(
         val currentStatus by remember(listVersion, selectedAnime!!.id) {
             derivedStateOf { animeStatusMap[selectedAnime!!.id] }
         }
+        val isFavorite by remember(listVersion, favoriteIds, selectedAnime!!.id) {
+            derivedStateOf { favoriteIds.contains(selectedAnime!!.id) }
+        }
         
         DetailedAnimeScreen(
             anime = selectedAnime!!.toDetailedAnimeData(),
             viewModel = viewModel,
             isOled = isOled,
             currentStatus = currentStatus,
-            isFavorite = favoriteIds.contains(selectedAnime!!.id),
+            isFavorite = isFavorite,
             isLoggedIn = isLoggedIn,
             onToggleFavorite = { _ -> viewModel.toggleAniListFavorite(selectedAnime!!.id) },
             onDismiss = {

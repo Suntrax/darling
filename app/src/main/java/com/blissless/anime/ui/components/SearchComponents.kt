@@ -66,6 +66,7 @@ fun SearchOverlay(
     completed: List<AnimeMedia>,
     onHold: List<AnimeMedia>,
     dropped: List<AnimeMedia>,
+    localAnimeStatus: Map<Int, com.blissless.anime.data.models.LocalAnimeEntry>,
     favoriteIds: Set<Int>,
     onToggleFavorite: (AnimeMedia) -> Unit,
     onClose: () -> Unit,
@@ -100,13 +101,18 @@ fun SearchOverlay(
     }
 
     // Get saved anime IDs and their statuses from all lists
-    val savedAnimeMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+    val savedAnimeMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
         planningToWatch.forEach { map[it.id] = "PLANNING" }
         completed.forEach { map[it.id] = "COMPLETED" }
         onHold.forEach { map[it.id] = "PAUSED" }
         dropped.forEach { map[it.id] = "DROPPED" }
+        localAnimeStatus.forEach { (id, entry) ->
+            if (!map.containsKey(id)) {
+                map[id] = entry.status
+            }
+        }
         map
     }
     
@@ -114,7 +120,7 @@ fun SearchOverlay(
     var listVersion by remember { mutableIntStateOf(0) }
     
     // Update listVersion when lists change to trigger recomposition
-    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+    LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         listVersion++
     }
 
@@ -292,9 +298,11 @@ fun SearchOverlay(
 
     // Detail Dialog
     if (showDetailDialog && selectedAnime != null) {
-        val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
         val currentStatus by remember(listVersion, selectedAnime!!.id) {
             derivedStateOf { savedAnimeMap[selectedAnime!!.id] }
+        }
+        val isAnimeFavorite by remember(listVersion, favoriteIds, selectedAnime!!.id) {
+            derivedStateOf { favoriteIds.contains(selectedAnime!!.id) }
         }
         
         DetailedAnimeScreen(

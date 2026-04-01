@@ -1512,4 +1512,58 @@ class AnimeRepository(
         val response = graphqlMutation(mutation, mapOf("mediaId" to mediaId))
         return response != null && response.isNotEmpty()
     }
+    
+    suspend fun addAniListFavorite(mediaId: Int): Boolean {
+        val mutation = """
+            mutation (${'$'}mediaId: Int) {
+                ToggleFavourite(animeId: ${'$'}mediaId) {
+                    anime { nodes { id } }
+                }
+            }
+        """.trimIndent()
+        
+        // Check if already favorited first
+        val checkQuery = """
+            query (${'$'}mediaId: Int) {
+                Media(id: ${'$'}mediaId) {
+                    id
+                    isFavourite
+                }
+            }
+        """.trimIndent()
+        
+        val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
+        if (result?.contains("\"isFavourite\":true") == true || result?.contains("\"isFavourite\": true") == true) {
+            return true // Already favorited
+        }
+        
+        return graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+    }
+    
+    suspend fun removeAniListFavorite(mediaId: Int): Boolean {
+        val mutation = """
+            mutation (${'$'}mediaId: Int) {
+                ToggleFavourite(animeId: ${'$'}mediaId) {
+                    anime { nodes { id } }
+                }
+            }
+        """.trimIndent()
+        
+        // Check if not favorited first
+        val checkQuery = """
+            query (${'$'}mediaId: Int) {
+                Media(id: ${'$'}mediaId) {
+                    id
+                    isFavourite
+                }
+            }
+        """.trimIndent()
+        
+        val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
+        if (result?.contains("\"isFavourite\":false") == true || result?.contains("\"isFavourite\": false") == true) {
+            return true // Already not favorited
+        }
+        
+        return graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+    }
 }

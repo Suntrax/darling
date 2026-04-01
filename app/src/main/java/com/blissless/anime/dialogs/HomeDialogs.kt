@@ -327,7 +327,17 @@ fun HomeAnimeStatusDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = selectedProgress,
-                    onValueChange = { selectedProgress = it.filter { c -> c.isDigit() } },
+                    onValueChange = { newValue ->
+                        val filtered = newValue.filter { c -> c.isDigit() }
+                        val maxEp = when {
+                            anime.totalEpisodes > 0 -> anime.totalEpisodes
+                            anime.latestEpisode != null && anime.latestEpisode > 1 -> anime.latestEpisode - 1
+                            anime.latestEpisode == 1 -> 0
+                            else -> 0
+                        }
+                        val clamped = filtered.toIntOrNull()?.coerceIn(0, maxEp)?.toString() ?: filtered
+                        selectedProgress = clamped
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.White.copy(alpha = 0.3f), cursorColor = MaterialTheme.colorScheme.primary),
