@@ -60,6 +60,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+private fun easeOutCubic(t: Float): Float {
+    val t1 = t - 1
+    return t1 * t1 * t1 + 1
+}
+
 @Composable
 fun SearchOverlay(
     viewModel: MainViewModel,
@@ -276,6 +281,15 @@ fun SearchOverlay(
             } else {
                 val listState = rememberLazyListState()
                 
+                val cinematicProgress by animateFloatAsState(
+                    targetValue = if (resultsVisible) 1f else 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "cinematicProgress"
+                )
+                
                 LazyColumn(
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -313,17 +327,30 @@ fun SearchOverlay(
                             label = "centerOffset"
                         )
                         
+                        val staggerDelay = minOf(index, 15) * 40f
+                        val staggerMs = staggerDelay / 1000f
+                        val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                        val easedProgress = easeOutCubic(rawProgress.coerceAtMost(1f))
+                        
+                        val introScale = 0.3f + easedProgress * 0.7f
+                        val introAlpha = easedProgress
+                        val introTranslationY = -40f * (1f - easedProgress)
+                        
                         val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
                         val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
                         val scrollParallax = animatedOffset * 25f
                         
+                        val finalScale = scrollScale * introScale
+                        val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                        val finalTranslationY = scrollParallax + introTranslationY
+                        
                         Box(
                             modifier = Modifier
                                 .graphicsLayer {
-                                    scaleX = scrollScale
-                                    scaleY = scrollScale
-                                    alpha = scrollAlpha
-                                    translationY = scrollParallax
+                                    scaleX = finalScale
+                                    scaleY = finalScale
+                                    alpha = finalAlpha
+                                    translationY = finalTranslationY
                                 }
                         ) {
                             SearchResultItem(
@@ -477,7 +504,7 @@ private fun SearchResultItem(
         )
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
@@ -485,8 +512,8 @@ private fun SearchResultItem(
                 contentDescription = anime.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .width(50.dp)
-                    .height(70.dp)
+                    .width(70.dp)
+                    .height(95.dp)
                     .clip(RoundedCornerShape(8.dp))
             )
 

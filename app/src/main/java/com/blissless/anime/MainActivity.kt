@@ -469,6 +469,7 @@ fun MainScreen(
     var requestedCategory by remember { mutableStateOf("sub") }
     var actualCategory by remember { mutableStateOf("sub") }
     var isManualServerChange by remember { mutableStateOf(false) }
+    var isChangingEpisode by remember { mutableStateOf(false) }
 
     // Quality state
     var currentQualityOptions by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
@@ -575,8 +576,17 @@ fun MainScreen(
             animekaiOutroEnd = cachedStream.outroEnd
 
             val epInfoKey = "${anime.id}_$episode"
-            prefetchedEpisodeInfo[epInfoKey]?.let { currentEpisodeInfo = it }
+            val prefetchedEpInfo = prefetchedEpisodeInfo[epInfoKey]
+            currentEpisodeInfo = prefetchedEpInfo
             currentServerIndex = 0
+
+            // If episode info wasn't prefetched, fetch it now for server list
+            if (prefetchedEpInfo == null) {
+                scope.launch {
+                    val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                    currentEpisodeInfo = viewModel.getEpisodeInfo(getScrapingName(anime), episode, anime.id, latestAired)
+                }
+            }
 
             showPlayer = true
 
@@ -675,7 +685,10 @@ fun MainScreen(
     }
 
     val onPreviousEpisode: () -> Unit = {
-        currentAnime?.let { anime ->
+        if (!isChangingEpisode && currentAnime != null) {
+            isChangingEpisode = true
+            
+            val anime = currentAnime!!
             if (currentEpisode > 1) {
                 val prevEp = currentEpisode - 1
 
@@ -712,12 +725,23 @@ fun MainScreen(
                     animekaiOutroStart = cachedStream.outroStart
                     animekaiOutroEnd = cachedStream.outroEnd
 
+                    val epInfoKey = "${anime.id}_$prevEp"
+                    val prefetchedEpInfo = prefetchedEpisodeInfo[epInfoKey]
+                    currentEpisodeInfo = prefetchedEpInfo
+
+                    // If episode info wasn't prefetched, fetch it now for server list
+                    if (prefetchedEpInfo == null) {
+                        scope.launch {
+                            val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                            currentEpisodeInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        }
+                    }
+
                     scope.launch {
                         val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
-                        currentEpisodeInfo = epInfo
                         viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
                         currentEpisodeTitle = getTmdbEpisodeTitle(anime, prevEp)
+                        isChangingEpisode = false
                     }
 
                     if (isFallbackStream) {
@@ -728,61 +752,67 @@ fun MainScreen(
                         }
                         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     }
-                    return@let
-                }
+                } else {
+                    isLoadingStream = true
+                    scope.launch {
+                        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        currentEpisodeInfo = epInfo
 
-                isLoadingStream = true
-                scope.launch {
-                    val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                    val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
-                    currentEpisodeInfo = epInfo
+                        val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        if (result.stream != null) {
+                            savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
+                            currentVideoUrl = result.stream.url
+                            currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                            currentSubtitleUrl = result.stream.subtitleUrl
+                            currentEpisode = prevEp
+                            currentServerName = result.stream.serverName
+                            currentCategory = result.actualCategory
+                            currentServerIndex = 0
 
-                    val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), prevEp, anime.id, latestAired)
-                    if (result.stream != null) {
-                        savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
-                        currentVideoUrl = result.stream.url
-                        currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
-                        currentSubtitleUrl = result.stream.subtitleUrl
-                        currentEpisode = prevEp
-                        currentServerName = result.stream.serverName
-                        currentCategory = result.actualCategory
-                        currentServerIndex = 0
+                            isFallbackStream = result.isFallback
+                            requestedCategory = result.requestedCategory
+                            actualCategory = result.actualCategory
 
-                        isFallbackStream = result.isFallback
-                        requestedCategory = result.requestedCategory
-                        actualCategory = result.actualCategory
+                            currentQualityOptions = result.stream.qualities
+                            currentQuality = "Auto"
 
-                        currentQualityOptions = result.stream.qualities
-                        currentQuality = "Auto"
+                            // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
+                            animekaiIntroStart = result.stream.introStart
+                            animekaiIntroEnd = result.stream.introEnd
+                            animekaiOutroStart = result.stream.outroStart
+                            animekaiOutroEnd = result.stream.outroEnd
 
-                        // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
-                        animekaiIntroStart = result.stream.introStart
-                        animekaiIntroEnd = result.stream.introEnd
-                        animekaiOutroStart = result.stream.outroStart
-                        animekaiOutroEnd = result.stream.outroEnd
+                            viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
+                            currentEpisodeTitle = getTmdbEpisodeTitle(anime, prevEp)
+                            isChangingEpisode = false
 
-                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
-                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, prevEp)
-
-                        if (result.isFallback) {
-                            val message = if (result.requestedCategory == "dub") {
-                                "Dub not available, playing sub"
-                            } else {
-                                "Sub not available, playing dub"
+                            if (result.isFallback) {
+                                val message = if (result.requestedCategory == "dub") {
+                                    "Dub not available, playing sub"
+                                } else {
+                                    "Sub not available, playing dub"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                             }
-                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        } else {
+                            streamError = "Could not find stream for episode $prevEp"
+                            isChangingEpisode = false
                         }
-                    } else {
-                        streamError = "Could not find stream for episode $prevEp"
+                        isLoadingStream = false
                     }
-                    isLoadingStream = false
                 }
+            } else {
+                isChangingEpisode = false
             }
         }
     }
 
     val onNextEpisode: () -> Unit = {
-        currentAnime?.let { anime ->
+        if (!isChangingEpisode && currentAnime != null) {
+            isChangingEpisode = true
+            
+            val anime = currentAnime!!
             if (totalEpisodes == 0 || currentEpisode < totalEpisodes) {
                 val nextEp = currentEpisode + 1
 
@@ -825,6 +855,7 @@ fun MainScreen(
                         currentEpisodeInfo = epInfo
                         viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
                         currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
+                        isChangingEpisode = false
                     }
 
                     if (isFallbackStream) {
@@ -835,54 +866,54 @@ fun MainScreen(
                         }
                         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     }
-                    return@let
-                }
+                } else {
+                    isLoadingStream = true
+                    scope.launch {
+                        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
+                        currentEpisodeInfo = epInfo
 
-                isLoadingStream = true
-                scope.launch {
-                    val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                    val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
-                    currentEpisodeInfo = epInfo
+                        val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), nextEp, anime.id, latestAired)
+                        if (result.stream != null) {
+                            savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
+                            currentVideoUrl = result.stream.url
+                            currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                            currentSubtitleUrl = result.stream.subtitleUrl
+                            currentEpisode = nextEp
+                            currentServerName = result.stream.serverName
+                            currentCategory = result.actualCategory
+                            currentServerIndex = 0
 
-                    val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), nextEp, anime.id, latestAired)
-                    if (result.stream != null) {
-                        savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
-                        currentVideoUrl = result.stream.url
-                        currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
-                        currentSubtitleUrl = result.stream.subtitleUrl
-                        currentEpisode = nextEp
-                        currentServerName = result.stream.serverName
-                        currentCategory = result.actualCategory
-                        currentServerIndex = 0
+                            isFallbackStream = result.isFallback
+                            requestedCategory = result.requestedCategory
+                            actualCategory = result.actualCategory
 
-                        isFallbackStream = result.isFallback
-                        requestedCategory = result.requestedCategory
-                        actualCategory = result.actualCategory
+                            currentQualityOptions = result.stream.qualities
+                            currentQuality = "Auto"
 
-                        currentQualityOptions = result.stream.qualities
-                        currentQuality = "Auto"
+                            animekaiIntroStart = result.stream.introStart
+                            animekaiIntroEnd = result.stream.introEnd
+                            animekaiOutroStart = result.stream.outroStart
+                            animekaiOutroEnd = result.stream.outroEnd
 
-                        // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
-                        animekaiIntroStart = result.stream.introStart
-                        animekaiIntroEnd = result.stream.introEnd
-                        animekaiOutroStart = result.stream.outroStart
-                        animekaiOutroEnd = result.stream.outroEnd
+                            viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
+                            currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
+                            isChangingEpisode = false
 
-                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
-                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
-
-                        if (result.isFallback) {
-                            val message = if (result.requestedCategory == "dub") {
-                                "Dub not available, playing sub"
-                            } else {
-                                "Sub not available, playing dub"
+                            if (result.isFallback) {
+                                val message = if (result.requestedCategory == "dub") {
+                                    "Dub not available, playing sub"
+                                } else {
+                                    "Sub not available, playing dub"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                             }
-                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        } else {
+                            streamError = "Could not find stream for episode $nextEp"
+                            isChangingEpisode = false
                         }
-                    } else {
-                        streamError = "Could not find stream for episode $nextEp"
+                        isLoadingStream = false
                     }
-                    isLoadingStream = false
                 }
             }
         }

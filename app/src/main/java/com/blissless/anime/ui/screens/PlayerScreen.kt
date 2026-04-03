@@ -140,6 +140,7 @@ fun PlayerScreen(
     var isChangingServer by remember { mutableStateOf(false) }
     var serverChangeTrigger by remember { mutableIntStateOf(0) }
     var hasPlaybackStarted by remember { mutableStateOf(false) }
+    var isManuallySeeking by remember { mutableStateOf(false) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
@@ -321,6 +322,9 @@ fun PlayerScreen(
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        // Ignore errors during server change - new player will handle playback
+                        if (isChangingServer) return
+                        
                         // Check if offline - if so, keep buffering state instead of showing error
                         if (!isNetworkAvailable()) {
                             isOffline = true
@@ -350,7 +354,7 @@ fun PlayerScreen(
                             }
                         }
                         if (playbackState == Player.STATE_ENDED) {
-                            if (autoPlayNextEpisode && onNextEpisode != null) {
+                            if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
                                 if (isLatestEpisode) {
                                     Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
                                 } else {
@@ -446,6 +450,7 @@ fun PlayerScreen(
     }
 
     fun seekBy(milliseconds: Long, isForward: Boolean) {
+        isManuallySeeking = true
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
         // Immediately update slider position for instant feedback
@@ -457,8 +462,9 @@ fun PlayerScreen(
         skipIsForward = isForward
         showSkipIndicator = true
         scope.launch {
-            delay(500)
+            delay(1000)
             showSkipIndicator = false
+            isManuallySeeking = false
         }
     }
 
@@ -534,8 +540,8 @@ fun PlayerScreen(
         hasFetchedTimestamps = true
     }
 
-    LaunchedEffect(currentPosition, effectiveTimestamps, hasError) {
-        if (hasError) return@LaunchedEffect
+    LaunchedEffect(currentPosition, effectiveTimestamps, hasError, isManuallySeeking, isChangingServer) {
+        if (hasError || isChangingServer) return@LaunchedEffect
 
         val ts = effectiveTimestamps
         val posSeconds = currentPosition / 1000
@@ -543,7 +549,7 @@ fun PlayerScreen(
         if (ts.introStart != null && ts.introEnd != null) {
             val isInIntro = posSeconds >= ts.introStart && posSeconds < ts.introEnd
             if (isInIntro) {
-                if (autoSkipOpening && !hasSkippedIntro) {
+                if (autoSkipOpening && !hasSkippedIntro && !isManuallySeeking) {
                     exoPlayer.seekTo(ts.introEnd * 1000L)
                     exoPlayer.play()
                     hasSkippedIntro = true
@@ -557,7 +563,7 @@ fun PlayerScreen(
         if (ts.creditsStart != null && onNextEpisode != null) {
             val isInCredits = posSeconds >= ts.creditsStart
             if (isInCredits) {
-                if (autoSkipEnding && !hasSkippedOutro) {
+                if (autoSkipEnding && !hasSkippedOutro && !isManuallySeeking) {
                     if (isLatestEpisode) {
                         Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
                     } else {
@@ -592,7 +598,11 @@ fun PlayerScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
+        onDispose {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+            exoPlayer.release()
+        }
     }
 
     fun formatTime(ms: Long): String {
@@ -625,12 +635,15 @@ fun PlayerScreen(
     } else false
 
     fun handleServerChange(serverName: String, category: String) {
-        hasError = false
-        playbackError = null
         isChangingServer = true
         hasPlaybackStarted = false
-        // Trigger player recreation by incrementing counter
-        serverChangeTrigger++
+        hasError = false
+        playbackError = null
+        // Small delay before triggering server change to ensure error popup disappears
+        scope.launch {
+            delay(50)
+            serverChangeTrigger++
+        }
         onSavePosition?.invoke(exoPlayer.currentPosition)
         onPositionSaved?.invoke(exoPlayer.currentPosition)
         onServerChange?.invoke(serverName, category)
@@ -815,7 +828,7 @@ fun PlayerScreen(
                         if (exoPlayer.duration > 0) {
                             exoPlayer.seekTo(exoPlayer.duration)
                         }
-                    } else {
+                    } else if (!isChangingServer) {
                         onNextEpisode?.invoke()
                     }
                 }

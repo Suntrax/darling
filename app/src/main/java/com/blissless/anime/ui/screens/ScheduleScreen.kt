@@ -990,6 +990,15 @@ private fun TimelineScheduleList(
                 }
             }
         ) { index, item ->
+            val staggerDelay = minOf(index, 20) * 30f
+            val staggerMs = staggerDelay / 1000f
+            val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+            val easedProgress = easeOutCubic(rawProgress.coerceAtMost(1f))
+            
+            val introScale = 0.3f + easedProgress * 0.7f
+            val introAlpha = easedProgress
+            val introTranslationY = translationYOffset * (1f - easedProgress)
+            
             val layoutInfo = listState.layoutInfo
             val visibleItems = layoutInfo.visibleItemsInfo
             val itemInfo = visibleItems.find { it.index == index }
@@ -1003,28 +1012,13 @@ private fun TimelineScheduleList(
             }
             
             val animatedOffset by animateFloatAsState(
-                targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
-                animationSpec = if (isScrolling) {
-                    spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                } else {
-                    spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                },
+                targetValue = centerOffset.coerceIn(-2f, 2f),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                ),
                 label = "centerOffset"
             )
-            
-            val staggerDelay = index * 30f
-            val effectiveProgress = ((cinematicProgress * 1000f - staggerDelay) / 1000f).coerceIn(0f, 1f)
-            val easedProgress = easeOutCubic(effectiveProgress)
-            
-            val introScale = 0.3f + easedProgress * 0.7f
-            val introAlpha = easedProgress
-            val introTranslationY = translationYOffset * (1f - easedProgress)
             
             val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
             val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
@@ -1211,13 +1205,13 @@ private fun TimelineAnimeItem(
                     contentDescription = anime.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .width(50.dp)
-                        .height(70.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .width(70.dp)
+                        .height(95.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .alpha(contentAlpha)
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
