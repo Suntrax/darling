@@ -28,7 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,12 +44,14 @@ import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.components.StatusColors
 import com.blissless.anime.ui.components.StatusLabels
+import com.blissless.anime.ui.components.rememberCinematicAnimation
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.data.models.DetailedAnimeData
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.absoluteValue
 
 val DayNames = listOf(
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
@@ -82,7 +86,7 @@ fun ScheduleScreen(
     disableMaterialColors: Boolean = false,
     hideAdultContent: Boolean = false,
     isLoggedIn: Boolean = false,
-    onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
+    onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
     onClearAnimeStack: () -> Unit = {},
     onAnimeDialogOpen: (Boolean) -> Unit = {}
@@ -93,6 +97,13 @@ fun ScheduleScreen(
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
+
+    // Auto-fetch when airing list is empty and not loading
+    LaunchedEffect(airingList, isLoading) {
+        if (airingList.isEmpty() && !isLoading) {
+            viewModel.fetchAiringSchedule()
+        }
+    }
 
     // Filter adult content if setting is enabled
     val filteredAiringList = remember(airingList, hideAdultContent) {
@@ -129,9 +140,6 @@ fun ScheduleScreen(
 
     // Lock input during programmatic scroll to prevent spam
     var isInputLocked by remember { mutableStateOf(false) }
-
-    // Track if user has manually interacted with day selectors
-    var hasUserInteracted by remember { mutableStateOf(false) }
 
     // For By Day mode, track selected day
     var selectedDay by remember { mutableIntStateOf(currentDayOfWeek) }
@@ -437,14 +445,18 @@ fun ScheduleScreen(
         }
     }
 
-    // Automatically scroll to NOW indicator only on first visit (unless preventing auto sync)
-    LaunchedEffect(isVisible, nowIndicatorIndexAll, nowIndicatorIndexByDay, preventAutoSync) {
-        if (isVisible && !hasUserInteracted && !preventAutoSync) {
+    // Automatically scroll to current day when auto sync is enabled
+    LaunchedEffect(isVisible, preventAutoSync) {
+        if (isVisible && !preventAutoSync) {
+            val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
+            currentDayOfWeek = today
+            visibleDayByScroll = today
+            selectedDay = today
+            lastKnownDay = today
+            // Scroll to current day in the list
             val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
             val listState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
             if (targetIndex >= 0) {
-                isProgrammaticScroll = true
-                isInputLocked = true
                 listState.scrollToItem(targetIndex, scrollOffset = -100)
             }
         }
@@ -580,12 +592,9 @@ fun ScheduleScreen(
             FilterChip(
                 selected = viewMode == 0,
                 onClick = {
-                    hasUserInteracted = true
                     viewMode = 0
                     // Scroll to NOW indicator when switching to All Upcoming mode
                     if (nowIndicatorIndexAll >= 0) {
-                        isProgrammaticScroll = true
-                        isInputLocked = true
                         scope.launch {
                             listStateAllUpcoming.scrollToItem(nowIndicatorIndexAll, scrollOffset = -100)
                         }
@@ -606,13 +615,10 @@ fun ScheduleScreen(
             FilterChip(
                 selected = viewMode == 1,
                 onClick = {
-                    hasUserInteracted = true
                     viewMode = 1
                     selectedDay = currentDayOfWeek
                     // Scroll to NOW indicator when switching to By Day mode
                     if (nowIndicatorIndexByDay >= 0) {
-                        isProgrammaticScroll = true
-                        isInputLocked = true
                         scope.launch {
                             listStateByDay.scrollToItem(nowIndicatorIndexByDay, scrollOffset = -100)
                         }
@@ -649,10 +655,6 @@ fun ScheduleScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = {
-                            if (isInputLocked) return@FilterChip
-                            hasUserInteracted = true
-                            isProgrammaticScroll = true
-                            isInputLocked = true
                             visibleDayByScroll = dayIndex
 
                             // If clicking on Today, scroll to NOW indicator, else scroll to day header
@@ -719,7 +721,6 @@ fun ScheduleScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = {
-                            hasUserInteracted = true
                             val wasDifferentDay = selectedDay != dayIndex
                             selectedDay = dayIndex
                             // Instant scroll for By Day mode
@@ -824,6 +825,8 @@ fun ScheduleScreen(
                         showStatusColors = showStatusColors,
                         animeStatusMap = animeStatusMap,
                         listState = currentListState,
+                        screenKey = "schedule",
+                        isVisible = isVisible,
                         onAnimeClick = { anime ->
                             val exploreAnime = ExploreAnime(
                                 id = anime.id,
@@ -882,7 +885,7 @@ fun ScheduleScreen(
                 firstOpenedAnime = null
                 onAnimeDialogOpen(false)
             },
-            onPlayEpisode = { episode ->
+            onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
                     id = selectedAnime!!.id,
                     title = selectedAnime!!.title,
@@ -900,7 +903,7 @@ fun ScheduleScreen(
                     year = selectedAnime!!.year,
                     malId = selectedAnime!!.malId
                 )
-                onPlayEpisode(animeMedia, episode)
+                onPlayEpisode(animeMedia, episode, null)
                 showAnimeDialog = false
                 selectedAnime = null
                 firstOpenedAnime = null
@@ -958,9 +961,19 @@ private fun TimelineScheduleList(
     showStatusColors: Boolean,
     animeStatusMap: Map<Int, String>,
     listState: LazyListState,
+    screenKey: String = "schedule",
+    isVisible: Boolean = true,
     onAnimeClick: (AiringScheduleAnime) -> Unit
 ) {
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val density = LocalDensity.current
+    val translationYOffset = with(density) { (-30).dp.toPx() }
+    
+    val isScrolling by remember {
+        derivedStateOf { listState.isScrollInProgress }
+    }
+
+    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -977,19 +990,57 @@ private fun TimelineScheduleList(
                 }
             }
         ) { index, item ->
-            val slideInAnim = remember { Animatable(0.5f) }
-            val alphaAnim = remember { Animatable(0.5f) }
-
-            LaunchedEffect(item) {
-                slideInAnim.snapTo(1f)
-                alphaAnim.snapTo(1f)
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            val itemInfo = visibleItems.find { it.index == index }
+            
+            val centerOffset = if (itemInfo != null) {
+                val itemCenter = itemInfo.offset + itemInfo.size / 2
+                val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                (itemCenter - screenCenter) / screenCenter
+            } else {
+                0f
             }
-
+            
+            val animatedOffset by animateFloatAsState(
+                targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                animationSpec = if (isScrolling) {
+                    spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                } else {
+                    spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                },
+                label = "centerOffset"
+            )
+            
+            val staggerDelay = index * 30f
+            val effectiveProgress = ((cinematicProgress * 1000f - staggerDelay) / 1000f).coerceIn(0f, 1f)
+            val easedProgress = easeOutCubic(effectiveProgress)
+            
+            val introScale = 0.3f + easedProgress * 0.7f
+            val introAlpha = easedProgress
+            val introTranslationY = translationYOffset * (1f - easedProgress)
+            
+            val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
+            val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+            val scrollParallax = animatedOffset * 25f
+            
+            val finalScale = scrollScale * introScale
+            val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+            val finalTranslationY = scrollParallax + introTranslationY
+            
             Box(
                 modifier = Modifier
                     .graphicsLayer {
-                        translationX = (1f - slideInAnim.value) * 30f
-                        this.alpha = alphaAnim.value
+                        scaleX = finalScale
+                        scaleY = finalScale
+                        alpha = finalAlpha
+                        translationY = finalTranslationY
                     }
             ) {
                 when (item) {
@@ -1026,6 +1077,11 @@ private fun TimelineScheduleList(
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
+}
+
+private fun easeOutCubic(t: Float): Float {
+    val t1 = t - 1
+    return t1 * t1 * t1 + 1
 }
 
 @Composable

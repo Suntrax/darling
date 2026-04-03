@@ -13,7 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,8 +27,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.ExploreAnime
 import java.util.Locale
+import kotlin.math.absoluteValue
 
 @Composable
 fun ExploreAnimeHorizontalList(
@@ -48,34 +52,111 @@ fun ExploreAnimeHorizontalList(
     isOled: Boolean = false,
     localAnimeStatus: Map<Int, com.blissless.anime.data.models.LocalAnimeEntry> = emptyMap(),
     onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
-    onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {}
+    onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
+    listIndex: Int = 0,
+    screenKey: String = "explore",
+    isVisible: Boolean = true
 ) {
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val cameraDistancePx = with(density) { 12.dp.toPx() }
+    val translationYOffset = with(density) { (-40).dp.toPx() }
+    
+    val isScrolling by remember {
+        derivedStateOf { listState.isScrollInProgress }
+    }
+    
+    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible)
+    val staggerDelay = listIndex * 50f
+    val effectiveProgress = ((cinematicProgress * 1000f - staggerDelay) / 1000f).coerceIn(0f, 1f)
+    val easedProgress = easeOutCubic(effectiveProgress)
+    
     LazyRow(
+        state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(
+        itemsIndexed(
             items = animeList,
-            key = { it.id }
-        ) { anime ->
+            key = { _, anime -> anime.id }
+        ) { index, anime ->
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            val itemInfo = visibleItems.find { it.index == index }
+            
+            val centerOffset = if (itemInfo != null) {
+                val itemCenter = itemInfo.offset + itemInfo.size / 2
+                val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                (itemCenter - screenCenter) / screenCenter
+            } else {
+                0f
+            }
+            
+            val animatedOffset by animateFloatAsState(
+                targetValue = if (isScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                animationSpec = if (isScrolling) {
+                    androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                    )
+                } else {
+                    androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                    )
+                },
+                label = "centerOffset"
+            )
+            
+            val baseScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+            val baseAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+            val translationXVal = animatedOffset * -20f
+            val rotationYVal = (animatedOffset * 15f).coerceIn(-15f, 15f)
+            
+            val introScale = 0.3f + easedProgress * 0.7f
+            val introAlpha = easedProgress
+            val introTranslationY = translationYOffset * (1f - easedProgress)
+            
+            val finalScale = baseScale * introScale
+            val finalAlpha = baseAlpha * introAlpha
+            val finalTranslationY = introTranslationY
+            
             val localStatus = localAnimeStatus[anime.id]?.status
             val handleAddLocalPlanning: () -> Unit = { onAddToLocalPlanning(anime) }
             val handleRemoveLocalStatus: () -> Unit = { onRemoveFromLocalStatus(anime) }
-            ExploreAnimeCard(
-                anime = anime,
-                currentStatus = animeStatusMap[anime.id],
-                showStatusColors = showStatusColors,
-                showAnimeCardButtons = showAnimeCardButtons,
-                onClick = { onAnimeClick(anime) },
-                onBookmarkClick = { onBookmarkClick(anime) },
-                isLoggedIn = isLoggedIn,
-                isOled = isOled,
-                localStatus = localStatus,
-                onAddToLocalPlanning = handleAddLocalPlanning,
-                onRemoveFromLocalStatus = handleRemoveLocalStatus
-            )
+            
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    scaleX = finalScale
+                    scaleY = finalScale
+                    alpha = finalAlpha
+                    translationX = translationXVal
+                    translationY = finalTranslationY
+                    rotationY = rotationYVal
+                    cameraDistance = cameraDistancePx
+                }
+            ) {
+                ExploreAnimeCard(
+                    anime = anime,
+                    currentStatus = animeStatusMap[anime.id],
+                    showStatusColors = showStatusColors,
+                    showAnimeCardButtons = showAnimeCardButtons,
+                    onClick = { onAnimeClick(anime) },
+                    onBookmarkClick = { onBookmarkClick(anime) },
+                    isLoggedIn = isLoggedIn,
+                    isOled = isOled,
+                    localStatus = localStatus,
+                    onAddToLocalPlanning = handleAddLocalPlanning,
+                    onRemoveFromLocalStatus = handleRemoveLocalStatus
+                )
+            }
         }
     }
+}
+
+private fun easeOutCubic(t: Float): Float {
+    val t1 = t - 1
+    return t1 * t1 * t1 + 1
 }
 
 @Composable

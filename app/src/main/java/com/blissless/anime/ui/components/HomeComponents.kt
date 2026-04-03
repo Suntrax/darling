@@ -1,10 +1,12 @@
 package com.blissless.anime.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,12 +19,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.absoluteValue
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
@@ -102,23 +107,99 @@ fun HomeAnimeHorizontalList(
     onAnimeClick: (AnimeMedia) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
     onStatusClick: (AnimeMedia) -> Unit,
-    onInfoClick: (AnimeMedia) -> Unit = {}
+    onInfoClick: (AnimeMedia) -> Unit = {},
+    listIndex: Int = 0,
+    screenKey: String = "home",
+    isVisible: Boolean = true
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(items = animeList, key = { "${listType}_${it.id}" }) { anime ->
-            HomeAnimeCard(
-                anime = anime,
-                listType = listType,
-                isOled = isOled,
-                showStatusColors = showStatusColors,
-                isLoggedIn = isLoggedIn,
-                playbackPositions = playbackPositions,
-                disableMaterialColors = disableMaterialColors,
-                onClick = { onAnimeClick(anime) },
-                onPlayClick = { onPlayClick(anime) },
-                onStatusClick = { onStatusClick(anime) },
-                onInfoClick = { onInfoClick(anime) }
-            )
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val cameraDistancePx = with(density) { 12.dp.toPx() }
+    val translationYOffset = with(density) { (-40).dp.toPx() }
+    
+    val isScrolling by remember {
+        derivedStateOf { listState.isScrollInProgress }
+    }
+    
+    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible)
+    val staggerDelay = listIndex * 50f
+    val effectiveProgress = ((cinematicProgress * 1000f - staggerDelay) / 1000f).coerceIn(0f, 1f)
+    val easedProgress = easeOutCubic(effectiveProgress)
+    
+    Box(modifier = Modifier.fillMaxWidth()) {
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp)
+        ) {
+            itemsIndexed(items = animeList, key = { _, anime -> "${listType}_${anime.id}" }) { index, anime ->
+                val layoutInfo = listState.layoutInfo
+                val visibleItems = layoutInfo.visibleItemsInfo
+                val itemInfo = visibleItems.find { it.index == index }
+                
+                val centerOffset = if (itemInfo != null) {
+                    val itemCenter = itemInfo.offset + itemInfo.size / 2
+                    val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                    (itemCenter - screenCenter) / screenCenter
+                } else {
+                    0f
+                }
+                
+                val animatedOffset by animateFloatAsState(
+                    targetValue = if (isScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                    animationSpec = if (isScrolling) {
+                        androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                        )
+                    } else {
+                        androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        )
+                    },
+                    label = "centerOffset"
+                )
+                
+                val baseScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                val baseAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                val translationXVal = animatedOffset * -20f
+                val rotationYVal = (animatedOffset * 15f).coerceIn(-15f, 15f)
+                
+                val introScale = 0.3f + easedProgress * 0.7f
+                val introAlpha = easedProgress
+                val introTranslationY = translationYOffset * (1f - easedProgress)
+                
+                val finalScale = baseScale * introScale
+                val finalAlpha = baseAlpha * introAlpha
+                val finalTranslationY = introTranslationY
+                
+                Box(
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = finalScale
+                        scaleY = finalScale
+                        alpha = finalAlpha
+                        translationX = translationXVal
+                        translationY = finalTranslationY
+                        rotationY = rotationYVal
+                        cameraDistance = cameraDistancePx
+                    }
+                ) {
+                    HomeAnimeCard(
+                        anime = anime,
+                        listType = listType,
+                        isOled = isOled,
+                        showStatusColors = showStatusColors,
+                        isLoggedIn = isLoggedIn,
+                        playbackPositions = playbackPositions,
+                        disableMaterialColors = disableMaterialColors,
+                        onClick = { onAnimeClick(anime) },
+                        onPlayClick = { onPlayClick(anime) },
+                        onStatusClick = { onStatusClick(anime) },
+                        onInfoClick = { onInfoClick(anime) }
+                    )
+                }
+            }
         }
     }
 }
@@ -329,4 +410,9 @@ fun StatusButton(
         Spacer(modifier = Modifier.width(4.dp))
         Text(label, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
+}
+
+private fun easeOutCubic(t: Float): Float {
+    val t1 = t - 1
+    return t1 * t1 * t1 + 1
 }

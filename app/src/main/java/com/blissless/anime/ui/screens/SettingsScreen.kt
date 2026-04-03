@@ -308,7 +308,7 @@ fun SettingsScreen(
         ) {
             SettingsToggle(
                 title = "Hide Adult Content",
-                description = "Exclude 18+ anime from search results and airing schedule",
+                description = "Exclude 18+ anime from showing up",
                 checked = hideAdultContentState,
                 onCheckedChange = { viewModel.setHideAdultContent(it) },
                 isOled = isOled

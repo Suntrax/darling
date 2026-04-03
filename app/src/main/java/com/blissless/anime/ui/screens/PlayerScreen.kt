@@ -3,6 +3,7 @@ package com.blissless.anime.ui.screens
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.os.Build
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -10,10 +11,13 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -87,6 +92,7 @@ fun PlayerScreen(
     totalEpisodes: Int = 0,
     latestAiredEpisode: Int? = null,
     animeName: String = "",
+    episodeTitle: String? = null,
     animeId: Int = 0,
     malId: Int = 0,
     animeYear: Int? = null,
@@ -132,6 +138,7 @@ fun PlayerScreen(
     var playbackError by remember { mutableStateOf<String?>(null) }
     var hasError by remember { mutableStateOf(false) }
     var isChangingServer by remember { mutableStateOf(false) }
+    var serverChangeTrigger by remember { mutableIntStateOf(0) }
     var hasPlaybackStarted by remember { mutableStateOf(false) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
@@ -145,6 +152,7 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(false) }
     var isOffline by remember { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var bufferedPosition by remember { mutableLongStateOf(0L) }
@@ -162,6 +170,14 @@ fun PlayerScreen(
     var showSkipIndicator by remember { mutableStateOf(false) }
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
+
+    LaunchedEffect(showControls, hasError, showSkipIndicator) {
+        if (showControls || hasError || showSkipIndicator) {
+            controlsVisible = true
+        } else {
+            controlsVisible = false
+        }
+    }
     
     // Helper to check if device has internet connection
     fun isNetworkAvailable(): Boolean {
@@ -326,6 +342,7 @@ fun PlayerScreen(
                             playbackError = null
                             isChangingServer = false
                             isBuffering = false
+                            hasPlaybackStarted = true
                             if (pendingQualityChange != null && savedPositionForQuality > 0) {
                                 seekTo(savedPositionForQuality)
                                 pendingQualityChange = null
@@ -346,7 +363,7 @@ fun PlayerScreen(
             }
     }
 
-    LaunchedEffect(videoUrl) {
+    LaunchedEffect(videoUrl, serverChangeTrigger) {
         hasError = false
         playbackError = null
         hasRestoredPosition = false
@@ -359,34 +376,53 @@ fun PlayerScreen(
         maxBufferedPosition = 0L
         isOffline = false
 
-        val mediaItemBuilder = MediaItem.Builder()
-            .setUri(videoUrl)
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
+        // Stop any current playback before setting new media
+        exoPlayer.stop()
+        
+        // Small delay to ensure player is fully stopped
+        delay(100)
+        
+        // Clear any existing media items
+        exoPlayer.clearMediaItems()
 
-        if (subtitleUrl != null) {
-            val subtitle = MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
+        val startPositionMs = if (savedPosition > 0) savedPosition else 0L
+        
+        val subtitleConfigs = if (subtitleUrl != null) {
+            listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
                 .setMimeType(MimeTypes.TEXT_VTT)
                 .setLanguage("en")
                 .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                .build()
-            mediaItemBuilder.setSubtitleConfigurations(listOf(subtitle))
+                .build())
+        } else {
+            emptyList()
         }
-
-        exoPlayer.setMediaItem(mediaItemBuilder.build())
+        
+        val mediaItem = MediaItem.Builder()
+            .setUri(videoUrl)
+            .setMimeType(MimeTypes.APPLICATION_M3U8)
+            .setSubtitleConfigurations(subtitleConfigs)
+            .build()
+        
+        exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
-        // Only auto-play if no saved position, otherwise wait for seek
-        exoPlayer.playWhenReady = savedPosition == 0L
+        
+        // Seek to saved position after prepare but before playback starts
+        if (savedPosition > 0) {
+            exoPlayer.seekTo(savedPosition)
+        }
+        
+        // Mark that playback has started
+        hasPlaybackStarted = true
 
         hasTriggeredProgressUpdate = false
-        currentPosition = 0L
-        sliderValue = 0f
+        currentPosition = startPositionMs
+        sliderValue = startPositionMs.toFloat()
     }
 
-    LaunchedEffect(exoPlayer.playbackState, savedPosition, hasRestoredPosition) {
-        if (exoPlayer.playbackState == Player.STATE_READY && savedPosition > 0 && !hasRestoredPosition) {
-            exoPlayer.seekTo(savedPosition)
+    LaunchedEffect(exoPlayer.playbackState, hasRestoredPosition, videoUrl) {
+        if (exoPlayer.playbackState == Player.STATE_READY && hasPlaybackStarted && !hasRestoredPosition) {
             hasRestoredPosition = true
-            // Start playback after seeking to saved position
+            // Start playback after seek
             exoPlayer.playWhenReady = true
         }
     }
@@ -548,7 +584,7 @@ fun PlayerScreen(
 
     LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu) {
         if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu) {
-            delay(3000)
+            delay(2000)
             if (!isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu) {
                 showControls = false
             }
@@ -592,10 +628,11 @@ fun PlayerScreen(
         hasError = false
         playbackError = null
         isChangingServer = true
+        hasPlaybackStarted = false
+        // Trigger player recreation by incrementing counter
+        serverChangeTrigger++
         onSavePosition?.invoke(exoPlayer.currentPosition)
         onPositionSaved?.invoke(exoPlayer.currentPosition)
-        exoPlayer.stop()
-        exoPlayer.clearMediaItems()
         onServerChange?.invoke(serverName, category)
     }
 
@@ -616,44 +653,46 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // PlayerView
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    resizeMode = resizeModes[resizeModeIndex].first
-                    useController = false
-                    setShowNextButton(false)
-                    setShowPreviousButton(false)
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    controllerShowTimeoutMs = 3000
-                    controllerAutoShow = false
+        // PlayerView - recreate when server changes
+        key(serverChangeTrigger) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        resizeMode = resizeModes[resizeModeIndex].first
+                        useController = false
+                        setShowNextButton(false)
+                        setShowPreviousButton(false)
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                        controllerShowTimeoutMs = 3000
+                        controllerAutoShow = false
 
-                    val style = CaptionStyleCompat(
-                        android.graphics.Color.WHITE,
-                        android.graphics.Color.TRANSPARENT,
-                        android.graphics.Color.TRANSPARENT,
-                        CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                        android.graphics.Color.BLACK,
-                        null
-                    )
-                    subtitleView?.apply {
-                        setStyle(style)
-                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
+                        val style = CaptionStyleCompat(
+                            android.graphics.Color.WHITE,
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT,
+                            CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                            android.graphics.Color.BLACK,
+                            null
+                        )
+                        subtitleView?.apply {
+                            setStyle(style)
+                            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
+                        }
                     }
+                },
+                modifier = Modifier
+                    .fillMaxSize(),
+                update = { view -> 
+                    view.resizeMode = resizeModes[resizeModeIndex].first
+                    view.player = exoPlayer
                 }
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(if (hasPlaybackStarted) 1f else 0f),
-            update = { view -> 
-                view.resizeMode = resizeModes[resizeModeIndex].first
-            }
-        )
+            )
+        }
 
         // 2. Active Gesture Zones (Middle Layer)
         // These handle seeking and toggling controls. Defined first so they are "under" the padding zones.
@@ -784,21 +823,26 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = showControls || hasError || showSkipIndicator,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            visible = controlsVisible,
+            enter = fadeIn(animationSpec = tween(150)),
+            exit = fadeOut(animationSpec = tween(100)),
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Top gradient
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                        .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
-                        .statusBarsPadding()
-                        .padding(16.dp)
+                // Top gradient - slides from top
+                AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = slideInVertically(initialOffsetY = { -it }, animationSpec = tween(200)),
+                    exit = slideOutVertically(targetOffsetY = { -it }, animationSpec = tween(100)),
+                    modifier = Modifier.align(Alignment.TopCenter)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
+                            .statusBarsPadding()
+                            .padding(16.dp)
+                    ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -810,6 +854,15 @@ fun PlayerScreen(
                                     text = animeName,
                                     color = Color.White,
                                     style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (!episodeTitle.isNullOrEmpty()) {
+                                Text(
+                                    text = episodeTitle,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodySmall,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -964,9 +1017,16 @@ fun PlayerScreen(
                         }
                     }
                 }
+                }
 
                 Box(modifier = Modifier.align(Alignment.Center)) {
-                    Row(
+                    AnimatedVisibility(
+                        visible = controlsVisible,
+                        enter = scaleIn(initialScale = 0.8f, animationSpec = tween(200)),
+                        exit = scaleOut(targetScale = 0.8f, animationSpec = tween(100)),
+                        modifier = Modifier.align(Alignment.Center)
+                    ) {
+                        Row(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalArrangement = Arrangement.spacedBy(32.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1007,12 +1067,13 @@ fun PlayerScreen(
                             }
                         }
 
-                        IconButton(
-                            onClick = { onNextEpisode?.invoke() },
-                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
-                            enabled = onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer
-                        ) {
-                            Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                            IconButton(
+                                onClick = { onNextEpisode?.invoke() },
+                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                                enabled = onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer
+                            ) {
+                                Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                            }
                         }
                     }
 
@@ -1071,33 +1132,18 @@ fun PlayerScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = {
-                                        handlePlaybackError()
-                                        hasError = false
-                                        playbackError = null
-                                        exoPlayer.prepare()
-                                        exoPlayer.playWhenReady = true
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Retry")
-                                }
-
-                                if (onServerChange != null) {
-                                    val servers = if (currentCategory == "sub") subServers else dubServers
-                                    if (servers.size > 1) {
-                                        Button(
-                                            onClick = {
-                                                val currentIndex = servers.indexOfFirst { it.name == currentServerName }
-                                                val nextIndex = (currentIndex + 1) % servers.size
-                                                handleServerChange(servers[nextIndex].name, currentCategory)
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                                        ) {
-                                            Text("Try Next Server")
-                                        }
+                            if (onServerChange != null) {
+                                val servers = if (currentCategory == "sub") subServers else dubServers
+                                if (servers.size > 1) {
+                                    Button(
+                                        onClick = {
+                                            val currentIndex = servers.indexOfFirst { it.name == currentServerName }
+                                            val nextIndex = (currentIndex + 1) % servers.size
+                                            handleServerChange(servers[nextIndex].name, currentCategory)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Text("Try Next Server")
                                     }
                                 }
                             }
@@ -1105,15 +1151,20 @@ fun PlayerScreen(
                     }
                 }
 
-                // Bottom gradient
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                        .navigationBarsPadding()
-                        .padding(16.dp)
+                // Bottom gradient - slides from bottom
+                AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(200)),
+                    exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(100)),
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
+                            .navigationBarsPadding()
+                            .padding(16.dp)
+                    ) {
                     // Timer above progress bar
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1129,6 +1180,19 @@ fun PlayerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(24.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { offset ->
+                                        if (duration > 0) {
+                                            val ratio = (offset.x / size.width).coerceIn(0f, 1f)
+                                            val seekPosition = (ratio * duration).toLong()
+                                            exoPlayer.seekTo(seekPosition)
+                                            currentPosition = seekPosition
+                                            sliderValue = seekPosition.toFloat()
+                                        }
+                                    }
+                                )
+                            }
                             .pointerInput(Unit) {
                                 detectHorizontalDragGestures(
                                     onDragStart = { offset ->
@@ -1240,7 +1304,7 @@ fun PlayerScreen(
                     }
 
                     // Bottom row with speed selector on left and time on right
-                    var currentSpeed by remember { mutableFloatStateOf(1f) }
+                    var currentSpeed by rememberSaveable { mutableFloatStateOf(1f) }
                     val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
                     Row(
@@ -1250,13 +1314,15 @@ fun PlayerScreen(
                     ) {
                         // Playback speed selector on the left
                         Box {
-                            IconButton(
-                                onClick = { showSpeedMenu = true },
-                                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.small)
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                onClick = { showSpeedMenu = true }
                             ) {
                                 Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Speed,
@@ -1300,6 +1366,7 @@ fun PlayerScreen(
                         // Time on the right (already showing in Row above, this is spacer)
                         Spacer(modifier = Modifier.width(1.dp))
                     }
+                }
                 }
             }
         }

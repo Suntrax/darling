@@ -72,7 +72,7 @@ fun DetailedAnimeScreen(
     isLocalFavorite: Boolean = false,
     onDismiss: () -> Unit,
     onSwipeToClose: () -> Unit = {},
-    onPlayEpisode: (Int) -> Unit = {},
+    onPlayEpisode: (Int, String?) -> Unit = { _, _ -> },
     onUpdateStatus: (String?) -> Unit = {},
     onRemove: () -> Unit = {},
     onToggleFavorite: (DetailedAnimeData) -> Unit = {},
@@ -463,7 +463,7 @@ fun DetailedAnimeScreen(
                             }
 
                             Button(
-                                onClick = { onPlayEpisode(1) }, modifier = Modifier.weight(1f),
+                                onClick = { onPlayEpisode(1, null) }, modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp),
                                 enabled = !notYetAired,
                                 colors = ButtonDefaults.buttonColors(

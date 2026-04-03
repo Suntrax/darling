@@ -167,15 +167,18 @@ class MainViewModel : ViewModel() {
                     }
                 }
                 "favorite" -> {
-                    // Set the desired favorite state instead of toggling
+                    // Execute the queued action directly - don't check current state
+                    // The local state was already updated, now sync with API
                     val shouldBeFavorited = sync.favoriteAdded == true
-                    val currentlyFavorited = _aniListFavorites.value.any { it.id == sync.mediaId }
-                    if (shouldBeFavorited && !currentlyFavorited) {
+                    android.util.Log.d("AniListFavorite", "executePendingSyncs favorite: mediaId=${sync.mediaId}, shouldBeFavorited=$shouldBeFavorited")
+                    if (shouldBeFavorited) {
+                        android.util.Log.d("AniListFavorite", "  Calling addAniListFavorite API")
                         repository.addAniListFavorite(sync.mediaId)
-                    } else if (!shouldBeFavorited && currentlyFavorited) {
+                    } else {
+                        android.util.Log.d("AniListFavorite", "  Calling removeAniListFavorite API")
                         repository.removeAniListFavorite(sync.mediaId)
                     }
-                    hasFavoritesSync = true
+                    // Don't set hasFavoritesSync - no need to refetch, UI already updated
                 }
             }
         }
@@ -187,9 +190,7 @@ class MainViewModel : ViewModel() {
                 fetchLists()
             }
         }
-        if (hasFavoritesSync) {
-            fetchAniListFavorites()
-        }
+        // Don't fetch AniList favorites after sync - local-first approach means UI is already updated
     }
     
     private fun mapToMalStatus(status: String): String? {
@@ -291,9 +292,30 @@ class MainViewModel : ViewModel() {
         if (existingIndex >= 0) {
             currentFavorites.removeAt(existingIndex)
             userPreferences.toggleLocalFavorite(anime.id)
+            // Also remove from AniList if logged in via AniList
+            if (_loginProvider.value == LoginProvider.ANILIST && anime.id > 0) {
+                _aniListFavorites.value = _aniListFavorites.value.filter { it.id != anime.id }
+                userPreferences.toggleAniListFavorite(anime.id)
+                queueSync(anime.id, "favorite", favoriteAdded = false)
+            }
         } else {
             currentFavorites.add(anime)
             userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
+            // Also add to AniList if logged in via AniList
+            if (_loginProvider.value == LoginProvider.ANILIST && anime.id > 0) {
+                val userFavorite = UserFavoriteAnime(
+                    id = anime.id,
+                    title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
+                    coverImage = MediaCoverImage(large = anime.cover, medium = anime.cover),
+                    episodes = anime.totalEpisodes,
+                    averageScore = anime.averageScore,
+                    genres = anime.genres,
+                    seasonYear = anime.year
+                )
+                _aniListFavorites.value = _aniListFavorites.value + userFavorite
+                userPreferences.toggleAniListFavorite(anime.id)
+                queueSync(anime.id, "favorite", favoriteAdded = true)
+            }
         }
         _malFavorites.value = currentFavorites
         userPreferences.saveMalFavorites(currentFavorites.map { it.id })
@@ -452,6 +474,7 @@ class MainViewModel : ViewModel() {
     // AniList Favorites
     private val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
     val aniListFavorites: StateFlow<List<UserFavoriteAnime>> = _aniListFavorites.asStateFlow()
+    val aniListFavoriteIds: StateFlow<Set<Int>> get() = userPreferences.aniListFavorites
     
     // Jikan (MAL) Favorites and History
     private val _jikanFavorites = MutableStateFlow<JikanUserFavorites?>(null)
@@ -1629,19 +1652,81 @@ class MainViewModel : ViewModel() {
             }
         }
     }
+
+    fun loadAniListFavoritesFromStorage() {
+        // Load favorites from UserPreferences (IDs only)
+        val favoriteIds = userPreferences.aniListFavorites.value
+        android.util.Log.d("AniListFavorite", "loadAniListFavoritesFromStorage: found ${favoriteIds.size} favorites")
+        
+        if (favoriteIds.isEmpty()) {
+            _aniListFavorites.value = emptyList()
+            return
+        }
+        
+        // Convert IDs to UserFavoriteAnime placeholders (will be enriched by detailedAnimeCache if available)
+        val favorites = favoriteIds.mapNotNull { id ->
+            android.util.Log.d("AniListFavorite", "  Processing favorite id: $id")
+            val cached = cacheManager.detailedAnimeCache.value[id]
+            if (cached != null) {
+                UserFavoriteAnime(
+                    id = cached.id,
+                    title = MediaTitle(romaji = cached.title, english = cached.titleEnglish),
+                    coverImage = MediaCoverImage(large = cached.cover, medium = cached.cover),
+                    episodes = cached.episodes,
+                    averageScore = cached.averageScore,
+                    genres = cached.genres,
+                    seasonYear = cached.year
+                )
+            } else {
+                // Try to find in currently watching lists
+                val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+                val anime = allAnime.find { it.id == id }
+                if (anime != null) {
+                    UserFavoriteAnime(
+                        id = anime.id,
+                        title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
+                        coverImage = MediaCoverImage(large = anime.cover, medium = anime.cover),
+                        episodes = anime.totalEpisodes,
+                        averageScore = anime.averageScore,
+                        genres = anime.genres,
+                        seasonYear = anime.year
+                    )
+                } else {
+                    android.util.Log.d("AniListFavorite", "    No anime found for id $id, showing placeholder")
+                    // Just use ID as placeholder
+                    UserFavoriteAnime(
+                        id = id,
+                        title = MediaTitle(romaji = "Loading...", english = null),
+                        coverImage = MediaCoverImage(large = "", medium = ""),
+                        episodes = null,
+                        averageScore = null,
+                        genres = emptyList(),
+                        seasonYear = null
+                    )
+                }
+            }
+        }
+        _aniListFavorites.value = favorites
+        android.util.Log.d("AniListFavorite", "Loaded ${favorites.size} favorites into UI")
+    }
     fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null): Boolean {
+        android.util.Log.d("AniListFavorite", "toggleAniListFavorite called: mediaId=$mediaId, anime=${anime?.title}, loginProvider=${_loginProvider.value}")
+        
         if (_loginProvider.value == LoginProvider.MAL) {
             // Toggle MAL favorite using the ID-based method
             toggleMalFavoriteById(mediaId)
         } else {
-            // Toggle AniList favorite - local-first
-            val isFavorite = _aniListFavorites.value.any { it.id == mediaId }
+            // Toggle AniList favorite - local-first with persistence
+            val isFavorite = userPreferences.isAniListFavorite(mediaId)
             val willBeAdded = !isFavorite
+            
+            // Update persisted storage
+            userPreferences.toggleAniListFavorite(mediaId)
+            
+            // Update UI list
             if (isFavorite) {
-                // Remove from favorites
                 _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
             } else {
-                // Add to favorites immediately
                 if (anime != null) {
                     val userFavorite = UserFavoriteAnime(
                         id = anime.id,
@@ -1654,7 +1739,6 @@ class MainViewModel : ViewModel() {
                     )
                     _aniListFavorites.value = _aniListFavorites.value + userFavorite
                 } else {
-                    // Add a placeholder favorite - will be updated when API responds
                     val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
                     val placeholder = UserFavoriteAnime(
                         id = mediaId,
@@ -1668,6 +1752,7 @@ class MainViewModel : ViewModel() {
                     _aniListFavorites.value = _aniListFavorites.value + placeholder
                 }
             }
+            
             // Queue the API call for debounced sync with the desired state
             queueSync(mediaId, "favorite", favoriteAdded = willBeAdded)
             return true
@@ -1738,6 +1823,38 @@ class MainViewModel : ViewModel() {
      * Fetches BOTH sub and dub for each adjacent episode.
      * Skips unreleased episodes.
      */
+    fun prefetchNextEpisodeStream(
+        animeName: String,
+        currentEpisode: Int,
+        animeId: Int,
+        latestAired: Int,
+        category: String? = null
+    ) {
+        android.util.Log.d("PREFETCH", "prefNextEpisode: anime='$animeName', currentEp=$currentEpisode, animeId=$animeId, latestAired=$latestAired")
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            // Prefetch BOTH sub and dub for NEXT episode only
+            listOf("sub", "dub").forEach { prefetchCategory ->
+                // Prefetch next episode stream - only if released
+                val nextEp = currentEpisode + 1
+                // nextEp is released if latestAired <= 0 (unknown) OR nextEp <= latestAired
+                val isReleased = latestAired <= 0 || nextEp <= latestAired
+                
+                if (isReleased) {
+                    val nextKey = "${animeId}_${nextEp}_$prefetchCategory"
+                    if (!cacheManager.hasStream(nextKey)) {
+                        android.util.Log.d("PREFETCH", "  Fetching next Ep $nextEp ($prefetchCategory)")
+                        tryAllScrapersWithFallback(animeName, nextEp, animeId, latestAired, prefetchCategory)
+                    } else {
+                        android.util.Log.d("PREFETCH", "  Next Ep $nextEp ($prefetchCategory) - already cached")
+                    }
+                } else {
+                    android.util.Log.d("PREFETCH", "  Next Ep $nextEp - skipped (not released yet, latestAired=$latestAired)")
+                }
+            }
+        }
+    }
+
     fun prefetchAdjacentEpisodeStreams(
         animeName: String,
         currentEpisode: Int,
@@ -1745,29 +1862,8 @@ class MainViewModel : ViewModel() {
         latestAired: Int,
         category: String? = null
     ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // Prefetch BOTH sub and dub for previous and next episodes
-            listOf("sub", "dub").forEach { prefetchCategory ->
-                // Prefetch previous episode stream
-                if (currentEpisode > 1) {
-                    val prevKey = "${animeId}_${currentEpisode - 1}_$prefetchCategory"
-                    if (!cacheManager.hasStream(prevKey)) {
-                        tryAllScrapersWithFallback(animeName, currentEpisode - 1, animeId, latestAired, prefetchCategory)
-                    }
-                }
-
-                // Prefetch next episode stream - only if released
-                val nextEp = currentEpisode + 1
-                val isReleased = latestAired <= 0 || nextEp <= latestAired
-                val isValidNext = isReleased && nextEp <= 24  // Cap at 24 for safety
-                if (isValidNext) {
-                    val nextKey = "${animeId}_${nextEp}_$prefetchCategory"
-                    if (!cacheManager.hasStream(nextKey)) {
-                        tryAllScrapersWithFallback(animeName, nextEp, animeId, latestAired, prefetchCategory)
-                    }
-                }
-            }
-        }
+        // Delegate to the new method
+        prefetchNextEpisodeStream(animeName, currentEpisode, animeId, latestAired, category)
     }
 
     /**
@@ -1783,14 +1879,27 @@ class MainViewModel : ViewModel() {
      * This preloads the next episode to watch so playback starts instantly.
      * Called after fetching lists on app start.
      * Fetches BOTH sub and dub to ensure instant playback regardless of preference.
+     * Also prefetches TMDB episode info for episode titles.
      * Skips unreleased episodes.
      */
     private fun prefetchContinueWatchingStreams() {
         val watchingList = _currentlyWatching.value
         if (watchingList.isEmpty()) return
 
+        android.util.Log.d("PREFETCH", "Starting prefetch for ${watchingList.size} anime in Continue Watching")
+
         viewModelScope.launch(Dispatchers.IO) {
             watchingList.forEach { anime ->
+                // Prefetch TMDB episode info if not cached
+                if (cacheManager.getCachedTmdbEpisodes(anime.id) == null) {
+                    android.util.Log.d("PREFETCH", "Prefetching TMDB episodes for '${anime.title}' (id=${anime.id})")
+                    val tmdbEpisodes = repository.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format, anime.totalEpisodes)
+                    if (tmdbEpisodes.isNotEmpty()) {
+                        cacheManager.cacheTmdbEpisodes(anime.id, tmdbEpisodes)
+                        android.util.Log.d("PREFETCH", "  Cached ${tmdbEpisodes.size} TMDB episodes")
+                    }
+                }
+
                 val nextEp = anime.progress + 1
                 val latest = anime.latestEpisode ?: anime.totalEpisodes
 
@@ -1801,14 +1910,73 @@ class MainViewModel : ViewModel() {
 
                 // Use English title for scraping
                 val scrapingName = getScrapingName(anime)
+                android.util.Log.d("PREFETCH", "Prefetching '${anime.title}' (Ep $nextEp, category: sub+dub)")
 
                 // Prefetch BOTH sub and dub
                 listOf("sub", "dub").forEach { category ->
                     val cacheKey = "${anime.id}_${nextEp}_$category"
                     if (!cacheManager.hasStream(cacheKey)) {
+                        android.util.Log.d("PREFETCH", "  Fetching $category for Ep $nextEp")
                         tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
+                    } else {
+                        android.util.Log.d("PREFETCH", "  $category for Ep $nextEp - already cached")
                     }
+                    // Also pre-scrape all servers for this episode and category
+                    prefetchAllServersForEpisode(scrapingName, nextEp, anime.id, latest, category)
                 }
+            }
+            android.util.Log.d("PREFETCH", "Completed prefetch for Continue Watching")
+        }
+    }
+
+    private suspend fun prefetchAllServersForEpisode(
+        animeName: String,
+        episodeNumber: Int,
+        animeId: Int,
+        latestAiredEpisode: Int,
+        category: String
+    ) {
+        if (latestAiredEpisode > 0 && episodeNumber > latestAiredEpisode) return
+        
+        android.util.Log.d("PREFETCH", "  Prefetching all servers for Ep $episodeNumber ($category)")
+        
+        // Cache episode info first (contains server list for UI)
+        val epKey = "${animeId}_$episodeNumber"
+        if (!cacheManager.hasEpisodeInfo(epKey)) {
+            val episodeInfo = AnimekaiScraper.getEpisodeInfo(animeName, episodeNumber) ?: run {
+                android.util.Log.d("PREFETCH", "  No episode info found for Ep $episodeNumber")
+                return
+            }
+            val streams = AnimekaiScraper.toEpisodeStreams(episodeInfo)
+            if (streams != null) {
+                cacheManager.cacheEpisodeInfo(epKey, streams)
+                android.util.Log.d("PREFETCH", "  Episode info cached")
+            }
+        } else {
+            android.util.Log.d("PREFETCH", "  Episode info already cached")
+        }
+        
+        // Get episode info from cache for server list
+        val cachedInfo = cacheManager.getCachedEpisodeInfo(epKey) ?: return
+        val servers = if (category == "dub") cachedInfo.dubServers else cachedInfo.subServers
+        android.util.Log.d("PREFETCH", "  Found ${servers.size} servers for $category")
+        
+        servers.forEach { server ->
+            val key = "${animeId}_${episodeNumber}_$category"
+            if (!cacheManager.hasStream(key)) {
+                try {
+                    android.util.Log.d("PREFETCH", "    Fetching server: ${server.name} ($category)")
+                    val result = AnimekaiScraper.getStreamForSpecificServer(animeName, episodeNumber, server.name, category)
+                    result?.let {
+                        val aniwatchResult = AnimekaiScraper.toAniwatchStreamResult(it)
+                        cacheManager.cacheStream(key, aniwatchResult)
+                        android.util.Log.d("PREFETCH", "    Server ${server.name} cached successfully")
+                    } ?: android.util.Log.d("PREFETCH", "    Server ${server.name} returned no stream")
+                } catch (e: Exception) {
+                    android.util.Log.e("PREFETCH", "    Server ${server.name} failed: ${e.message}")
+                }
+            } else {
+                android.util.Log.d("PREFETCH", "    Server ${server.name} - already cached")
             }
         }
     }
@@ -1893,6 +2061,8 @@ class MainViewModel : ViewModel() {
     fun forceRefreshExplore() = fetchExploreData(force = true)
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
+
+    fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId)
     
     fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
         android.util.Log.d("MAL_DEBUG", "addExploreAnimeToList: anime.id=${anime.id}, malId=${anime.malId}, status=$status")

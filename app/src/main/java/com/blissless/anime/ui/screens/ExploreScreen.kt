@@ -41,7 +41,7 @@ fun ExploreScreen(
     hideAdultContent: Boolean = true,
     favoriteIds: Set<Int> = emptySet(),
     onToggleFavorite: (ExploreAnime) -> Unit = {},
-    onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
+    onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     currentlyWatching: List<AnimeMedia> = emptyList(),
     planningToWatch: List<AnimeMedia> = emptyList(),
     completed: List<AnimeMedia> = emptyList(),
@@ -146,7 +146,7 @@ fun ExploreScreen(
                 }
             },
             onSwipeToClose = { showDialog = false; onClearAnimeStack() },
-            onPlayEpisode = { episode ->
+            onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
                     id = anime.id,
                     title = anime.title,
@@ -161,7 +161,7 @@ fun ExploreScreen(
                     listStatus = "",
                     listEntryId = 0
                 )
-                onPlayEpisode(animeMedia, episode)
+                onPlayEpisode(animeMedia, episode, null)
                 showDialog = false
             },
             onUpdateStatus = { status ->
@@ -234,6 +234,14 @@ fun ExploreScreen(
     LaunchedEffect(isLoading) {
         if (!isLoading) {
             isRefreshing = false
+        }
+    }
+    
+    // Refresh data when screen becomes visible
+    LaunchedEffect(isVisible, seasonalAnime) {
+        if (isVisible && seasonalAnime.isEmpty()) {
+            kotlinx.coroutines.delay(100)
+            viewModel.forceRefreshExplore()
         }
     }
 
@@ -332,7 +340,10 @@ fun ExploreScreen(
                     },
                     onRemoveFromLocalStatus = { anime ->
                         viewModel.setLocalAnimeStatus(anime.id, null)
-                    }
+                    },
+                    listIndex = 0,
+                    screenKey = "explore",
+                    isVisible = isVisible
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -369,7 +380,10 @@ fun ExploreScreen(
                     },
                     onRemoveFromLocalStatus = { anime ->
                         viewModel.setLocalAnimeStatus(anime.id, null)
-                    }
+                    },
+                    listIndex = 1,
+                    screenKey = "explore",
+                    isVisible = isVisible
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -406,7 +420,10 @@ fun ExploreScreen(
                     },
                     onRemoveFromLocalStatus = { anime ->
                         viewModel.setLocalAnimeStatus(anime.id, null)
-                    }
+                    },
+                    listIndex = 2,
+                    screenKey = "explore",
+                    isVisible = isVisible
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -443,7 +460,10 @@ fun ExploreScreen(
                 },
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
-                }
+                },
+                listIndex = 3,
+                screenKey = "explore",
+                isVisible = isVisible
             )
 
             GenreSection(
@@ -476,7 +496,10 @@ fun ExploreScreen(
                 },
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
-                }
+                },
+                listIndex = 4,
+                screenKey = "explore",
+                isVisible = isVisible
             )
 
             GenreSection(
@@ -509,7 +532,10 @@ fun ExploreScreen(
                 },
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
-                }
+                },
+                listIndex = 5,
+                screenKey = "explore",
+                isVisible = isVisible
             )
 
             GenreSection(
@@ -542,7 +568,10 @@ fun ExploreScreen(
                 },
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
-                }
+                },
+                listIndex = 6,
+                screenKey = "explore",
+                isVisible = isVisible
             )
 
             GenreSection(
@@ -575,7 +604,10 @@ fun ExploreScreen(
                 },
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
-                }
+                },
+                listIndex = 7,
+                screenKey = "explore",
+                isVisible = isVisible
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -610,7 +642,10 @@ private fun GenreSection(
     onBookmarkClick: (ExploreAnime) -> Unit,
     localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap(),
     onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
-    onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {}
+    onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
+    listIndex: Int = 0,
+    screenKey: String = "explore",
+    isVisible: Boolean = true
 ) {
     if (animeList.isEmpty() && !isLoading) return
 
@@ -628,7 +663,10 @@ private fun GenreSection(
                 isOled = isOled,
                 localAnimeStatus = localAnimeStatus,
                 onAddToLocalPlanning = onAddToLocalPlanning,
-                onRemoveFromLocalStatus = onRemoveFromLocalStatus
+                onRemoveFromLocalStatus = onRemoveFromLocalStatus,
+                listIndex = listIndex,
+                screenKey = screenKey,
+                isVisible = isVisible
             )
         } else if (isLoading) {
             LoadingPlaceholder(isOled)

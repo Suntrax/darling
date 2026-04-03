@@ -38,6 +38,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_ENABLE_THUMBNAIL_PREVIEW = "enable_thumbnail_preview"
         private const val KEY_LOCAL_FAVORITES_V2 = "local_favorites_v2"
         private const val KEY_LOCAL_FAVORITES = "local_favorites"
+        private const val KEY_ANILIST_FAVORITES = "anilist_favorites"
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
         private const val KEY_HIDE_ADULT_CONTENT = "hide_adult_content"
         private const val KEY_STARTUP_SCREEN = "startup_screen"
@@ -135,6 +136,51 @@ class UserPreferences(private val context: Context) {
 
     val localFavoriteIds: Set<Int> get() = _localFavorites.value.keys
 
+    // AniList favorites (stored locally, synced to API)
+    private val _aniListFavorites = MutableStateFlow<Set<Int>>(emptySet())
+    val aniListFavorites: StateFlow<Set<Int>> = _aniListFavorites.asStateFlow()
+
+    fun isAniListFavorite(mediaId: Int): Boolean = _aniListFavorites.value.contains(mediaId)
+
+    fun toggleAniListFavorite(mediaId: Int): Boolean {
+        val current = _aniListFavorites.value.toMutableSet()
+        val wasAdded = !current.contains(mediaId)
+        if (wasAdded) {
+            current.add(mediaId)
+        } else {
+            current.remove(mediaId)
+        }
+        _aniListFavorites.value = current
+        saveAniListFavorites(current)
+        android.util.Log.d("AniListFavorite", "toggleAniListFavorite: mediaId=$mediaId, wasAdded=$wasAdded, new count=${current.size}")
+        return wasAdded
+    }
+
+    private fun saveAniListFavorites(favorites: Set<Int>) {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val encoded = json.encodeToString(kotlinx.serialization.serializer(), favorites.toList())
+        sharedPreferences.edit().putString(KEY_ANILIST_FAVORITES, encoded).apply()
+        android.util.Log.d("AniListFavorite", "saveAniListFavorites: saved ${favorites.size} favorites")
+    }
+
+    private fun loadAniListFavorites() {
+        val saved = sharedPreferences.getString(KEY_ANILIST_FAVORITES, null)
+        android.util.Log.d("AniListFavorite", "loadAniListFavorites: raw saved = ${saved?.take(100)}")
+        if (saved != null) {
+            try {
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val list = json.decodeFromString<List<Int>>(kotlinx.serialization.serializer(), saved)
+                _aniListFavorites.value = list.toSet()
+                android.util.Log.d("AniListFavorite", "loadAniListFavorites: loaded ${list.size} favorites")
+            } catch (e: Exception) {
+                _aniListFavorites.value = emptySet()
+                android.util.Log.e("AniListFavorite", "loadAniListFavorites: failed to parse - ${e.message}")
+            }
+        } else {
+            android.util.Log.d("AniListFavorite", "loadAniListFavorites: no saved data found")
+        }
+    }
+
     // Local anime status (for offline users)
     private val _localAnimeStatus = MutableStateFlow<Map<Int, LocalAnimeEntry>>(emptyMap())
     val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> = _localAnimeStatus.asStateFlow()
@@ -176,6 +222,9 @@ class UserPreferences(private val context: Context) {
 
         // Load local favorites
         loadLocalFavorites()
+
+        // Load AniList favorites (stored locally, synced to API)
+        loadAniListFavorites()
 
         // Load local anime status
         loadLocalAnimeStatus()

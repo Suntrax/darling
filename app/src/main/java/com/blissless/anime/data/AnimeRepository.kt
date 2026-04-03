@@ -1549,6 +1549,8 @@ class AnimeRepository(
     }
     
     suspend fun addAniListFavorite(mediaId: Int): Boolean {
+        android.util.Log.d("AniListFavorite", "addAniListFavorite called: mediaId=$mediaId")
+        
         val mutation = """
             mutation (${'$'}mediaId: Int) {
                 ToggleFavourite(animeId: ${'$'}mediaId) {
@@ -1569,13 +1571,19 @@ class AnimeRepository(
         
         val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
         if (result?.contains("\"isFavourite\":true") == true || result?.contains("\"isFavourite\": true") == true) {
+            android.util.Log.d("AniListFavorite", "  Already favorited, skipping")
             return true // Already favorited
         }
         
-        return graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+        android.util.Log.d("AniListFavorite", "  Executing ToggleFavourite mutation")
+        val success = graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+        android.util.Log.d("AniListFavorite", "  Mutation result: $success")
+        return success
     }
     
     suspend fun removeAniListFavorite(mediaId: Int): Boolean {
+        android.util.Log.d("AniListFavorite", "removeAniListFavorite called: mediaId=$mediaId")
+        
         val mutation = """
             mutation (${'$'}mediaId: Int) {
                 ToggleFavourite(animeId: ${'$'}mediaId) {
@@ -1596,9 +1604,50 @@ class AnimeRepository(
         
         val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
         if (result?.contains("\"isFavourite\":false") == true || result?.contains("\"isFavourite\": false") == true) {
+            android.util.Log.d("AniListFavorite", "  Already not favorited, skipping")
             return true // Already not favorited
         }
         
-        return graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+        android.util.Log.d("AniListFavorite", "  Executing ToggleFavourite mutation")
+        val success = graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+        android.util.Log.d("AniListFavorite", "  Mutation result: $success")
+        return success
+    }
+    
+    suspend fun toggleAniListFavorite(mediaId: Int, addFavorite: Boolean): Boolean {
+        android.util.Log.d("AniListFavorite", "toggleAniListFavorite called: mediaId=$mediaId, addFavorite=$addFavorite")
+        
+        if (addFavorite) {
+            // Check if already favorited
+            val checkQuery = """
+                query (${'$'}mediaId: Int) {
+                    Media(id: ${'$'}mediaId) {
+                        id
+                        isFavourite
+                    }
+                }
+            """.trimIndent()
+            
+            val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
+            android.util.Log.d("AniListFavorite", "Check result: $result")
+            
+            if (result?.contains("\"isFavourite\":true") == true || result?.contains("\"isFavourite\": true") == true) {
+                android.util.Log.d("AniListFavorite", "Already favorited, skipping")
+                return true // Already favorited
+            }
+        }
+        
+        val mutation = """
+            mutation (${'$'}mediaId: Int) {
+                ToggleFavourite(animeId: ${'$'}mediaId) {
+                    anime { nodes { id } }
+                }
+            }
+        """.trimIndent()
+        
+        android.util.Log.d("AniListFavorite", "Executing toggle mutation for mediaId=$mediaId")
+        val success = graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
+        android.util.Log.d("AniListFavorite", "Toggle result: $success")
+        return success
     }
 }

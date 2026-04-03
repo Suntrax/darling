@@ -254,6 +254,18 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     private val _playbackPositions = MutableStateFlow<Map<String, Long>>(emptyMap())
     val playbackPositions: StateFlow<Map<String, Long>> = _playbackPositions.asStateFlow()
 
+    // TMDB episode cache - stores episode titles by anime ID
+    private val _tmdbEpisodeCache = MutableStateFlow<Map<Int, List<TmdbEpisode>>>(emptyMap())
+    val tmdbEpisodeCache: StateFlow<Map<Int, List<TmdbEpisode>>> = _tmdbEpisodeCache.asStateFlow()
+
+    fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? {
+        return _tmdbEpisodeCache.value[animeId]
+    }
+
+    fun cacheTmdbEpisodes(animeId: Int, episodes: List<TmdbEpisode>) {
+        _tmdbEpisodeCache.value = _tmdbEpisodeCache.value + (animeId to episodes)
+    }
+
     fun invalidateUserCache() {
         sharedPreferences.edit {
             remove(CACHE_HOME_DATA)
@@ -488,6 +500,10 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     fun cacheEpisodeInfo(key: String, info: EpisodeStreams) {
         _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
+    }
+
+    fun hasEpisodeInfo(key: String): Boolean {
+        return _prefetchedEpisodeInfo.value.containsKey(key)
     }
 
     fun hasStream(key: String): Boolean {

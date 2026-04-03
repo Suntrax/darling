@@ -62,13 +62,13 @@ fun HomeScreen(
     onToggleLocalFavorite: (Int) -> Unit = {},
     onToggleFavorite: (AnimeMedia) -> Unit = {},
     onPlayerStateChange: (Boolean) -> Unit = {},
-    onPlayEpisode: (AnimeMedia, Int) -> Unit = { _, _ -> },
+    onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     onLoginClick: () -> Unit = {},
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
     onShowDetailedAnimeFromMal: (Int) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap()
-) {
+) {    
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
     val completed by viewModel.completed.collectAsState()
@@ -189,9 +189,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .offset(x = (-4).dp),
+                            modifier = Modifier.offset(x = (-4).dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
@@ -200,9 +198,7 @@ fun HomeScreen(
                             enabled = isLoggedIn
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),
+                                modifier = Modifier.padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (isLoggedIn && userAvatar != null) { 
@@ -219,7 +215,7 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.width(12.dp)) 
                                 }
 
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column {
                                     if (isLoggedIn) {
                                         Text(userName ?: "My Anime", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                         Text("Tap to view profile", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -230,14 +226,21 @@ fun HomeScreen(
                         if (isLoggedIn) { 
                             Spacer(modifier = Modifier.width(8.dp))
                             Card(
-                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(IntrinsicSize.Min),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-                                )
+                                ),
+                                onClick = { showSearchOverlay = true }
                             ) {
-                                IconButton(onClick = { showSearchOverlay = true }) { 
-                                    Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground) 
-                                } 
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Search", style = MaterialTheme.typography.bodyLarge, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
+                                }
                             }
                         }
                     }
@@ -280,13 +283,15 @@ fun HomeScreen(
                             }
                         }
                         Card(
+                            modifier = Modifier.size(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-                            )
+                            ),
+                            onClick = { showSearchOverlay = true }
                         ) {
-                            IconButton(onClick = { showSearchOverlay = true }) {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(28.dp))
                             }
                         }
                     }
@@ -336,10 +341,10 @@ fun HomeScreen(
                             if (anime.latestEpisode != null && nextEp > released) {
                                 Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                             } else {
-                                onPlayEpisode(anime, nextEp)
+                                onPlayEpisode(anime, nextEp, null)
                             }
                         } else {
-                            onPlayEpisode(anime, 1)
+                            onPlayEpisode(anime, 1, null)
                         }
                     }
                     val onStatusClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showStatusDialog = true }
@@ -374,7 +379,10 @@ fun HomeScreen(
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "CURRENT") },
                                 onStatusClick = onStatusClick,
-                                onInfoClick = onInfoClick)
+                                onInfoClick = onInfoClick,
+                                listIndex = 0,
+                                screenKey = "home",
+                                isVisible = currentScreenIndex == 0)
                         }
 
                         if (effectivePlanningToWatch.isNotEmpty()) {
@@ -396,7 +404,10 @@ fun HomeScreen(
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "PLANNING") },
                                 onStatusClick = onStatusClick,
-                                onInfoClick = onInfoClick)
+                                onInfoClick = onInfoClick,
+                                listIndex = 1,
+                                screenKey = "home",
+                                isVisible = currentScreenIndex == 0)
                         }
 
                         if (effectiveCompleted.isNotEmpty()) {
@@ -418,7 +429,10 @@ fun HomeScreen(
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "COMPLETED") },
                                 onStatusClick = onStatusClick,
-                                onInfoClick = onInfoClick)
+                                onInfoClick = onInfoClick,
+                                listIndex = 2,
+                                screenKey = "home",
+                                isVisible = currentScreenIndex == 0)
                         }
 
                         if (effectiveOnHold.isNotEmpty()) {
@@ -440,7 +454,10 @@ fun HomeScreen(
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "PAUSED") },
                                 onStatusClick = onStatusClick,
-                                onInfoClick = onInfoClick)
+                                onInfoClick = onInfoClick,
+                                listIndex = 3,
+                                screenKey = "home",
+                                isVisible = currentScreenIndex == 0)
                         }
 
                         if (effectiveDropped.isNotEmpty()) {
@@ -462,7 +479,10 @@ fun HomeScreen(
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "DROPPED") },
                                 onStatusClick = onStatusClick,
-                                onInfoClick = onInfoClick)
+                                onInfoClick = onInfoClick,
+                                listIndex = 4,
+                                screenKey = "home",
+                                isVisible = currentScreenIndex == 0)
                         }
 
                         if (allListsEmpty && !showWelcomeCard) {
@@ -513,6 +533,7 @@ fun HomeScreen(
                 viewModel = viewModel,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
+                hideAdultContent = hideAdultContent,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,
                 completed = completed,
@@ -535,8 +556,8 @@ fun HomeScreen(
                 isOled = isOled,
                 disableMaterialColors = disableMaterialColors,
                 onDismiss = { showEpisodeSheet = false },
-                onEpisodeSelect = { episode ->
-                    onPlayEpisode(selectedAnime!!, episode)
+                onEpisodeSelect = { episode, title ->
+                    onPlayEpisode(selectedAnime!!, episode, title)
                     showEpisodeSheet = false
                 }
             )
@@ -547,8 +568,8 @@ fun HomeScreen(
                 isOled = isOled,
                 disableMaterialColors = disableMaterialColors,
                 onDismiss = { showEpisodeSheet = false },
-                onEpisodeSelect = { episode ->
-                    onPlayEpisode(selectedAnime!!, episode)
+                onEpisodeSelect = { episode, title ->
+                    onPlayEpisode(selectedAnime!!, episode, title)
                     showEpisodeSheet = false
                 }
             )
@@ -603,8 +624,8 @@ fun HomeScreen(
                 showDetailedAnimeScreen = false
                 firstAnime = null
             },
-            onPlayEpisode = { episode ->
-                onPlayEpisode(selectedAnime!!, episode)
+            onPlayEpisode = { episode, _ ->
+                onPlayEpisode(selectedAnime!!, episode, null)
                 showDetailedAnimeScreen = false
             },
             onUpdateStatus = { status ->

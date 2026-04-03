@@ -62,7 +62,7 @@ fun EpisodeSelectionDialog(
     isOled: Boolean,
     disableMaterialColors: Boolean = false,
     onDismiss: () -> Unit,
-    onEpisodeSelect: (Int) -> Unit
+    onEpisodeSelect: (Int, String?) -> Unit
 ) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
@@ -113,7 +113,7 @@ fun EpisodeSelectionDialog(
                             disableMaterialColors = disableMaterialColors,
                             onClick = {
                                 if (hasAired) {
-                                    onEpisodeSelect(episodeNum)
+                                    onEpisodeSelect(episodeNum, null)
                                 } else {
                                     Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
                                 }
@@ -125,7 +125,7 @@ fun EpisodeSelectionDialog(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     val nextEp = currentProgress + 1
                     if (nextEp <= released) {
-                        Button(onClick = { onEpisodeSelect(nextEp) }, shape = RoundedCornerShape(10.dp)) { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Resume Ep $nextEp") }
+                        Button(onClick = { onEpisodeSelect(nextEp, null) }, shape = RoundedCornerShape(10.dp)) { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Resume Ep $nextEp") }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     TextButton(onClick = onDismiss) { Text("Close") }
@@ -192,7 +192,7 @@ fun RichEpisodeScreen(
     isOled: Boolean,
     disableMaterialColors: Boolean = false,
     onDismiss: () -> Unit,
-    onEpisodeSelect: (Int) -> Unit
+    onEpisodeSelect: (Int, String?) -> Unit
 ) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
@@ -416,7 +416,7 @@ fun RichEpisodeScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             val nextEp = currentProgress + 1
-                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White)) } }
+                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp, null) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White)) } }
                             item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(0) } }, label = { Text("Ep 1") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) }
                             if (released > 1) { item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(released - 1) } }, label = { Text("Latest: Ep $released") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) } }
                         }
@@ -434,7 +434,8 @@ fun RichEpisodeScreen(
                             val hasAired = episodeNum <= released
                             RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, onSelect = { selectedEpisode = episodeNum }, onPlay = {
                                 if (hasAired) {
-                                    onEpisodeSelect(episodeNum)
+                                    val title = if (ep.title.isNotEmpty() && !ep.title.startsWith("Episode", ignoreCase = true)) ep.title else "Episode $episodeNum"
+                                    onEpisodeSelect(episodeNum, title)
                                 } else {
                                     Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                                 }
@@ -457,7 +458,7 @@ fun RichEpisodeScreen(
                                 onSelect = { selectedEpisode = episodeNum },
                                 onPlay = {
                                     if (hasAired) {
-                                        onEpisodeSelect(episodeNum)
+                                        onEpisodeSelect(episodeNum, "Episode $episodeNum")
                                     } else {
                                         Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                                     }

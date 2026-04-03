@@ -35,7 +35,7 @@ fun HomeAnimeInfoDialog(
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
     onDismiss: () -> Unit,
-    onPlayEpisode: (Int) -> Unit,
+    onPlayEpisode: (Int, String?) -> Unit,
     onUpdateStatus: (String) -> Unit = {},
     onRemove: () -> Unit = {}
 ) {
@@ -158,7 +158,7 @@ fun HomeAnimeInfoDialog(
 
                 if (canPlay) {
                     Button(
-                        onClick = { onPlayEpisode(if (selectedStatus == "PLANNING" || anime.listStatus == "PLANNING") 1 else nextEp) },
+                        onClick = { onPlayEpisode(if (selectedStatus == "PLANNING" || anime.listStatus == "PLANNING") 1 else nextEp, null) },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

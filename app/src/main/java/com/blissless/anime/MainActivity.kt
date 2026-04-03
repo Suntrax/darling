@@ -3,6 +3,8 @@ package com.blissless.anime
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import kotlin.math.absoluteValue
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -43,7 +45,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.MainScope
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.OverlayState
@@ -361,12 +366,6 @@ fun MainScreen(
     val pagerState = rememberPagerState(initialPage = startupScreen, pageCount = { 4 })
 
     var committedPage by remember { mutableIntStateOf(startupScreen) }
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.isScrollInProgress to pagerState.targetPage }
-            .collect { (isScrolling, targetPage) ->
-                committedPage = if (isScrolling) targetPage else pagerState.currentPage
-            }
-    }
 
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
@@ -461,6 +460,7 @@ fun MainScreen(
     var streamError by remember { mutableStateOf<String?>(null) }
 
     var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
+    var currentEpisodeTitle by remember { mutableStateOf<String?>(null) }
     var currentCategory by remember { mutableStateOf("sub") }
     var currentServerName by remember { mutableStateOf("") }
     var currentServerIndex by remember { mutableIntStateOf(0) }
@@ -643,8 +643,35 @@ fun MainScreen(
         }
     }
 
-    val onPlayEpisode: (AnimeMedia, Int) -> Unit = { anime, episode ->
-        loadAndPlayEpisode(anime, episode)
+    suspend fun getTmdbEpisodeTitle(anime: AnimeMedia, episode: Int): String {
+        // Try cache first
+        val cachedEpisodes = viewModel.getCachedTmdbEpisodes(anime.id)
+        if (cachedEpisodes != null) {
+            val title = cachedEpisodes.find { it.episode == episode }?.title
+            if (!title.isNullOrEmpty() && !title.startsWith("Episode", ignoreCase = true)) {
+                return title
+            }
+        }
+        // Fallback to fetching
+        return try {
+            val tmdbEpisodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
+            val title = tmdbEpisodes.find { it.episode == episode }?.title
+            if (!title.isNullOrEmpty() && !title.startsWith("Episode", ignoreCase = true)) title else "Episode $episode"
+        } catch (e: Exception) {
+            "Episode $episode"
+        }
+    }
+
+    val onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { anime, episode, title ->
+        if (title == null) {
+            scope.launch {
+                currentEpisodeTitle = getTmdbEpisodeTitle(anime, episode)
+                loadAndPlayEpisode(anime, episode)
+            }
+        } else {
+            currentEpisodeTitle = title
+            loadAndPlayEpisode(anime, episode)
+        }
     }
 
     val onPreviousEpisode: () -> Unit = {
@@ -690,6 +717,7 @@ fun MainScreen(
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
                         viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, prevEp)
                     }
 
                     if (isFallbackStream) {
@@ -734,6 +762,7 @@ fun MainScreen(
                         animekaiOutroEnd = result.stream.outroEnd
 
                         viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, prevEp)
 
                         if (result.isFallback) {
                             val message = if (result.requestedCategory == "dub") {
@@ -795,6 +824,7 @@ fun MainScreen(
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
                         viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
+                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
                     }
 
                     if (isFallbackStream) {
@@ -839,6 +869,7 @@ fun MainScreen(
                         animekaiOutroEnd = result.stream.outroEnd
 
                         viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
+                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
 
                         if (result.isFallback) {
                             val message = if (result.requestedCategory == "dub") {
@@ -1005,7 +1036,7 @@ fun MainScreen(
                 }
             },
             onSwipeToClose = { overlayState = OverlayState.None },
-            onPlayEpisode = { episode ->
+            onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
                     id = exploreDialog.anime.id,
                     title = exploreDialog.anime.title,
@@ -1024,7 +1055,7 @@ fun MainScreen(
                     malId = exploreDialog.anime.malId
                 )
                 viewModel.addExploreAnimeToList(exploreDialog.anime, "CURRENT")
-                onPlayEpisode(animeMedia, episode)
+                onPlayEpisode(animeMedia, episode, null)
                 overlayState = OverlayState.None
             },
             onUpdateStatus = { status ->
@@ -1148,7 +1179,7 @@ fun MainScreen(
             isFavorite = isAnimeFavorite,
             onDismiss = { detailedAnimeFromMal = null },
             onSwipeToClose = { detailedAnimeFromMal = null },
-            onPlayEpisode = { episode ->
+            onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
                     id = detailedData.id,
                     title = detailedData.title,
@@ -1180,7 +1211,7 @@ fun MainScreen(
                     format = detailedData.format,
                     malId = detailedData.malId
                 ), "CURRENT")
-                onPlayEpisode(animeMedia, episode)
+                onPlayEpisode(animeMedia, episode, null)
                 detailedAnimeFromMal = null
             },
             onUpdateStatus = { status ->
@@ -1305,6 +1336,7 @@ fun MainScreen(
                 totalEpisodes = totalEpisodes,
                 latestAiredEpisode = released,
                 animeName = anime.title,
+                episodeTitle = currentEpisodeTitle,
                 animeId = anime.id,
                 malId = anime.malId ?: 0,
                 animeYear = anime.year,
@@ -1399,7 +1431,13 @@ fun MainScreen(
                             selected = pagerState.targetPage == index,
                             onClick = {
                                 scope.launch {
-                                    pagerState.animateScrollToPage(index)
+                                    val currentPage = pagerState.currentPage
+                                    val isAdjacent = (index - currentPage).absoluteValue <= 1
+                                    if (isAdjacent) {
+                                        pagerState.animateScrollToPage(index)
+                                    } else {
+                                        pagerState.scrollToPage(index)
+                                    }
                                 }
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -1417,7 +1455,14 @@ fun MainScreen(
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 HorizontalPager(
                     state = pagerState,
-                    beyondViewportPageCount = 2
+                    beyondViewportPageCount = 2,
+                    flingBehavior = PagerDefaults.flingBehavior(
+                        state = pagerState,
+                        snapAnimationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    )
                 ) { page ->
                     val isCurrentPage = pagerState.currentPage == page
                     val isScheduleVisible = pagerState.currentPage == 0
@@ -1499,7 +1544,6 @@ fun MainScreen(
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
                             onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
-                            currentScreenIndex = committedPage,
                             playbackPositions = playbackPositions
                         )
                         3 -> SettingsScreen(

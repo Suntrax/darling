@@ -63,7 +63,8 @@ fun UserProfileDialog(
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
     val userId by viewModel.userId.collectAsState()
-    val aniListFavorites by viewModel.aniListFavorites.collectAsState()
+    val anilistFavs by viewModel.aniListFavorites.collectAsState()
+    val anilistFavoriteIds by viewModel.aniListFavoriteIds.collectAsState()
     val userActivity by viewModel.userActivity.collectAsState()
     val loginProvider by viewModel.loginProvider.collectAsState()
     val jikanFavorites by viewModel.jikanFavorites.collectAsState()
@@ -94,7 +95,8 @@ fun UserProfileDialog(
         if (userId != null) {
             if (loginProvider == com.blissless.anime.data.LoginProvider.ANILIST) {
                 viewModel.fetchUserActivity()
-                viewModel.fetchAniListFavorites()
+                // Load favorites from local storage (UserPreferences)
+                viewModel.loadAniListFavoritesFromStorage()
             } else if (loginProvider == com.blissless.anime.data.LoginProvider.MAL) {
                 viewModel.fetchJikanUserData()
             }
@@ -302,7 +304,7 @@ fun UserProfileDialog(
                             } else if (tab == 0) {
                                 FavoritesTab(
                                     viewModel = viewModel,
-                                    favorites = aniListFavorites,
+                                    favorites = anilistFavs,
                                     isOled = isOled,
                                     onAnimeClick = { anime ->
                                         onShowAnimeDialog(anime, null)

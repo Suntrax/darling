@@ -3,8 +3,9 @@ package com.blissless.anime.ui.components
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlin.math.absoluteValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -28,6 +31,8 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -70,7 +75,7 @@ fun SearchOverlay(
     favoriteIds: Set<Int>,
     onToggleFavorite: (AnimeMedia) -> Unit,
     onClose: () -> Unit,
-    onPlayEpisode: (AnimeMedia, Int) -> Unit
+    onPlayEpisode: (AnimeMedia, Int, String?) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
@@ -170,7 +175,6 @@ fun SearchOverlay(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(16.dp)
         ) {
             // Search bar - taller and positioned higher
@@ -184,7 +188,7 @@ fun SearchOverlay(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -235,14 +239,18 @@ fun SearchOverlay(
 
                     IconButton(
                         onClick = {
-                            keyboardController?.hide()
-                            onClose()
+                            if (searchQuery.isNotEmpty()) {
+                                searchQuery = ""
+                            } else {
+                                keyboardController?.hide()
+                                onClose()
+                            }
                         },
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
                             Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = if (searchQuery.isNotEmpty()) "Clear" else "Close",
                             tint = Color.White
                         )
                     }
@@ -266,17 +274,57 @@ fun SearchOverlay(
                     modifier = Modifier.padding(16.dp)
                 )
             } else {
+                val listState = rememberLazyListState()
+                
                 LazyColumn(
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(filteredSearchResults) { index, anime ->
-                        AnimatedVisibility(
-                            visible = resultsVisible,
-                            enter = fadeIn(animationSpec = tween(300, delayMillis = index * 50, easing = FastOutSlowInEasing)) +
-                                    slideInVertically(
-                                        animationSpec = tween(300, delayMillis = index * 50, easing = FastOutSlowInEasing),
-                                        initialOffsetY = { it / 2 }
-                                    )
+                        val isScrolling by remember {
+                            derivedStateOf { listState.isScrollInProgress }
+                        }
+                        
+                        val layoutInfo = listState.layoutInfo
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val itemInfo = visibleItems.find { it.index == index }
+                        
+                        val centerOffset = if (itemInfo != null) {
+                            val itemCenter = itemInfo.offset + itemInfo.size / 2
+                            val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                            (itemCenter - screenCenter) / screenCenter
+                        } else {
+                            0f
+                        }
+                        
+                        val animatedOffset by animateFloatAsState(
+                            targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                            animationSpec = if (isScrolling) {
+                                spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                )
+                            } else {
+                                spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            },
+                            label = "centerOffset"
+                        )
+                        
+                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
+                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                        val scrollParallax = animatedOffset * 25f
+                        
+                        Box(
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    scaleX = scrollScale
+                                    scaleY = scrollScale
+                                    alpha = scrollAlpha
+                                    translationY = scrollParallax
+                                }
                         ) {
                             SearchResultItem(
                                 anime = anime,
@@ -337,7 +385,7 @@ fun SearchOverlay(
                     firstAnime = null
                 }
             },
-            onPlayEpisode = { episode ->
+            onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
                     id = selectedAnime!!.id,
                     title = selectedAnime!!.title,
@@ -352,7 +400,7 @@ fun SearchOverlay(
                     listStatus = "",
                     listEntryId = 0
                 )
-                onPlayEpisode(animeMedia, episode)
+                onPlayEpisode(animeMedia, episode, null)
                 showDetailDialog = false
             },
             onUpdateStatus = { status ->
