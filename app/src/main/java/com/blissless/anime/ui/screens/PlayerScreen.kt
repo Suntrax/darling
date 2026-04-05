@@ -130,7 +130,8 @@ fun PlayerScreen(
     onPlaybackError: (() -> Unit)? = null,
     onPrefetchAdjacent: (() -> Unit)? = null,
     onInvalidateStreamCache: (() -> Unit)? = null,
-    onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null }
+    onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null },
+    onBackClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -148,6 +149,33 @@ fun PlayerScreen(
         AspectRatioFrameLayout.RESIZE_MODE_FILL to "Stretch",
         AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to "16:9"
     )
+    
+    var isFullscreen by remember { mutableStateOf(true) }
+    
+    // Handle fullscreen toggle
+    fun toggleFullscreen() {
+        isFullscreen = !isFullscreen
+        activity?.let { act ->
+            if (isFullscreen) {
+                act.window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
+    }
+    
+    // Exit fullscreen when closing
+    fun exitFullscreen() {
+        if (isFullscreen) {
+            isFullscreen = false
+            activity?.let { act ->
+                act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
+    }
 
     var showControls by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(true) }
@@ -161,6 +189,9 @@ fun PlayerScreen(
     var showServerMenu by remember { mutableStateOf(false) }
     var showQualityMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
+
+    var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
+    var lastTapTime by remember { mutableLongStateOf(0L) }
 
     var selectedQuality by remember { mutableStateOf(currentQuality) }
 
@@ -451,20 +482,36 @@ fun PlayerScreen(
 
     fun seekBy(milliseconds: Long, isForward: Boolean) {
         isManuallySeeking = true
-        val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
+        // Keep controls visible during seeking
+        showControls = true
+        controlsVisible = true
+        
+        // Handle accumulated skips within 300ms window
+        val now = System.currentTimeMillis()
+        if (now - lastTapTime < 300) {
+            accumulatedSkipMs += milliseconds
+        } else {
+            accumulatedSkipMs = milliseconds
+        }
+        lastTapTime = now
+        
+        val totalSkipMs = accumulatedSkipMs
+        val newPosition = (exoPlayer.currentPosition + totalSkipMs).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
-        // Immediately update slider position for instant feedback
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
-        // Don't autoplay when user is manually skipping
-        val seconds = abs(milliseconds / 1000)
-        skipIndicatorText = if (milliseconds > 0) "+${seconds}s" else "-${seconds}s"
-        skipIsForward = isForward
+        
+        // Display accumulated skip time
+        val totalSeconds = kotlin.math.abs(totalSkipMs / 1000)
+        skipIndicatorText = if (totalSkipMs > 0) "+${totalSeconds}s" else "-${totalSeconds}s"
+        skipIsForward = totalSkipMs >= 0
         showSkipIndicator = true
+        
         scope.launch {
             delay(1000)
             showSkipIndicator = false
             isManuallySeeking = false
+            accumulatedSkipMs = 0L
         }
     }
 
@@ -711,6 +758,7 @@ fun PlayerScreen(
         // These handle seeking and toggling controls. Defined first so they are "under" the padding zones.
 
         // Left Seek Zone (30% width, offset by padding)
+        var lastLeftTapTime by remember { mutableLongStateOf(0L) }
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -719,8 +767,19 @@ fun PlayerScreen(
                 .align(Alignment.CenterStart)
                 .pointerInput(backwardSkipSeconds) {
                     detectTapGestures(
-                        onTap = { if (!hasError) showControls = !showControls },
-                        onDoubleTap = { if (!hasError) seekBy(-(backwardSkipSeconds * 1000L), false) }
+                        onTap = { 
+                            if (!hasError) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastLeftTapTime < 300) {
+                                    // Double tap - seek
+                                    seekBy(-(backwardSkipSeconds * 1000L), false)
+                                } else {
+                                    // Single tap - toggle controls
+                                    showControls = !showControls
+                                }
+                                lastLeftTapTime = now
+                            }
+                        }
                     )
                 }
         )
@@ -735,6 +794,7 @@ fun PlayerScreen(
         )
 
         // Right Seek Zone (30% width, offset by padding)
+        var lastRightTapTime by remember { mutableLongStateOf(0L) }
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -743,8 +803,19 @@ fun PlayerScreen(
                 .align(Alignment.CenterEnd)
                 .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
-                        onTap = { if (!hasError) showControls = !showControls },
-                        onDoubleTap = { if (!hasError) seekBy(forwardSkipSeconds * 1000L, true) }
+                        onTap = { 
+                            if (!hasError) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastRightTapTime < 300) {
+                                    // Double tap - seek
+                                    seekBy(forwardSkipSeconds * 1000L, true)
+                                } else {
+                                    // Single tap - toggle controls
+                                    showControls = !showControls
+                                }
+                                lastRightTapTime = now
+                            }
+                        }
                     )
                 }
         )
@@ -842,6 +913,13 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
+                // Darkening overlay when controls are visible
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = if (controlsVisible) 0.3f else 0f))
+                )
+
                 // Top gradient - slides from top
                 AnimatedVisibility(
                     visible = controlsVisible,
@@ -861,7 +939,25 @@ fun PlayerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            IconButton(
+                                onClick = { 
+                                    exitFullscreen()
+                                    onBackClick?.invoke() 
+                                },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Column {
                             if (animeName.isNotEmpty()) {
                                 Text(
                                     text = animeName,
@@ -922,6 +1018,9 @@ fun PlayerScreen(
                                     )
                                 }
                             }
+                        }
+
+                        // Closing Column for text content
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
@@ -1376,8 +1475,17 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Time on the right (already showing in Row above, this is spacer)
-                        Spacer(modifier = Modifier.width(1.dp))
+                        // Fullscreen button on the far right
+                        IconButton(
+                            onClick = { toggleFullscreen() },
+                            modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                        ) {
+                            Icon(
+                                imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
                 }

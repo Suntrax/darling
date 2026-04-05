@@ -1416,7 +1416,11 @@ fun MainScreen(
                 disableMaterialColors = disableMaterialColors,
                 showBufferIndicator = showBufferIndicator,
                 bufferAheadSeconds = bufferAheadSeconds,
-                onGetCacheDataSourceFactory = { referer -> viewModel.getCacheDataSourceFactory(referer) }
+                onGetCacheDataSourceFactory = { referer -> viewModel.getCacheDataSourceFactory(referer) },
+                onBackClick = { 
+                    showPlayer = false
+                    currentVideoUrl = null
+                }
             )
         }
 
