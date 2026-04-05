@@ -1617,6 +1617,11 @@ class MainViewModel : ViewModel() {
                 else if (it.site == "dailymotion") "https://www.dailymotion.com/video/${it.id}"
                 else null 
             },
+            trailerThumbnail = media.trailer?.let {
+                if (it.site == "youtube" && it.id != null) {
+                    "https://img.youtube.com/vi/${it.id}/maxresdefault.jpg"
+                } else null
+            },
             staff = media.staff
         )
         cacheManager.cacheDetailedAnime(animeId, detailedData)
@@ -1656,8 +1661,12 @@ class MainViewModel : ViewModel() {
     fun fetchAniListFavorites() {
         val userId = _userId.value ?: return
         viewModelScope.launch {
+            android.util.Log.d("AniListFavorite", "fetchAniListFavorites: fetching for userId=$userId")
             repository.fetchUserFavorites(userId)?.let { response ->
+                android.util.Log.d("AniListFavorite", "fetchAniListFavorites: got ${response.data.User.favourites.anime.nodes.size} favorites")
                 _aniListFavorites.value = response.data.User.favourites.anime.nodes
+            } ?: run {
+                android.util.Log.d("AniListFavorite", "fetchAniListFavorites: API returned null")
             }
         }
     }

@@ -1202,10 +1202,10 @@ fun MainScreen(
                 }
             },
             onCharacterClick = { characterId ->
-                android.util.Log.d("MAIN_DEBUG", "onCharacterClick called with id=$characterId, animeId=${exploreDialog.anime.id}")
-                android.util.Log.d("MAIN_DEBUG", "Setting overlayState to CharacterDialog")
+                val ctx = context
+                android.util.Log.d("MAIN_DEBUG", "onCharacterClick called with id=$characterId")
+                android.widget.Toast.makeText(ctx, "Opening character: $characterId", android.widget.Toast.LENGTH_SHORT).show()
                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = exploreDialog.anime.id)
-                android.util.Log.d("MAIN_DEBUG", "overlayState is now: $overlayState")
             },
             onStaffClick = { staffId ->
                 android.util.Log.d("MAIN_DEBUG", "onStaffClick called with id=$staffId, animeId=${exploreDialog.anime.id}")

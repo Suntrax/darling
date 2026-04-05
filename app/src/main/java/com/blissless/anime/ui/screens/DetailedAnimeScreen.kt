@@ -304,27 +304,6 @@ fun DetailedAnimeScreen(
                             )
                         )
                     )
-                    displayData.trailerUrl?.let { trailerUrl ->
-                        FilledIconButton(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(trailerUrl))
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(56.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = Color.Black.copy(alpha = 0.7f)
-                            )
-                        ) {
-                            Icon(
-                                Icons.Default.PlayCircle,
-                                contentDescription = "Watch Trailer",
-                                tint = Color.White,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
-                    }
                 }
             }
 
@@ -720,11 +699,57 @@ fun DetailedAnimeScreen(
                                 displayData.startDate?.let {
                                     InfoRow("Started", formatDate(it), isOled)
                                 }
-                                if (displayData.status != "RELEASING") {
+                                if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
                                     displayData.endDate?.let {
                                         InfoRow("Ended", formatDate(it), isOled)
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                if (displayData.trailerUrl != null) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .clickable {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(displayData.trailerUrl))
+                                    context.startActivity(intent)
+                                },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.PlayCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Trailer", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    Text("Watch on YouTube", style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Icon(
+                                    Icons.Default.OpenInNew,
+                                    contentDescription = "Open",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
@@ -1055,9 +1080,10 @@ fun DetailedAnimeScreen(
                                                 .width(80.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .clickable { 
-                                                    android.util.Log.d("DETAIL_DEBUG", "Character clicked: ${character.id}, calling onCharacterClick...")
-                                                    onCharacterClick(character.id)
-                                                    android.util.Log.d("DETAIL_DEBUG", "onCharacterClick called")
+                                                    val id = character.id
+                                                    android.util.Log.d("DETAIL_DEBUG", "Character clicked: $id")
+                                                    android.widget.Toast.makeText(context, "Calling onCharacterClick for: $id", android.widget.Toast.LENGTH_SHORT).show()
+                                                    onCharacterClick(id)
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1178,6 +1204,7 @@ fun DetailedAnimeScreen(
                                                     Text(
                                                         role.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
                                                         style = MaterialTheme.typography.labelSmall,
+                                                        maxLines = 1,
                                                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                                                     )
                                                 }

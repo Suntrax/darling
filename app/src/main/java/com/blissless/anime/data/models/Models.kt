@@ -182,6 +182,7 @@ data class DetailedAnimeData(
     val nextAiringTime: Long? = null,
     val isAdult: Boolean = false,
     val trailerUrl: String? = null,
+    val trailerThumbnail: String? = null,
     val staff: DetailedAnimeStaff? = null,
     val recommendations: List<ExploreAnime> = emptyList(),
     val latestEpisode: Int? = null,

@@ -1689,8 +1689,11 @@ class AnimeRepository(
 
         return graphqlRequest(query, mapOf("userId" to userId))?.let {
             try {
-                json.decodeFromString<UserFavoritesResponse>(it)
+                val response = json.decodeFromString<UserFavoritesResponse>(it)
+                android.util.Log.d("REPO_DEBUG", "UserFavorites response: ${response.data.User.favourites.anime.nodes.size} items")
+                response
             } catch (e: Exception) {
+                android.util.Log.e("REPO_DEBUG", "Failed to parse user favorites: ${e.message}")
                 null
             }
         }

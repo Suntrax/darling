@@ -95,7 +95,9 @@ fun UserProfileDialog(
         if (userId != null) {
             if (loginProvider == com.blissless.anime.data.LoginProvider.ANILIST) {
                 viewModel.fetchUserActivity()
-                // Load favorites from local storage (UserPreferences)
+                // Fetch fresh favorites from AniList API
+                viewModel.fetchAniListFavorites()
+                // Also load from local storage as fallback
                 viewModel.loadAniListFavoritesFromStorage()
             } else if (loginProvider == com.blissless.anime.data.LoginProvider.MAL) {
                 viewModel.fetchJikanUserData()
@@ -119,7 +121,7 @@ fun UserProfileDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
