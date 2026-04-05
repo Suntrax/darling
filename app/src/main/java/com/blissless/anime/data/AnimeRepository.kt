@@ -94,10 +94,17 @@ class AnimeRepository(
             variables = variables,
             requiresAuth = false,
             clientIds = CLIENT_IDS,
-            useCache = true,
+            useCache = false,  // Disable cache for testing
             parser = { it }
         )
 
+        if (result.error != null) {
+            android.util.Log.e("REPO_DEBUG", "GraphQL error: ${result.error}")
+        }
+        if (result.data == null) {
+            android.util.Log.e("REPO_DEBUG", "GraphQL returned no data")
+        }
+        
         return result.data
     }
 
@@ -693,6 +700,28 @@ class AnimeRepository(
                     startDate { year month day }
                     endDate { year month day }
                     nextAiringEpisode { episode airingAt }
+                    isAdult
+                    characters(perPage: 10) {
+                        nodes {
+                            id
+                            name { full }
+                            image { large }
+                        }
+                    }
+                    trailer {
+                        id
+                        site
+                    }
+                    staff(perPage: 10) {
+                        edges {
+                            node {
+                                id
+                                name { full }
+                                image { large }
+                            }
+                            role
+                        }
+                    }
                     relations {
                         edges {
                             relationType
@@ -711,11 +740,17 @@ class AnimeRepository(
             }
         """.trimIndent()
 
-        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
+        android.util.Log.d("REPO_DEBUG", "Executing fetchDetailedAnime for id=$animeId")
+        
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
+            android.util.Log.d("REPO_DEBUG", "Raw response length: ${response.length}")
             try {
-                val data = json.decodeFromString<DetailedAnimeResponse>(it)
+                val data = json.decodeFromString<DetailedAnimeResponse>(response)
+                android.util.Log.d("REPO_DEBUG", "Parsed detailed anime: id=${data.data.Media?.id}, title=${data.data.Media?.title?.romaji}")
                 data.data.Media
             } catch (e: Exception) {
+                android.util.Log.e("REPO_DEBUG", "Failed to parse detailed anime: ${e.message}")
+                android.util.Log.e("REPO_DEBUG", "Response preview: ${response.take(500)}")
                 null
             }
         }
@@ -783,6 +818,134 @@ class AnimeRepository(
     // ============================================
     // Mutations
     // ============================================
+
+    suspend fun fetchCharacter(characterId: Int): CharacterData? {
+        val query = """
+            query (${'$'}id: Int!) {
+                Character(id: ${'$'}id) {
+                    id
+                    name { full native }
+                    image { large medium }
+                    description(asHtml: false)
+                    anime: media(perPage: 10, sort: POPULARITY_DESC) {
+                        nodes {
+                            id
+                            title { romaji english }
+                            coverImage { large }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("id" to characterId))?.let { response ->
+            try {
+                val data = json.decodeFromString<CharacterResponse>(response)
+                data.data.Character
+            } catch (e: Exception) {
+                android.util.Log.e("REPO_DEBUG", "Failed to parse character: ${e.message}")
+                null
+            }
+        }
+    }
+
+    suspend fun fetchStaff(staffId: Int): StaffData? {
+        val query = """
+            query (${'$'}id: Int!) {
+                Staff(id: ${'$'}id) {
+                    id
+                    name { full native }
+                    image { large medium }
+                    description(asHtml: false)
+                    anime: staffMedia(perPage: 10, sort: POPULARITY_DESC) {
+                        nodes {
+                            id
+                            title { romaji english }
+                            coverImage { large }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("id" to staffId))?.let { response ->
+            try {
+                val data = json.decodeFromString<StaffResponse>(response)
+                data.data.Staff
+            } catch (e: Exception) {
+                android.util.Log.e("REPO_DEBUG", "Failed to parse staff: ${e.message}")
+                null
+            }
+        }
+    }
+
+    suspend fun fetchAllCharacters(animeId: Int): List<CharacterData>? {
+        val query = """
+            query (${'$'}id: Int!) {
+                Media(id: ${'$'}id, type: ANIME) {
+                    characters(perPage: 50) {
+                        nodes {
+                            id
+                            name { full native }
+                            image { large medium }
+                            description(asHtml: false)
+                            anime: media(perPage: 5, sort: POPULARITY_DESC) {
+                                nodes {
+                                    id
+                                    title { romaji english }
+                                    coverImage { large }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
+            try {
+                val data = json.decodeFromString<AllCharactersResponse>(response)
+                data.data.Media?.characters?.nodes
+            } catch (e: Exception) {
+                android.util.Log.e("REPO_DEBUG", "Failed to parse all characters: ${e.message}")
+                null
+            }
+        }
+    }
+
+    suspend fun fetchAllStaff(animeId: Int): List<StaffData>? {
+        val query = """
+            query (${'$'}id: Int!) {
+                Media(id: ${'$'}id, type: ANIME) {
+                    staff(perPage: 50) {
+                        nodes {
+                            id
+                            name { full native }
+                            image { large medium }
+                            description(asHtml: false)
+                            anime: staffMedia(perPage: 5, sort: POPULARITY_DESC) {
+                                nodes {
+                                    id
+                                    title { romaji english }
+                                    coverImage { large }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        """.trimIndent()
+
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
+            try {
+                val data = json.decodeFromString<AllStaffResponse>(response)
+                data.data.Media?.staff?.nodes
+            } catch (e: Exception) {
+                android.util.Log.e("REPO_DEBUG", "Failed to parse all staff: ${e.message}")
+                null
+            }
+        }
+    }
 
     suspend fun updateProgress(mediaId: Int, progress: Int): Boolean {
         cacheManager.invalidateUserCache()

@@ -202,6 +202,7 @@ fun PlayerScreen(
     var showSkipIndicator by remember { mutableStateOf(false) }
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
+    var skipResetJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     LaunchedEffect(showControls, hasError, showSkipIndicator) {
         if (showControls || hasError || showSkipIndicator) {
@@ -486,6 +487,9 @@ fun PlayerScreen(
         showControls = true
         controlsVisible = true
         
+        // Cancel any existing reset job
+        skipResetJob?.cancel()
+        
         // Handle accumulated skips within 300ms window
         val now = System.currentTimeMillis()
         if (now - lastTapTime < 300) {
@@ -495,20 +499,21 @@ fun PlayerScreen(
         }
         lastTapTime = now
         
-        val totalSkipMs = accumulatedSkipMs
-        val newPosition = (exoPlayer.currentPosition + totalSkipMs).coerceIn(0, exoPlayer.duration)
+        // Always seek by single skip amount, not accumulated
+        val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
         
         // Display accumulated skip time
-        val totalSeconds = kotlin.math.abs(totalSkipMs / 1000)
-        skipIndicatorText = if (totalSkipMs > 0) "+${totalSeconds}s" else "-${totalSeconds}s"
-        skipIsForward = totalSkipMs >= 0
+        val totalSeconds = kotlin.math.abs(accumulatedSkipMs / 1000)
+        skipIndicatorText = if (accumulatedSkipMs > 0) "+${totalSeconds}s" else "-${totalSeconds}s"
+        skipIsForward = accumulatedSkipMs >= 0
         showSkipIndicator = true
         
-        scope.launch {
-            delay(1000)
+        // Schedule reset after 1.5 seconds of no taps
+        skipResetJob = scope.launch {
+            delay(1500)
             showSkipIndicator = false
             isManuallySeeking = false
             accumulatedSkipMs = 0L
@@ -861,51 +866,8 @@ fun PlayerScreen(
         )
 
         // 4. UI Overlays (Top Layer)
-        AnimatedVisibility(
-            visible = showSkipOpeningButton,
-            enter = fadeIn() + scaleIn(initialScale = 0.8f),
-            exit = fadeOut() + scaleOut(targetScale = 0.8f),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
-        ) {
-            SkipIconButton(
-                icon = Icons.Default.FastForward,
-                label = "Skip\nOpening",
-                backgroundColor = Color.Black.copy(alpha = 0.6f),
-                iconTint = Color.White,
-                onClick = {
-                    val ts = effectiveTimestamps
-                    if (ts.introEnd != null) {
-                        exoPlayer.seekTo(ts.introEnd * 1000L)
-                        exoPlayer.play()
-                        hasSkippedIntro = true
-                    }
-                }
-            )
-        }
-
-        AnimatedVisibility(
-            visible = showSkipEndingButton,
-            enter = fadeIn() + scaleIn(initialScale = 0.8f),
-            exit = fadeOut() + scaleOut(targetScale = 0.8f),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
-        ) {
-            SkipIconButton(
-                icon = Icons.Default.SkipNext,
-                label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
-                backgroundColor = Color.Black.copy(alpha = 0.6f),
-                iconTint = Color.White,
-                onClick = {
-                    if (isLatestEpisode || !creditsAtEnd) {
-                        if (exoPlayer.duration > 0) {
-                            exoPlayer.seekTo(exoPlayer.duration)
-                        }
-                    } else if (!isChangingServer) {
-                        onNextEpisode?.invoke()
-                    }
-                }
-            )
-        }
-
+        
+        // Controls UI with darkening overlay (drawn first)
         AnimatedVisibility(
             visible = controlsVisible,
             enter = fadeIn(animationSpec = tween(150)),
@@ -948,7 +910,7 @@ fun PlayerScreen(
                                     exitFullscreen()
                                     onBackClick?.invoke() 
                                 },
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                             ) {
                                 Icon(
                                     Icons.Default.ArrowBack,
@@ -957,6 +919,7 @@ fun PlayerScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Column {
                             if (animeName.isNotEmpty()) {
                                 Text(
@@ -1224,7 +1187,51 @@ fun PlayerScreen(
                             Text(skipIndicatorText, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         }
                     }
-                }
+                    }
+
+                    // Skip Opening/Ending buttons - outside controls visibility so they don't get darkened
+                    AnimatedVisibility(
+                        visible = showSkipOpeningButton || showSkipEndingButton,
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            if (showSkipOpeningButton) {
+                                SkipIconButton(
+                                    icon = Icons.Default.FastForward,
+                                    label = "Skip\nOpening",
+                                    backgroundColor = Color.Black.copy(alpha = 0.6f),
+                                    iconTint = Color.White,
+                                    onClick = {
+                                        val ts = effectiveTimestamps
+                                        if (ts.introEnd != null) {
+                                            exoPlayer.seekTo(ts.introEnd * 1000L)
+                                            exoPlayer.play()
+                                            hasSkippedIntro = true
+                                        }
+                                    }
+                                )
+                            }
+                            if (showSkipEndingButton) {
+                                SkipIconButton(
+                                    icon = Icons.Default.SkipNext,
+                                    label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
+                                    backgroundColor = Color.Black.copy(alpha = 0.6f),
+                                    iconTint = Color.White,
+                                    onClick = {
+                                        if (isLatestEpisode || !creditsAtEnd) {
+                                            if (exoPlayer.duration > 0) {
+                                                exoPlayer.seekTo(exoPlayer.duration)
+                                            }
+                                        } else if (!isChangingServer) {
+                                            onNextEpisode?.invoke()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                 if (isLoadingStream || isChangingServer) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp), color = Color.White)
@@ -1432,7 +1439,7 @@ fun PlayerScreen(
                                 onClick = { showSpeedMenu = true }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
@@ -1478,7 +1485,7 @@ fun PlayerScreen(
                         // Fullscreen button on the far right
                         IconButton(
                             onClick = { toggleFullscreen() },
-                            modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                            modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                         ) {
                             Icon(
                                 imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,

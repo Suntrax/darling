@@ -181,12 +181,13 @@ data class DetailedAnimeData(
     val nextAiringEpisode: Int? = null,
     val nextAiringTime: Long? = null,
     val isAdult: Boolean = false,
-    val countryOfOrigin: String? = null,
     val trailerUrl: String? = null,
+    val staff: DetailedAnimeStaff? = null,
     val recommendations: List<ExploreAnime> = emptyList(),
     val latestEpisode: Int? = null,
     val malId: Int? = null,
-    val relations: List<AnimeRelation> = emptyList()
+    val relations: List<AnimeRelation> = emptyList(),
+    val characters: DetailedAnimeCharacters? = null
 )
 
 @Serializable
@@ -616,7 +617,11 @@ data class DetailedAnimeMedia(
     val startDate: FuzzyDate? = null,
     val endDate: FuzzyDate? = null,
     val nextAiringEpisode: NextAiringEpisode? = null,
-    val relations: AnimeRelations? = null
+    val relations: AnimeRelations? = null,
+    val isAdult: Boolean = false,
+    val characters: DetailedAnimeCharacters? = null,
+    val trailer: MediaTrailer? = null,
+    val staff: DetailedAnimeStaff? = null
 )
 
 @Serializable
@@ -836,3 +841,108 @@ data class LocalAnimeEntry(
     val year: Int? = null,
     val averageScore: Int? = null
 )
+
+@Serializable
+data class DetailedAnimeCharacters(
+    val nodes: List<DetailedAnimeCharacterNode> = emptyList()
+)
+
+@Serializable
+data class DetailedAnimeCharacterNode(
+    val id: Int,
+    val name: DetailedCharacterName? = null,
+    val image: MediaCoverImage? = null
+)
+
+@Serializable
+data class DetailedCharacterName(
+    val full: String? = null,
+    val native: String? = null
+)
+
+@Serializable
+data class DetailedAnimeStaff(
+    val edges: List<DetailedAnimeStaffEdge> = emptyList()
+)
+
+@Serializable
+data class DetailedAnimeStaffEdge(
+    val node: DetailedAnimeStaffNode? = null,
+    val role: String? = null
+)
+
+@Serializable
+data class DetailedAnimeStaffNode(
+    val id: Int,
+    val name: DetailedCharacterName? = null,
+    val image: MediaCoverImage? = null
+)
+
+@Serializable
+data class MediaTrailer(
+    val id: String? = null,
+    val site: String? = null
+)
+
+@Serializable
+data class CharacterData(
+    val id: Int,
+    val name: DetailedCharacterName? = null,
+    val image: MediaCoverImage? = null,
+    val description: String? = null,
+    val anime: CharacterAnimeConnection? = null
+)
+
+@Serializable
+data class CharacterAnimeConnection(
+    val nodes: List<CharacterAnimeNode> = emptyList()
+)
+
+@Serializable
+data class CharacterAnimeNode(
+    val id: Int,
+    val title: MediaTitle? = null,
+    val coverImage: MediaCoverImage? = null
+)
+
+@Serializable
+data class StaffData(
+    val id: Int,
+    val name: DetailedCharacterName? = null,
+    val image: MediaCoverImage? = null,
+    val description: String? = null,
+    val anime: StaffAnimeConnection? = null
+)
+
+@Serializable
+data class StaffAnimeConnection(
+    val nodes: List<CharacterAnimeNode> = emptyList()
+)
+
+@Serializable
+data class CharacterResponse(val data: CharacterResponseData)
+@Serializable
+data class CharacterResponseData(val Character: CharacterData?)
+
+@Serializable
+data class StaffResponse(val data: StaffResponseData)
+@Serializable
+data class StaffResponseData(val Staff: StaffData?)
+
+@Serializable
+data class AllCharactersResponse(val data: AllCharactersData)
+@Serializable
+data class AllCharactersData(val Media: AllCharactersMedia?)
+@Serializable
+data class AllCharactersMedia(val characters: AllCharactersConnection?)
+@Serializable
+data class AllCharactersConnection(val nodes: List<CharacterData> = emptyList())
+
+@Serializable
+data class AllStaffResponse(val data: AllStaffData)
+@Serializable
+data class AllStaffData(val Media: AllStaffMedia?)
+@Serializable
+data class AllStaffMedia(val staff: AllStaffConnection?)
+@Serializable
+data class AllStaffConnection(val nodes: List<StaffData> = emptyList())

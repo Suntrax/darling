@@ -1572,18 +1572,14 @@ class MainViewModel : ViewModel() {
     }
 
     suspend fun fetchDetailedAnimeData(animeId: Int): DetailedAnimeData? {
-        android.util.Log.d("MAL_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId")
-        cacheManager.getCachedDetailedAnime(animeId)?.let { 
-            android.util.Log.d("MAL_DEBUG", "Found in cache: ${it.title}, malId=${it.malId}")
-            return it 
-        }
-        android.util.Log.d("MAL_DEBUG", "Not in cache, fetching from AniList API...")
+        android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId")
+        android.util.Log.d("ANILIST_DEBUG", "Not in cache, fetching from AniList API...")
         val media = repository.fetchDetailedAnime(animeId)
         if (media == null) {
-            android.util.Log.e("MAL_DEBUG", "AniList API returned null for animeId=$animeId")
+            android.util.Log.e("ANILIST_DEBUG", "AniList API returned null for animeId=$animeId")
             return null
         }
-        android.util.Log.d("MAL_DEBUG", "AniList API returned: id=${media.id}, idMal=${media.idMal}, title=${media.title?.romaji}")
+        android.util.Log.d("ANILIST_DEBUG", "AniList API returned: id=${media.id}, idMal=${media.idMal}, title=${media.title?.romaji}, isAdult=${media.isAdult}, hasCharacters=${media.characters != null}, hasStaff=${media.staff != null}")
         val relationsList = media.relations?.edges?.mapNotNull { edge ->
             edge.node?.let { node ->
                 AnimeRelation(
@@ -1613,7 +1609,15 @@ class MainViewModel : ViewModel() {
             endDate = media.endDate?.let { "${it.year}-${it.month}-${it.day}" },
             latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
             nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt,
-            relations = relationsList
+            relations = relationsList,
+            isAdult = media.isAdult ?: false,
+            characters = media.characters,
+            trailerUrl = media.trailer?.let { 
+                if (it.site == "youtube") "https://www.youtube.com/watch?v=${it.id}" 
+                else if (it.site == "dailymotion") "https://www.dailymotion.com/video/${it.id}"
+                else null 
+            },
+            staff = media.staff
         )
         cacheManager.cacheDetailedAnime(animeId, detailedData)
         return detailedData
@@ -1624,15 +1628,20 @@ class MainViewModel : ViewModel() {
     }
     
     suspend fun fetchDetailedAnimeDataByMalId(malId: Int): DetailedAnimeData? {
-        android.util.Log.d("MAL_DEBUG", "fetchDetailedAnimeDataByMalId called for malId=$malId")
+        android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeDataByMalId called for malId=$malId")
         val media = repository.findAnimeByMalId(malId)
         if (media == null) {
-            android.util.Log.e("MAL_DEBUG", "Could not find anime with MAL ID=$malId on AniList")
+            android.util.Log.e("ANILIST_DEBUG", "Could not find anime with MAL ID=$malId on AniList")
             return null
         }
-        android.util.Log.d("MAL_DEBUG", "Found anime on AniList: id=${media.id}, title=${media.title?.romaji ?: media.title?.english}")
+        android.util.Log.d("ANILIST_DEBUG", "Found anime on AniList: id=${media.id}, title=${media.title?.romaji ?: media.title?.english}")
         return fetchDetailedAnimeData(media.id)
     }
+
+    suspend fun fetchCharacter(characterId: Int) = repository.fetchCharacter(characterId)
+    suspend fun fetchStaff(staffId: Int) = repository.fetchStaff(staffId)
+    suspend fun fetchAllCharacters(animeId: Int) = repository.fetchAllCharacters(animeId)
+    suspend fun fetchAllStaff(animeId: Int) = repository.fetchAllStaff(animeId)
 
     // Search & Activity
     suspend fun searchAnime(query: String) = repository.searchAnime(query).map { mapExploreMedia(it) }

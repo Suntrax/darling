@@ -346,6 +346,15 @@ object GraphqlQueries {
                 startDate { year month day }
                 endDate { year month day }
                 nextAiringEpisode { episode airingAt }
+                isAdult
+                characters(sort: POPULARITY_DESC, perPage: 10) {
+                    nodes {
+                        id
+                        name { full }
+                        image { large }
+                        role
+                    }
+                }
                 relations {
                     edges {
                         relationType

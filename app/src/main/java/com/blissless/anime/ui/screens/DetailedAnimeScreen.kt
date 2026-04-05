@@ -57,7 +57,23 @@ import com.blissless.anime.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+import android.content.Intent
+import android.net.Uri
+
+private fun formatDate(dateStr: String): String {
+    return try {
+        val parts = dateStr.split("-")
+        if (parts.size == 3) {
+            val date = LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+            date.format(DateTimeFormatter.ofPattern("d MMMM, yyyy"))
+        } else dateStr
+    } catch (e: Exception) {
+        dateStr
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,8 +96,13 @@ fun DetailedAnimeScreen(
     onUpdateLocalStatus: (String?) -> Unit = {},
     onRemoveLocalStatus: () -> Unit = {},
     onLoginClick: () -> Unit = {},
-    onRelationClick: (AnimeRelation) -> Unit = {}
+    onRelationClick: (AnimeRelation) -> Unit = {},
+    onCharacterClick: (Int) -> Unit = {},
+    onStaffClick: (Int) -> Unit = {},
+    onViewAllCast: () -> Unit = {},
+    onViewAllStaff: () -> Unit = {}
 ) {
+    android.util.Log.d("DETAIL_SCREEN", "DetailedAnimeScreen rendered, onCharacterClick=$onCharacterClick, onViewAllCast=$onViewAllCast")
     val context = LocalContext.current
     var showFullDescription by remember { mutableStateOf(false) }
 
@@ -267,21 +288,44 @@ fun DetailedAnimeScreen(
                 .nestedScroll(nestedScrollConnection)
         ) {
             if (!displayData.banner.isNullOrEmpty() || displayData.cover.isNotEmpty()) {
-                AsyncImage(
-                    model = displayData.banner ?: displayData.cover,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(280.dp).clickable {
-                        fullscreenImageUrl = displayData.banner ?: displayData.cover
-                    }
-                )
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(280.dp).background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+                Box(modifier = Modifier.fillMaxWidth().height(280.dp).clickable {
+                    fullscreenImageUrl = displayData.banner ?: displayData.cover
+                }) {
+                    AsyncImage(
+                        model = displayData.banner ?: displayData.cover,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+                            )
                         )
                     )
-                )
+                    displayData.trailerUrl?.let { trailerUrl ->
+                        FilledIconButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(trailerUrl))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(56.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = Color.Black.copy(alpha = 0.7f)
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.PlayCircle,
+                                contentDescription = "Watch Trailer",
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             IconButton(
@@ -673,8 +717,13 @@ fun DetailedAnimeScreen(
                                     val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
                                     if (studio.isNotEmpty()) InfoRow("Studio", studio, isOled)
                                 }
-                                displayData.countryOfOrigin?.let {
-                                    InfoRow("Country", it, isOled)
+                                displayData.startDate?.let {
+                                    InfoRow("Started", formatDate(it), isOled)
+                                }
+                                if (displayData.status != "RELEASING") {
+                                    displayData.endDate?.let {
+                                        InfoRow("Ended", formatDate(it), isOled)
+                                    }
                                 }
                             }
                         }
@@ -932,7 +981,8 @@ fun DetailedAnimeScreen(
                                                 fontWeight = FontWeight.Medium,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                                modifier = Modifier.height(32.dp)
                                             )
                                             relation.format?.let { format ->
                                                 val formatDisplay = when (format) {
@@ -953,6 +1003,184 @@ fun DetailedAnimeScreen(
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                                                 )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Cast Section
+                val castList = displayData.characters?.nodes
+                if (castList != null && castList.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0E0E0E).copy(alpha = 0.95f) else Color(0xFF151515).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Icon(
+                                        Icons.Default.Group,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Cast", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    if (castList.isNotEmpty()) {
+                                        TextButton(onClick = { 
+                                            android.util.Log.d("DETAIL_DEBUG", "View All Cast clicked")
+                                            onViewAllCast() 
+                                        }) {
+                                            Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(castList) { character ->
+                                        Column(
+                                            modifier = Modifier
+                                                .width(80.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { 
+                                                    android.util.Log.d("DETAIL_DEBUG", "Character clicked: ${character.id}, calling onCharacterClick...")
+                                                    onCharacterClick(character.id)
+                                                    android.util.Log.d("DETAIL_DEBUG", "onCharacterClick called")
+                                                }
+                                                .padding(4.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(1f)
+                                            ) {
+                                                Card(
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                ) {
+                                                    AsyncImage(
+                                                        model = character.image?.large,
+                                                        contentDescription = character.name?.full,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                character.name?.full ?: "Unknown",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                                modifier = Modifier.height(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Staff Section
+                val staffList = displayData.staff?.edges
+                if (staffList != null && staffList.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF0E0E0E).copy(alpha = 0.95f) else Color(0xFF151515).copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Staff", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    if (staffList.isNotEmpty()) {
+                                        TextButton(onClick = { 
+                                            android.util.Log.d("DETAIL_DEBUG", "View All Staff clicked")
+                                            onViewAllStaff() 
+                                        }) {
+                                            Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(staffList) { staffEdge ->
+                                        staffEdge.node?.let { staff ->
+                                            Column(
+                                                modifier = Modifier
+                                                    .width(80.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable { staffEdge.node?.id?.let { id -> 
+                                                        android.util.Log.d("DETAIL_DEBUG", "Staff clicked: $id")
+                                                        onStaffClick(id) 
+                                                    } }
+                                                    .padding(4.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .aspectRatio(1f)
+                                                ) {
+                                                    Card(
+                                                        shape = RoundedCornerShape(12.dp),
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = staff.image?.large,
+                                                            contentDescription = staff.name?.full,
+                                                            contentScale = ContentScale.Crop,
+                                                            modifier = Modifier.fillMaxSize()
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    staff.name?.full ?: "Unknown",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                                    modifier = Modifier.height(28.dp)
+                                                )
+                                                staffEdge.role?.let { role ->
+                                                    Text(
+                                                        role.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                                    )
+                                                }
                                             }
                                         }
                                     }

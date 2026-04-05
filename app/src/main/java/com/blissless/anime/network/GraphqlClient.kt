@@ -238,6 +238,7 @@ class GraphQLClient(
                     }
                     200 -> {
                         val responseBody = connection.inputStream.bufferedReader().readText()
+                        android.util.Log.d("GraphQLClient", "HTTP 200 response: ${responseBody.take(300)}")
                         HttpResponse(
                             isSuccess = true,
                             body = responseBody
@@ -245,6 +246,7 @@ class GraphQLClient(
                     }
                     else -> {
                         val errorBody = connection.errorStream?.bufferedReader()?.readText()
+                        android.util.Log.e("GraphQLClient", "HTTP $responseCode error: $errorBody")
                         HttpResponse(
                             error = GraphQLError(
                                 message = "HTTP $responseCode: ${errorBody?.take(200)}",

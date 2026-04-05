@@ -202,6 +202,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (isLoggedIn && userAvatar != null) { 
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(), 
                                         contentDescription = "User Avatar", 
@@ -211,6 +212,7 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.width(8.dp)) 
                                 }
                                 else if (isLoggedIn) { 
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(40.dp)); 
                                     Spacer(modifier = Modifier.width(8.dp)) 
                                 }
@@ -247,7 +249,7 @@ fun HomeScreen(
                 }
 
                 if (!isLoggedIn) {
-                    // Offline header with app icon and favorites count
+                    // Header - same style as logged in, but with app name "Darling"
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -255,9 +257,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .offset(x = (-4).dp),
+                            modifier = Modifier.offset(x = (-4).dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
@@ -265,33 +265,38 @@ fun HomeScreen(
                             onClick = { showOfflineFavoritesDialog = true }
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),
+                                modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Spacer(modifier = Modifier.width(4.dp))
                                 AsyncImage(
                                     model = com.blissless.anime.R.mipmap.ic_launcher_round,
                                     contentDescription = "App",
-                                    modifier = Modifier.size(32.dp).clip(CircleShape)
+                                    modifier = Modifier.size(40.dp).clip(CircleShape)
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("My Anime", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                     Text("${localFavorites.size} favorites", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Card(
-                            modifier = Modifier.size(48.dp),
-                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                            shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
                             ),
                             onClick = { showSearchOverlay = true }
                         ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(28.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Search", style = MaterialTheme.typography.bodyLarge, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
