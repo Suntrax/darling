@@ -1012,11 +1012,18 @@ private fun TimelineScheduleList(
             }
             
             val animatedOffset by animateFloatAsState(
-                targetValue = centerOffset.coerceIn(-2f, 2f),
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMedium
-                ),
+                targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                animationSpec = if (isScrolling) {
+                    spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                } else {
+                    spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                },
                 label = "centerOffset"
             )
             

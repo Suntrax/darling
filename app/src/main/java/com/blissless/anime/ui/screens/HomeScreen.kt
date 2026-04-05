@@ -149,7 +149,7 @@ fun HomeScreen(
             onRefresh = { isRefreshing = true; viewModel.refreshHome() },
             modifier = Modifier.fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 // Error/Offline Banner
                 if (apiError != null || isOffline) {
                     Surface(
@@ -198,7 +198,7 @@ fun HomeScreen(
                             enabled = isLoggedIn
                         ) {
                             Row(
-                                modifier = Modifier.padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                                modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (isLoggedIn && userAvatar != null) { 
@@ -208,11 +208,11 @@ fun HomeScreen(
                                         contentScale = ContentScale.Crop, 
                                         modifier = Modifier.size(40.dp).clip(CircleShape)
                                     ); 
-                                    Spacer(modifier = Modifier.width(12.dp)) 
+                                    Spacer(modifier = Modifier.width(8.dp)) 
                                 }
                                 else if (isLoggedIn) { 
                                     Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(40.dp)); 
-                                    Spacer(modifier = Modifier.width(12.dp)) 
+                                    Spacer(modifier = Modifier.width(8.dp)) 
                                 }
 
                                 Column {
