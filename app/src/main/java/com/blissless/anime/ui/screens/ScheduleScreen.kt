@@ -89,7 +89,11 @@ fun ScheduleScreen(
     onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
     onClearAnimeStack: () -> Unit = {},
-    onAnimeDialogOpen: (Boolean) -> Unit = {}
+    onAnimeDialogOpen: (Boolean) -> Unit = {},
+    onCharacterClick: (Int) -> Unit = {},
+    onStaffClick: (Int) -> Unit = {},
+    onViewAllCast: (Int, String) -> Unit = { _, _ -> },
+    onViewAllStaff: (Int, String) -> Unit = { _, _ -> }
 ) {
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
@@ -98,9 +102,10 @@ fun ScheduleScreen(
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
 
-    // Auto-fetch when airing list is empty and not loading
-    LaunchedEffect(airingList, isLoading) {
-        if (airingList.isEmpty() && !isLoading) {
+    // Auto-fetch when airing list or schedule is empty and not loading
+    LaunchedEffect(airingList, scheduleByDay, isLoading) {
+        val scheduleHasData = scheduleByDay.values.any { it.isNotEmpty() }
+        if ((airingList.isEmpty() || !scheduleHasData) && !isLoading) {
             viewModel.fetchAiringSchedule()
         }
     }
@@ -947,7 +952,11 @@ fun ScheduleScreen(
                 } catch (e: Exception) {
                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-            }
+            },
+            onCharacterClick = onCharacterClick,
+            onStaffClick = onStaffClick,
+            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
         )
     }
 }

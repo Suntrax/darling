@@ -66,6 +66,10 @@ fun HomeScreen(
     onLoginClick: () -> Unit = {},
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
     onShowDetailedAnimeFromMal: (Int) -> Unit = {},
+    onCharacterClick: (Int) -> Unit = {},
+    onStaffClick: (Int) -> Unit = {},
+    onViewAllCast: (Int, String) -> Unit = { _, _ -> },
+    onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap()
 ) {    
@@ -548,7 +552,11 @@ fun HomeScreen(
                 favoriteIds = favoriteIds,
                 onToggleFavorite = onToggleFavorite,
                 onClose = { showSearchOverlay = false },
-                onPlayEpisode = onPlayEpisode
+                onPlayEpisode = onPlayEpisode,
+                onCharacterClick = onCharacterClick,
+                onStaffClick = onStaffClick,
+                onViewAllCast = onViewAllCast,
+                onViewAllStaff = onViewAllStaff
             )
         }
     }
@@ -689,7 +697,11 @@ fun HomeScreen(
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
                 }
-            }
+            },
+            onCharacterClick = onCharacterClick,
+            onStaffClick = onStaffClick,
+            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
         )
     }
 

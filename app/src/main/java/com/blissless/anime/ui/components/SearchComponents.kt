@@ -80,7 +80,11 @@ fun SearchOverlay(
     favoriteIds: Set<Int>,
     onToggleFavorite: (AnimeMedia) -> Unit,
     onClose: () -> Unit,
-    onPlayEpisode: (AnimeMedia, Int, String?) -> Unit
+    onPlayEpisode: (AnimeMedia, Int, String?) -> Unit,
+    onCharacterClick: (Int) -> Unit = {},
+    onStaffClick: (Int) -> Unit = {},
+    onViewAllCast: (Int, String) -> Unit = { _, _ -> },
+    onViewAllStaff: (Int, String) -> Unit = { _, _ -> }
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
@@ -469,7 +473,11 @@ fun SearchOverlay(
                         Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
-            }
+            },
+            onCharacterClick = onCharacterClick,
+            onStaffClick = onStaffClick,
+            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
         )
     }
 

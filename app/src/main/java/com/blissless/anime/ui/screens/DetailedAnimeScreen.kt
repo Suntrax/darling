@@ -102,7 +102,6 @@ fun DetailedAnimeScreen(
     onViewAllCast: () -> Unit = {},
     onViewAllStaff: () -> Unit = {}
 ) {
-    android.util.Log.d("DETAIL_SCREEN", "DetailedAnimeScreen rendered, onCharacterClick=$onCharacterClick, onViewAllCast=$onViewAllCast")
     val context = LocalContext.current
     var showFullDescription by remember { mutableStateOf(false) }
 
@@ -235,7 +234,7 @@ fun DetailedAnimeScreen(
                     }
                 }
 
-                if (isAtTop && currentOffset == 0f && available.y > 0) {
+                if (isAtTop && currentOffset <= 10f && available.y > 0) {
                     scope.launch { offsetY.snapTo(available.y) }
                     return available
                 }
@@ -250,7 +249,7 @@ fun DetailedAnimeScreen(
 
                 val shouldDismiss = currentOffset > dismissThreshold || available.y > 500f
 
-                if (shouldDismiss) {
+                if (shouldDismiss && isAtTop) {
                     scope.launch {
                         offsetY.animateTo(screenHeightPx, tween(180, easing = FastOutSlowInEasing))
                         onDismiss()
@@ -367,7 +366,7 @@ fun DetailedAnimeScreen(
                             }.padding(vertical = 4.dp)) {
                                 Text(
                                     text = displayData.title, style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold, maxLines = 4, overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.Bold, maxLines = 10, overflow = TextOverflow.Clip,
                                     color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -380,7 +379,7 @@ fun DetailedAnimeScreen(
                                 }.padding(vertical = 4.dp)) {
                                     Text(
                                         text = displayData.titleEnglish!!, style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        maxLines = 10, overflow = TextOverflow.Clip,
                                         color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -393,7 +392,7 @@ fun DetailedAnimeScreen(
                                 }.padding(vertical = 4.dp)) {
                                     Text(
                                         text = displayData.titleNative!!, style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        maxLines = 10, overflow = TextOverflow.Clip,
                                         color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         modifier = Modifier.weight(1f)
                                     )
@@ -716,6 +715,7 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
+                                .clip(RoundedCornerShape(16.dp))
                                 .clickable {
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(displayData.trailerUrl))
                                     context.startActivity(intent)
@@ -725,31 +725,60 @@ fun DetailedAnimeScreen(
                                 containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
                             )
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.PlayCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.PlayCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text("Trailer", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                                    Text("Watch on YouTube", style = MaterialTheme.typography.bodySmall,
-                                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Icon(
-                                    Icons.Default.OpenInNew,
-                                    contentDescription = "Open",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(16f / 9f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                ) {
+                                    AsyncImage(
+                                        model = displayData.trailerThumbnail ?: "",
+                                        contentDescription = "Trailer Thumbnail",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(2.dp)
+                                            .background(Color.Black.copy(alpha = 0.3f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        FilledIconButton(
+                                            onClick = {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(displayData.trailerUrl))
+                                                context.startActivity(intent)
+                                            },
+                                            modifier = Modifier.size(60.dp),
+                                            colors = IconButtonDefaults.filledIconButtonColors(
+                                                containerColor = Color(0xFF1A1A1A).copy(alpha = 0.9f),
+                                                contentColor = Color.White
+                                            )
+                                        ) {
+                                            Icon(
+                                                Icons.Default.PlayArrow,
+                                                contentDescription = "Play Trailer",
+                                                modifier = Modifier.size(34.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Watch on YouTube", style = MaterialTheme.typography.bodySmall,
+                                    color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -1064,10 +1093,7 @@ fun DetailedAnimeScreen(
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (castList.isNotEmpty()) {
-                                        TextButton(onClick = { 
-                                            android.util.Log.d("DETAIL_DEBUG", "View All Cast clicked")
-                                            onViewAllCast() 
-                                        }) {
+                                        TextButton(onClick = onViewAllCast) {
                                             Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                         }
                                     }
@@ -1081,8 +1107,6 @@ fun DetailedAnimeScreen(
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .clickable { 
                                                     val id = character.id
-                                                    android.util.Log.d("DETAIL_DEBUG", "Character clicked: $id")
-                                                    android.widget.Toast.makeText(context, "Calling onCharacterClick for: $id", android.widget.Toast.LENGTH_SHORT).show()
                                                     onCharacterClick(id)
                                                 }
                                                 .padding(4.dp)
@@ -1150,10 +1174,7 @@ fun DetailedAnimeScreen(
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (staffList.isNotEmpty()) {
-                                        TextButton(onClick = { 
-                                            android.util.Log.d("DETAIL_DEBUG", "View All Staff clicked")
-                                            onViewAllStaff() 
-                                        }) {
+                                        TextButton(onClick = onViewAllStaff) {
                                             Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                         }
                                     }
@@ -1166,10 +1187,7 @@ fun DetailedAnimeScreen(
                                                 modifier = Modifier
                                                     .width(80.dp)
                                                     .clip(RoundedCornerShape(12.dp))
-                                                    .clickable { staffEdge.node?.id?.let { id -> 
-                                                        android.util.Log.d("DETAIL_DEBUG", "Staff clicked: $id")
-                                                        onStaffClick(id) 
-                                                    } }
+                                                    .clickable { staffEdge.node?.id?.let { id -> onStaffClick(id) } }
                                                     .padding(4.dp)
                                             ) {
                                                 Box(

@@ -288,7 +288,7 @@ fun SettingsScreen(
 
             SettingsToggle(
                 title = "Show Card Buttons",
-                description = "Show bookmark and play buttons on anime cards",
+                description = "Show bookmark and play buttons on anime cards in Explore",
                 checked = showAnimeCardButtons,
                 onCheckedChange = { viewModel.setShowAnimeCardButtons(it) },
                 isOled = isOled

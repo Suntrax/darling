@@ -46,8 +46,13 @@ fun AllCastScreen(
     LaunchedEffect(animeId) {
         isLoading = true
         android.util.Log.d("ALL_CAST_DEBUG", "Fetching all characters for animeId=$animeId")
-        characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()
-        android.util.Log.d("ALL_CAST_DEBUG", "Fetched ${characters.size} characters")
+        try {
+            characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()
+            android.util.Log.d("ALL_CAST_DEBUG", "Fetched ${characters.size} characters")
+        } catch (e: Exception) {
+            android.util.Log.e("ALL_CAST_DEBUG", "Error fetching characters: ${e.message}")
+            characters = emptyList()
+        }
         isLoading = false
     }
 
@@ -194,8 +199,13 @@ fun AllStaffScreen(
     LaunchedEffect(animeId) {
         isLoading = true
         android.util.Log.d("ALL_STAFF_DEBUG", "Fetching all staff for animeId=$animeId")
-        staff = viewModel.fetchAllStaff(animeId) ?: emptyList()
-        android.util.Log.d("ALL_STAFF_DEBUG", "Fetched ${staff.size} staff members")
+        try {
+            staff = viewModel.fetchAllStaff(animeId) ?: emptyList()
+            android.util.Log.d("ALL_STAFF_DEBUG", "Fetched ${staff.size} staff members")
+        } catch (e: Exception) {
+            android.util.Log.e("ALL_STAFF_DEBUG", "Error fetching staff: ${e.message}")
+            staff = emptyList()
+        }
         isLoading = false
     }
 

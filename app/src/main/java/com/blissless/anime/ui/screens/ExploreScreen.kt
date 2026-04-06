@@ -49,7 +49,11 @@ fun ExploreScreen(
     dropped: List<AnimeMedia> = emptyList(),
     isVisible: Boolean = true,
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
-    onClearAnimeStack: () -> Unit = {}
+    onClearAnimeStack: () -> Unit = {},
+    onCharacterClick: (Int) -> Unit = {},
+    onStaffClick: (Int) -> Unit = {},
+    onViewAllCast: (Int, String) -> Unit = { _, _ -> },
+    onViewAllStaff: (Int, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -204,7 +208,11 @@ fun ExploreScreen(
                 } catch (e: Exception) {
                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-            }
+            },
+            onCharacterClick = onCharacterClick,
+            onStaffClick = onStaffClick,
+            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
         )
     }
 

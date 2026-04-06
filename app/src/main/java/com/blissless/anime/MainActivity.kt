@@ -1202,34 +1202,19 @@ fun MainScreen(
                 }
             },
             onCharacterClick = { characterId ->
-                val ctx = context
-                android.util.Log.d("MAIN_DEBUG", "onCharacterClick called with id=$characterId")
-                android.widget.Toast.makeText(ctx, "Opening character: $characterId", android.widget.Toast.LENGTH_SHORT).show()
                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = exploreDialog.anime.id)
             },
             onStaffClick = { staffId ->
-                android.util.Log.d("MAIN_DEBUG", "onStaffClick called with id=$staffId, animeId=${exploreDialog.anime.id}")
-                android.util.Log.d("MAIN_DEBUG", "Setting overlayState to StaffDialog")
                 overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = exploreDialog.anime.id)
-                android.util.Log.d("MAIN_DEBUG", "overlayState is now: $overlayState")
             },
             onViewAllCast = {
-                android.util.Log.d("MAIN_DEBUG", "onViewAllCast called for animeId=${exploreDialog.anime.id}")
-                android.util.Log.d("MAIN_DEBUG", "Setting overlayState to AllCastDialog")
                 overlayState = OverlayState.AllCastDialog(animeId = exploreDialog.anime.id, animeTitle = exploreDialog.anime.title)
-                android.util.Log.d("MAIN_DEBUG", "overlayState is now: $overlayState")
             },
             onViewAllStaff = {
-                android.util.Log.d("MAIN_DEBUG", "onViewAllStaff called for animeId=${exploreDialog.anime.id}")
-                android.util.Log.d("MAIN_DEBUG", "Setting overlayState to AllStaffDialog")
                 overlayState = OverlayState.AllStaffDialog(animeId = exploreDialog.anime.id, animeTitle = exploreDialog.anime.title)
-                android.util.Log.d("MAIN_DEBUG", "overlayState is now: $overlayState")
             }
         )
     }
-
-    // Log overlay state
-    android.util.Log.d("MAIN_DEBUG", "Current overlayState: $overlayState")
 
     // Character Screen
     val characterDialog = overlayState as? OverlayState.CharacterDialog
@@ -1536,7 +1521,19 @@ fun MainScreen(
                             onPlayEpisode = onPlayEpisode,
                             onShowAnimeDialog = onShowAnimeDialog,
                             onClearAnimeStack = onClearAnimeStack,
-                            onAnimeDialogOpen = { isOpen -> scheduleDialogOpen = isOpen }
+                            onAnimeDialogOpen = { isOpen -> scheduleDialogOpen = isOpen },
+                            onCharacterClick = { characterId ->
+                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
+                            },
+                            onStaffClick = { staffId ->
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
+                            },
+                            onViewAllCast = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllStaff = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            }
                         )
                         1 -> ExploreScreen(
                             viewModel = viewModel,
@@ -1578,7 +1575,19 @@ fun MainScreen(
                             dropped = dropped,
                             isVisible = isCurrentPage,
                             onShowAnimeDialog = onShowAnimeDialog,
-                            onClearAnimeStack = onClearAnimeStack
+                            onClearAnimeStack = onClearAnimeStack,
+                            onCharacterClick = { characterId ->
+                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
+                            },
+                            onStaffClick = { staffId ->
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
+                            },
+                            onViewAllCast = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllStaff = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            }
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,
@@ -1600,6 +1609,18 @@ fun MainScreen(
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
                             onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
+                            onCharacterClick = { characterId ->
+                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
+                            },
+                            onStaffClick = { staffId ->
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
+                            },
+                            onViewAllCast = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllStaff = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
                             playbackPositions = playbackPositions
                         )
                         3 -> SettingsScreen(

@@ -30,7 +30,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         private const val TAG = "CacheManager"
         private const val CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
         private const val AIRING_CACHE_DURATION_MS = 1 * 60 * 60 * 1000L
-        private const val STREAM_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
+        private const val STREAM_CACHE_DURATION_MS = 60 * 60 * 1000L // 1 hour
 
         private const val CACHE_EXPLORE_TIME = "cache_explore_time"
         private const val CACHE_HOME_TIME = "cache_home_time"
