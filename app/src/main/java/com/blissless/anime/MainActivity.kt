@@ -14,6 +14,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -1656,13 +1657,23 @@ fun MainScreen(
 
                 streamError?.let { error ->
                     LaunchedEffect(error) {
-                        delay(3000)
+                        delay(5000)
                         streamError = null
                     }
 
                     AlertDialog(
                         onDismissRequest = { streamError = null },
-                        title = { Text("Stream Error") },
+                        title = { 
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Stream Error", modifier = Modifier.weight(1f))
+                                IconButton(onClick = { streamError = null }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close")
+                                }
+                            }
+                        },
                         text = { Text(error) },
                         confirmButton = { TextButton(onClick = { streamError = null }) { Text("OK") } }
                     )
