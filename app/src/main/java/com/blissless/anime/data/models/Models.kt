@@ -949,7 +949,8 @@ data class StaffData(
     val name: DetailedCharacterName? = null,
     val image: MediaCoverImage? = null,
     val description: String? = null,
-    val anime: StaffAnimeConnection? = null
+    val anime: StaffAnimeConnection? = null,
+    val primaryOccupations: List<String>? = null
 )
 
 @Serializable

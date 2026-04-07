@@ -45,10 +45,8 @@ fun AllCastScreen(
 
     LaunchedEffect(animeId) {
         isLoading = true
-        android.util.Log.d("ALL_CAST_DEBUG", "Fetching all characters for animeId=$animeId")
         try {
             characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()
-            android.util.Log.d("ALL_CAST_DEBUG", "Fetched ${characters.size} characters")
         } catch (e: Exception) {
             android.util.Log.e("ALL_CAST_DEBUG", "Error fetching characters: ${e.message}")
             characters = emptyList()
@@ -110,9 +108,12 @@ fun AllCastScreen(
                         text = animeTitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 16.dp, bottom = 16.dp)
+                            .widthIn(max = 200.dp)
                     )
                 }
 
@@ -198,10 +199,8 @@ fun AllStaffScreen(
 
     LaunchedEffect(animeId) {
         isLoading = true
-        android.util.Log.d("ALL_STAFF_DEBUG", "Fetching all staff for animeId=$animeId")
         try {
             staff = viewModel.fetchAllStaff(animeId) ?: emptyList()
-            android.util.Log.d("ALL_STAFF_DEBUG", "Fetched ${staff.size} staff members")
         } catch (e: Exception) {
             android.util.Log.e("ALL_STAFF_DEBUG", "Error fetching staff: ${e.message}")
             staff = emptyList()
@@ -263,9 +262,12 @@ fun AllStaffScreen(
                         text = animeTitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 16.dp, bottom = 16.dp)
+                            .widthIn(max = 200.dp)
                     )
                 }
 
@@ -299,8 +301,8 @@ fun AllStaffScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { onStaffClick(staffMember.id) }
+                                    .clickable { onStaffClick(staffMember.id) },
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Card(
                                     shape = RoundedCornerShape(12.dp),
@@ -316,16 +318,24 @@ fun AllStaffScreen(
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = staffMember.name?.full ?: "Unknown",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
-                                    maxLines = 2,
+                                    maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
-                                    modifier = Modifier.height(32.dp)
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
                                 )
+                                staffMember.primaryOccupations?.firstOrNull()?.let { role ->
+                                    Text(
+                                        text = role,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

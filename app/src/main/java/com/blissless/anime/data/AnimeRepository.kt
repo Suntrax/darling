@@ -953,18 +953,19 @@ class AnimeRepository(
                         nodes {
                             id
                             name { full native }
-                            image { large medium }
+                            image { large }
+                            primaryOccupations
                         }
                     }
                 }
             }
         """.trimIndent()
 
-        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
+        val response = publicGraphqlRequest(query, mapOf("id" to animeId))
+        return response?.let {
             try {
-                val data = json.decodeFromString<AllStaffResponse>(response)
+                val data = json.decodeFromString<AllStaffResponse>(it)
                 val staff = data.data.Media?.staff?.nodes
-                android.util.Log.d("REPO_DEBUG", "fetchAllStaff: got ${staff?.size ?: 0} staff members")
                 staff?.distinctBy { it.id }
             } catch (e: Exception) {
                 android.util.Log.e("REPO_DEBUG", "Failed to parse all staff: ${e.message}")
