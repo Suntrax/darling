@@ -104,9 +104,7 @@ fun UserProfileScreen(
                     title = aniListFavorite.title.english ?: aniListFavorite.title.romaji ?: "",
                     images = com.blissless.anime.data.JikanImages(
                         jpg = com.blissless.anime.data.JikanImageUrls(
-                            aniListFavorite.coverImage?.large 
-                                ?: aniListFavorite.coverImage?.medium 
-                                ?: ""
+                            aniListFavorite.coverImage?.extraLarge ?: ""
                         )
                     ),
                     year = aniListFavorite.seasonYear

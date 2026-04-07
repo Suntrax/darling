@@ -23,7 +23,7 @@ object GraphqlQueries {
             id
             idMal
             title { romaji english }
-            coverImage { large }
+            coverImage { extraLarge }
             bannerImage
             episodes
             status
@@ -42,7 +42,7 @@ object GraphqlQueries {
             id
             idMal
             title { romaji english }
-            coverImage { large medium }
+            coverImage { extraLarge }
             bannerImage
             episodes
             status
@@ -69,7 +69,7 @@ object GraphqlQueries {
                 id
                 idMal
                 title { romaji english }
-                coverImage { large }
+                coverImage { extraLarge }
                 episodes
                 status
                 averageScore
@@ -116,7 +116,7 @@ object GraphqlQueries {
                             id
                             idMal
                             title { romaji english }
-                            coverImage { large medium }
+                            coverImage { extraLarge }
                             bannerImage
                             episodes
                             status
@@ -166,27 +166,27 @@ object GraphqlQueries {
                     ...MediaExploreFields
                 }
             }
-            action: Page(page: 1, perPage: 15) {
+            action: Page(page: 1, perPage: 20) {
                 media(type: ANIME, genre: "Action", sort: POPULARITY_DESC) {
                     ...MediaExploreFields
                 }
             }
-            romance: Page(page: 1, perPage: 15) {
+            romance: Page(page: 1, perPage: 20) {
                 media(type: ANIME, genre: "Romance", sort: POPULARITY_DESC) {
                     ...MediaExploreFields
                 }
             }
-            comedy: Page(page: 1, perPage: 15) {
+            comedy: Page(page: 1, perPage: 20) {
                 media(type: ANIME, genre: "Comedy", sort: POPULARITY_DESC) {
                     ...MediaExploreFields
                 }
             }
-            fantasy: Page(page: 1, perPage: 15) {
+            fantasy: Page(page: 1, perPage: 20) {
                 media(type: ANIME, genre: "Fantasy", sort: POPULARITY_DESC) {
                     ...MediaExploreFields
                 }
             }
-            scifi: Page(page: 1, perPage: 15) {
+            scifi: Page(page: 1, perPage: 20) {
                 media(type: ANIME, genre: "Sci-Fi", sort: POPULARITY_DESC) {
                     ...MediaExploreFields
                 }
@@ -328,7 +328,7 @@ object GraphqlQueries {
             Media(id: ${'$'}id, type: ANIME) {
                 id
                 title { romaji english native }
-                coverImage { large }
+                coverImage { extraLarge }
                 bannerImage
                 description(asHtml: false)
                 episodes
@@ -361,7 +361,7 @@ object GraphqlQueries {
                         node {
                             id
                             title { romaji english }
-                            coverImage { large }
+                            coverImage { extraLarge }
                             episodes
                             averageScore
                             format
@@ -377,7 +377,7 @@ object GraphqlQueries {
             Media(id: $id, type: ANIME) {
                 id
                 title { romaji english }
-                coverImage { large }
+                coverImage { extraLarge }
                 episodes
                 status
                 averageScore
@@ -474,7 +474,7 @@ object GraphqlQueries {
                         progress
                         media {
                             title { romaji }
-                            coverImage { large }
+                            coverImage { extraLarge }
                         }
                     }
                 }
@@ -493,7 +493,7 @@ object GraphqlQueries {
                         nodes {
                             id
                             title { romaji english }
-                            coverImage { large }
+                            coverImage { extraLarge }
                             episodes
                             averageScore
                             genres
@@ -562,7 +562,7 @@ object GraphqlQueries {
                         node {
                             id
                             title { romaji english }
-                            coverImage { large }
+                            coverImage { extraLarge }
                             episodes
                             averageScore
                             format

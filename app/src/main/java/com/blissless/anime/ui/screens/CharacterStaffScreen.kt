@@ -204,7 +204,7 @@ fun CharacterScreen(
                                                         modifier = Modifier.aspectRatio(3f / 4f)
                                                     ) {
                                                         AsyncImage(
-                                                            model = anime.coverImage?.large,
+                                                            model = anime.coverImage?.extraLarge,
                                                             contentDescription = anime.title?.romaji,
                                                             contentScale = ContentScale.Crop,
                                                             modifier = Modifier.fillMaxSize()
@@ -414,7 +414,7 @@ fun StaffScreen(
                                                         modifier = Modifier.aspectRatio(3f / 4f)
                                                     ) {
                                                         AsyncImage(
-                                                            model = anime.coverImage?.large,
+                                                            model = anime.coverImage?.extraLarge,
                                                             contentDescription = anime.title?.romaji,
                                                             contentScale = ContentScale.Crop,
                                                             modifier = Modifier.fillMaxSize()

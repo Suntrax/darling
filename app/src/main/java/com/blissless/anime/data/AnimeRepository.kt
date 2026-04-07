@@ -190,7 +190,7 @@ class AnimeRepository(
                                 id
                                 idMal
                                 title { romaji english }
-                                coverImage { extraLarge large medium }
+                                coverImage { extraLarge }
                                 bannerImage
                                 episodes
                                 nextAiringEpisode { episode airingAt }
@@ -226,7 +226,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -242,7 +242,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -258,7 +258,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -274,7 +274,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -285,12 +285,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                action: Page(page: 1, perPage: 15) {
+                action: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Action", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -301,12 +301,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                romance: Page(page: 1, perPage: 15) {
+                romance: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Romance", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -317,12 +317,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                comedy: Page(page: 1, perPage: 15) {
+                comedy: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Comedy", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -333,12 +333,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                fantasy: Page(page: 1, perPage: 15) {
+                fantasy: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Fantasy", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -349,12 +349,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                scifi: Page(page: 1, perPage: 15) {
+                scifi: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Sci-Fi", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -387,7 +387,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -403,7 +403,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -419,7 +419,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -435,7 +435,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -446,12 +446,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                action: Page(page: 1, perPage: 15) {
+                action: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Action", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -462,12 +462,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                romance: Page(page: 1, perPage: 15) {
+                romance: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Romance", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -478,12 +478,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                comedy: Page(page: 1, perPage: 15) {
+                comedy: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Comedy", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -494,12 +494,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                fantasy: Page(page: 1, perPage: 15) {
+                fantasy: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Fantasy", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -510,12 +510,12 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                scifi: Page(page: 1, perPage: 15) {
+                scifi: Page(page: 1, perPage: 20) {
                     media(type: ANIME, genre: "Sci-Fi", sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -583,7 +583,7 @@ class AnimeRepository(
                             id
                             idMal
                             title { romaji english }
-                            coverImage { extraLarge large }
+                            coverImage { extraLarge }
                             episodes
                             status
                             averageScore
@@ -643,7 +643,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -676,7 +676,7 @@ class AnimeRepository(
                         id
                         idMal
                         title { romaji english native }
-                        coverImage { extraLarge large medium }
+                        coverImage { extraLarge }
                         bannerImage
                         episodes
                         nextAiringEpisode { episode airingAt }
@@ -714,7 +714,7 @@ class AnimeRepository(
                     id
                     idMal
                     title { romaji english native }
-                    coverImage { large }
+                    coverImage { extraLarge }
                     bannerImage
                     description(asHtml: false)
                     episodes
@@ -766,7 +766,7 @@ class AnimeRepository(
                             node {
                                 id
                                 title { romaji english }
-                                coverImage { extraLarge large }
+                                coverImage { extraLarge }
                                 episodes
                                 averageScore
                                 format
@@ -805,7 +805,7 @@ class AnimeRepository(
                         AnimeRelation(
                             id = node.id,
                             title = node.title?.english ?: node.title?.romaji ?: "Unknown",
-                            cover = node.coverImage?.extraLarge ?: node.coverImage?.large ?: "",
+                            cover = node.coverImage?.extraLarge ?: "",
                             episodes = node.episodes,
                             latestEpisode = node.nextAiringEpisode?.episode?.let { it - 1 },
                             averageScore = node.averageScore,
@@ -869,7 +869,7 @@ class AnimeRepository(
                         nodes {
                             id
                             title { romaji english }
-                            coverImage { extraLarge large }
+                            coverImage { extraLarge }
                         }
                     }
                 }
@@ -899,7 +899,7 @@ class AnimeRepository(
                         nodes {
                             id
                             title { romaji english }
-                            coverImage { extraLarge large }
+                            coverImage { extraLarge }
                         }
                     }
                 }
@@ -1459,7 +1459,7 @@ class AnimeRepository(
                         AnimeRelation(
                             id = node.id,
                             title = node.title?.english ?: node.title?.romaji ?: "Unknown",
-                            cover = node.coverImage?.extraLarge ?: node.coverImage?.large ?: "",
+                            cover = node.coverImage?.extraLarge ?: "",
                             episodes = node.episodes,
                             averageScore = node.averageScore,
                             format = node.format,
@@ -1661,7 +1661,7 @@ class AnimeRepository(
                             media {
                                 id
                                 title { romaji english }
-                                coverImage { extraLarge large medium }
+                                coverImage { extraLarge }
                             }
                         }
                     }
@@ -1682,7 +1682,7 @@ class AnimeRepository(
                             createdAt = activity.createdAt,
                             mediaId = activity.media?.id ?: 0,
                             mediaTitle = activity.media?.title?.romaji ?: activity.media?.title?.english ?: "Unknown",
-                            mediaCover = activity.media?.coverImage?.extraLarge ?: activity.media?.coverImage?.large ?: activity.media?.coverImage?.medium ?: "",
+                            mediaCover = activity.media?.coverImage?.extraLarge ?: "",
                             episodes = null,
                             averageScore = null,
                             year = null
@@ -1702,7 +1702,7 @@ class AnimeRepository(
                             nodes {
                                 id
                                 title { romaji english }
-                                coverImage { extraLarge large }
+                                coverImage { extraLarge }
                                 episodes
                                 averageScore
                                 genres
