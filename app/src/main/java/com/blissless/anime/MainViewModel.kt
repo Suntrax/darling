@@ -624,11 +624,20 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             if (hasToken || _loginProvider.value != LoginProvider.NONE) {
                 loadHomeDataWithCache()
+                // Load AniList favorites from storage AFTER home data is loaded (so lists are available)
+                if (hasToken) {
+                    loadAniListFavoritesFromStorage()
+                }
             } else {
                 prefetchOfflineWatchingStreams()
             }
             loadExploreDataWithCache()
             fetchAiringSchedule()
+            
+            // Fetch AniList favorites from API in background after initial load
+            if (hasToken) {
+                fetchAniListFavorites()
+            }
         }
     }
     
@@ -1696,9 +1705,33 @@ class MainViewModel : ViewModel() {
             android.util.Log.d("AniListFavorite", "fetchAniListFavorites: fetching for userId=$userId")
             repository.fetchUserFavorites(userId)?.let { response ->
                 android.util.Log.d("AniListFavorite", "fetchAniListFavorites: got ${response.data.User.favourites.anime.nodes.size} favorites")
-                _aniListFavorites.value = response.data.User.favourites.anime.nodes
+                val apiFavorites = response.data.User.favourites.anime.nodes
+                // Merge API favorites with locally stored favorites to preserve offline additions
+                val localFavoriteIds = userPreferences.aniListFavorites.value
+                val mergedFavorites = apiFavorites.map { apiFav ->
+                    val isLocalFavorite = localFavoriteIds.contains(apiFav.id)
+                    if (isLocalFavorite) {
+                        // Keep local version which might have more up-to-date info
+                        val localFav = _aniListFavorites.value.find { it.id == apiFav.id }
+                        localFav ?: apiFav
+                    } else {
+                        apiFav
+                    }
+                }.toMutableList()
+                
+                // Add any favorites that were added locally but not on API yet
+                localFavoriteIds.forEach { localId ->
+                    if (mergedFavorites.none { it.id == localId }) {
+                        val localOnly = _aniListFavorites.value.find { it.id == localId }
+                        if (localOnly != null) {
+                            mergedFavorites.add(localOnly)
+                        }
+                    }
+                }
+                
+                _aniListFavorites.value = mergedFavorites
             } ?: run {
-                android.util.Log.d("AniListFavorite", "fetchAniListFavorites: API returned null")
+                android.util.Log.d("AniListFavorite", "fetchAniListFavorites: API returned null, keeping local favorites")
             }
         }
     }
@@ -1707,6 +1740,7 @@ class MainViewModel : ViewModel() {
         // Load favorites from UserPreferences (IDs only)
         val favoriteIds = userPreferences.aniListFavorites.value
         android.util.Log.d("AniListFavorite", "loadAniListFavoritesFromStorage: found ${favoriteIds.size} favorites")
+        android.util.Log.d("AniListFavorite", "  detailedAnimeCache keys: ${cacheManager.detailedAnimeCache.value.keys.take(10)}")
         
         if (favoriteIds.isEmpty()) {
             _aniListFavorites.value = emptyList()
@@ -1718,6 +1752,7 @@ class MainViewModel : ViewModel() {
             android.util.Log.d("AniListFavorite", "  Processing favorite id: $id")
             val cached = cacheManager.detailedAnimeCache.value[id]
             if (cached != null) {
+                android.util.Log.d("AniListFavorite", "    Found in detailedAnimeCache: ${cached.title}")
                 UserFavoriteAnime(
                     id = cached.id,
                     title = MediaTitle(romaji = cached.title, english = cached.titleEnglish),
@@ -1730,8 +1765,10 @@ class MainViewModel : ViewModel() {
             } else {
                 // Try to find in currently watching lists
                 val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+                android.util.Log.d("AniListFavorite", "    Not in cache, searching lists among ${allAnime.size} items")
                 val anime = allAnime.find { it.id == id }
                 if (anime != null) {
+                    android.util.Log.d("AniListFavorite", "    Found in list: ${anime.title}")
                     UserFavoriteAnime(
                         id = anime.id,
                         title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),

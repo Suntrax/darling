@@ -1612,18 +1612,19 @@ class AnimeRepository(
         return baseTitle.replace(Regex("""[\s:－-]+$"""), "").trim()
     }
 
-    suspend fun fetchUserActivity(userId: Int): List<UserActivity>? {
+    suspend fun fetchUserActivity(userId: Int, perPage: Int = 50): List<UserActivity>? {
         val query = """
             query (${'$'}userId: Int) {
-                Page(page: 1, perPage: 20) {
+                Page(page: 1, perPage: $perPage) {
                     activities(userId: ${'$'}userId, type: ANIME_LIST, sort: ID_DESC) {
                         ... on ListActivity {
                             createdAt
                             status
                             progress
                             media {
-                                title { romaji }
-                                coverImage { large }
+                                id
+                                title { romaji english }
+                                coverImage { large medium }
                             }
                         }
                     }
@@ -1642,9 +1643,9 @@ class AnimeRepository(
                             status = activity.status ?: "",
                             progress = activity.progress,
                             createdAt = activity.createdAt,
-                            mediaId = 0,
-                            mediaTitle = activity.media.title.romaji ?: "Unknown",
-                            mediaCover = activity.media.coverImage?.large ?: "",
+                            mediaId = activity.media?.id ?: 0,
+                            mediaTitle = activity.media?.title?.romaji ?: activity.media?.title?.english ?: "Unknown",
+                            mediaCover = activity.media?.coverImage?.large ?: activity.media?.coverImage?.medium ?: "",
                             episodes = null,
                             averageScore = null,
                             year = null

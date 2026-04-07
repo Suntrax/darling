@@ -579,13 +579,15 @@ data class SimpleActivityEntry(
 
 @Serializable
 data class SimpleActivityMedia(
+    val id: Int,
     val title: SimpleActivityTitle,
     val coverImage: MediaCoverImage?
 )
 
 @Serializable
 data class SimpleActivityTitle(
-    val romaji: String?
+    val romaji: String?,
+    val english: String?
 )
 
 @Serializable
