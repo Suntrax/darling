@@ -62,6 +62,8 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.graphicsLayer
 
 private fun formatDate(dateStr: String): String {
     return try {
@@ -100,7 +102,8 @@ fun DetailedAnimeScreen(
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: () -> Unit = {},
-    onViewAllStaff: () -> Unit = {}
+    onViewAllStaff: () -> Unit = {},
+    initialCardBounds: MainViewModel.CardBounds? = null
 ) {
     val context = LocalContext.current
     var showFullDescription by remember { mutableStateOf(false) }
@@ -129,7 +132,8 @@ fun DetailedAnimeScreen(
         targetValue = when {
             isTransitioning -> 0.95f
             isVisible -> 1f
-            else -> 0.92f
+            initialCardBounds != null -> 0.85f
+            else -> 0f
         },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -141,21 +145,65 @@ fun DetailedAnimeScreen(
         targetValue = when {
             isTransitioning -> 0.7f
             isVisible -> 1f
+            initialCardBounds != null -> 0.9f
             else -> 0f
         },
         animationSpec = tween(durationMillis = 300),
         label = "alpha"
     )
 
-    LaunchedEffect(Unit) {
-        isVisible = true
+    var transitionProgress by remember { mutableFloatStateOf(0f) }
+    
+    val slideInProgress = remember { Animatable(0f) }
+    val coverAnimationProgress = remember(anime.id) { Animatable(0f) }
+    
+    val animatedCoverScale by animateFloatAsState(
+        targetValue = if (initialCardBounds != null) 1f else 1f,
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "coverScale"
+    )
+    val animatedCoverOffsetX by animateFloatAsState(
+        targetValue = if (initialCardBounds != null) 0f else 0f,
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "coverOffsetX"
+    )
+    val animatedCoverOffsetY by animateFloatAsState(
+        targetValue = if (initialCardBounds != null) 0f else 0f,
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "coverOffsetY"
+    )
+    val animatedCoverCornerRadius by animateFloatAsState(
+        targetValue = if (initialCardBounds != null) 12f else 12f,
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "coverCornerRadius"
+    )
+
+    LaunchedEffect(initialCardBounds) {
+        if (initialCardBounds != null) {
+            transitionProgress = 1f
+            coverAnimationProgress.snapTo(0f)
+            // Start cover animation immediately
+            coverAnimationProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+            )
+            // Immediately after cover animation finishes, show the rest of screen
+            isVisible = true
+        } else {
+            // Reset animation state for relation navigation
+            isVisible = true
+            coverAnimationProgress.snapTo(0f)
+            transitionProgress = 0f
+        }
     }
 
-    LaunchedEffect(anime.id) {
+    LaunchedEffect(anime.id, initialCardBounds) {
         isLoadingDetails = true
         
         if (previousAnimeId != 0 && previousAnimeId != anime.id) {
             isTransitioning = true
+            // Reset cover animation when switching anime
+            coverAnimationProgress.snapTo(0f)
             kotlinx.coroutines.delay(150)
             isTransitioning = false
         }
@@ -342,20 +390,52 @@ fun DetailedAnimeScreen(
                         verticalAlignment = Alignment.Top
                     ) {
                         Box {
-                            Surface(
-                                modifier = Modifier.width(120.dp).height(175.dp).clickable {
-                                    fullscreenImageUrl = displayData.cover
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                shadowElevation = 12.dp,
-                                color = Color.Transparent
-                            ) {
-                                AsyncImage(
-                                    model = displayData.cover, contentDescription = displayData.title,
-                                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clickable {
-                                        fullscreenImageUrl = displayData.cover
+                            val cardWidth = 120.dp
+                            val cardHeight = 171.dp
+                            val targetX = 0.dp
+                            val targetY = 0.dp
+                            
+                            Box(
+                                modifier = Modifier
+                                    .width(cardWidth)
+                                    .height(cardHeight)
+                                    .zIndex(if (initialCardBounds != null && coverAnimationProgress.value < 1f) 100f else 0f)
+                                    .graphicsLayer {
+                                        val startBounds = initialCardBounds
+                                        if (startBounds != null) {
+                                            val progress = FastOutSlowInEasing.transform(coverAnimationProgress.value)
+                                            val startX = startBounds.bounds.left
+                                            val startY = startBounds.bounds.top
+                                            val startWidth = startBounds.bounds.width()
+                                            val startHeight = startBounds.bounds.height()
+                                            
+                                            val currentWidth = startWidth + (cardWidth.toPx() - startWidth) * progress
+                                            val currentHeight = startHeight + (cardHeight.toPx() - startHeight) * progress
+                                            val currentX = startX + (targetX.toPx() - startX) * progress
+                                            val currentY = startY + (targetY.toPx() - startY) * progress
+                                            
+                                            scaleX = currentWidth / size.width
+                                            scaleY = currentHeight / size.height
+                                            translationX = currentX
+                                            translationY = currentY
+                                        }
                                     }
-                                )
+                            ) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable { fullscreenImageUrl = displayData.cover },
+                                    shape = RoundedCornerShape(12.dp),
+                                    shadowElevation = 12.dp,
+                                    color = Color.Transparent
+                                ) {
+                                    AsyncImage(
+                                        model = displayData.cover, contentDescription = displayData.title,
+                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clickable {
+                                            fullscreenImageUrl = displayData.cover
+                                        }
+                                    )
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
@@ -751,10 +831,7 @@ fun DetailedAnimeScreen(
                                         modifier = Modifier.fillMaxSize()
                                     )
                                     Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(2.dp)
-                                            .background(Color.Black.copy(alpha = 0.3f)),
+                                        modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         FilledIconButton(

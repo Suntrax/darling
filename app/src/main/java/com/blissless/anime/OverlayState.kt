@@ -13,21 +13,33 @@ sealed class OverlayState {
 
     data class CharacterDialog(
         val characterId: Int,
-        val animeId: Int
+        val animeId: Int,
+        val previousAnime: ExploreAnime? = null,
+        val previousFirstAnime: ExploreAnime? = null,
+        val previousIsFirstOpen: Boolean = false
     ) : OverlayState()
 
     data class StaffDialog(
         val staffId: Int,
-        val animeId: Int
+        val animeId: Int,
+        val previousAnime: ExploreAnime? = null,
+        val previousFirstAnime: ExploreAnime? = null,
+        val previousIsFirstOpen: Boolean = false
     ) : OverlayState()
 
     data class AllCastDialog(
         val animeId: Int,
-        val animeTitle: String
+        val animeTitle: String,
+        val previousAnime: ExploreAnime? = null,
+        val previousFirstAnime: ExploreAnime? = null,
+        val previousIsFirstOpen: Boolean = false
     ) : OverlayState()
 
     data class AllStaffDialog(
         val animeId: Int,
-        val animeTitle: String
+        val animeTitle: String,
+        val previousAnime: ExploreAnime? = null,
+        val previousFirstAnime: ExploreAnime? = null,
+        val previousIsFirstOpen: Boolean = false
     ) : OverlayState()
 }

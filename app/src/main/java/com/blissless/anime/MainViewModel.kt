@@ -485,6 +485,8 @@ class MainViewModel : ViewModel() {
     
     private var jikanService: JikanService? = null
     private var malUsername: String? = null
+    private val _malUsername = MutableStateFlow<String?>(null)
+    val malUsernameFlow: StateFlow<String?> = _malUsername.asStateFlow()
     
     suspend fun getJikanAnimeCover(malId: Int): String? = jikanService?.getAnimeCover(malId)
     
@@ -557,6 +559,34 @@ class MainViewModel : ViewModel() {
     
     private val _logoutEvent = MutableSharedFlow<Unit>()
     val logoutEvent: SharedFlow<Unit> = _logoutEvent.asSharedFlow()
+
+    // Card bounds for shared element transition
+    data class CardBounds(val animeId: Int, val coverUrl: String, val bounds: android.graphics.RectF)
+    private val _exploreAnimeCardBounds = MutableStateFlow<CardBounds?>(null)
+    val exploreAnimeCardBounds: StateFlow<CardBounds?> = _exploreAnimeCardBounds.asStateFlow()
+    
+    private val _homeAnimeCardBounds = MutableStateFlow<CardBounds?>(null)
+    val homeAnimeCardBounds: StateFlow<CardBounds?> = _homeAnimeCardBounds.asStateFlow()
+
+    fun setExploreAnimeCardBounds(animeId: Int, coverUrl: String, bounds: android.graphics.RectF?) {
+        if (bounds != null && bounds.width() > 0 && bounds.height() > 0) {
+            _exploreAnimeCardBounds.value = CardBounds(animeId, coverUrl, bounds)
+        }
+    }
+    
+    fun setHomeAnimeCardBounds(animeId: Int, coverUrl: String, bounds: android.graphics.RectF?) {
+        if (bounds != null && bounds.width() > 0 && bounds.height() > 0) {
+            _homeAnimeCardBounds.value = CardBounds(animeId, coverUrl, bounds)
+        }
+    }
+    
+    fun clearExploreAnimeCardBounds() {
+        _exploreAnimeCardBounds.value = null
+    }
+    
+    fun clearHomeAnimeCardBounds() {
+        _homeAnimeCardBounds.value = null
+    }
     
     // Is logged in (either AniList or MAL)
     val isLoggedIn: Boolean get() = _loginProvider.value != LoginProvider.NONE
@@ -638,6 +668,7 @@ class MainViewModel : ViewModel() {
             _userName.value = userInfo.name
             _userAvatar.value = userInfo.picture
             malUsername = userInfo.name
+            _malUsername.value = userInfo.name
             fetchJikanUserData()
         }
     }
@@ -758,6 +789,7 @@ class MainViewModel : ViewModel() {
                 _jikanFavorites.value = null
                 _jikanHistory.value = null
                 malUsername = null
+                _malUsername.value = null
             }
             LoginProvider.NONE -> {}
         }

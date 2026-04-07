@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,13 +42,19 @@ import com.blissless.anime.data.models.ExploreAnime
 import java.util.Locale
 import kotlin.math.absoluteValue
 
+data class AnimeCardBounds(
+    val animeId: Int,
+    val coverUrl: String,
+    val bounds: android.graphics.RectF
+)
+
 @Composable
 fun ExploreAnimeHorizontalList(
     animeList: List<ExploreAnime>,
     animeStatusMap: Map<Int, String>,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean = true,
-    onAnimeClick: (ExploreAnime) -> Unit,
+    onAnimeClick: (ExploreAnime, AnimeCardBounds?) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
     isLoggedIn: Boolean = false,
     isOled: Boolean = false,
@@ -55,7 +63,8 @@ fun ExploreAnimeHorizontalList(
     onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
     listIndex: Int = 0,
     screenKey: String = "explore",
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    viewModel: com.blissless.anime.MainViewModel? = null
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -126,22 +135,37 @@ fun ExploreAnimeHorizontalList(
             val handleRemoveLocalStatus: () -> Unit = { onRemoveFromLocalStatus(anime) }
             
             Box(
-                modifier = Modifier.graphicsLayer {
-                    scaleX = finalScale
-                    scaleY = finalScale
-                    alpha = finalAlpha
-                    translationX = translationXVal
-                    translationY = finalTranslationY
-                    rotationY = rotationYVal
-                    cameraDistance = cameraDistancePx
-                }
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = finalScale
+                        scaleY = finalScale
+                        alpha = finalAlpha
+                        translationX = translationXVal
+                        translationY = finalTranslationY
+                        rotationY = rotationYVal
+                        cameraDistance = cameraDistancePx
+                    }
+                    .onGloballyPositioned { coordinates ->
+                        val position = coordinates.positionInRoot()
+                        val size = coordinates.size
+                        val bounds = android.graphics.RectF(
+                            position.x,
+                            position.y,
+                            position.x + size.width,
+                            position.y + size.height
+                        )
+                        viewModel?.setExploreAnimeCardBounds(anime.id, anime.cover, bounds)
+                    }
             ) {
                 ExploreAnimeCard(
                     anime = anime,
                     currentStatus = animeStatusMap[anime.id],
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
-                    onClick = { onAnimeClick(anime) },
+                    onClick = { bounds ->
+                        viewModel?.setExploreAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
+                        onAnimeClick(anime, bounds)
+                    },
                     onBookmarkClick = { onBookmarkClick(anime) },
                     isLoggedIn = isLoggedIn,
                     isOled = isOled,
@@ -165,7 +189,7 @@ fun ExploreAnimeCard(
     currentStatus: String?,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean = true,
-    onClick: () -> Unit,
+    onClick: (AnimeCardBounds?) -> Unit,
     onBookmarkClick: () -> Unit,
     isLoggedIn: Boolean = false,
     isOled: Boolean = false,
@@ -174,6 +198,7 @@ fun ExploreAnimeCard(
     onRemoveFromLocalStatus: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    var cardBounds by remember { mutableStateOf<android.graphics.RectF?>(null) }
 
     var showAnimation by remember { mutableStateOf(false) }
     val bookmarkScale by animateFloatAsState(
@@ -231,7 +256,27 @@ fun ExploreAnimeCard(
     Column(modifier = Modifier.width(130.dp)) {
         Card(
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.height(185.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
+            modifier = Modifier
+                .height(185.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = {
+                    val bounds = cardBounds
+                    onClick(
+                        if (bounds != null && bounds.width() > 0 && bounds.height() > 0) {
+                            AnimeCardBounds(anime.id, anime.cover, bounds)
+                        } else null
+                    )
+                })
+                .onGloballyPositioned { coordinates ->
+                    val position = coordinates.positionInRoot()
+                    val size = coordinates.size
+                    cardBounds = android.graphics.RectF(
+                        position.x,
+                        position.y,
+                        position.x + size.width,
+                        position.y + size.height
+                    )
+                }
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
@@ -352,7 +397,7 @@ fun ExploreAnimeCard(
                         Spacer(modifier = Modifier.weight(1f))
 
                         FilledTonalIconButton(
-                            onClick = onClick,
+                            onClick = { onClick(null) },
                             modifier = Modifier.size(32.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(

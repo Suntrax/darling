@@ -21,6 +21,8 @@ import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
+import com.blissless.anime.ui.components.ExploreAnimeCard
+import com.blissless.anime.ui.components.AnimeCardBounds
 import com.blissless.anime.ui.components.FeaturedCarousel
 import com.blissless.anime.ui.components.LoadingPlaceholder
 import com.blissless.anime.ui.components.SectionTitle
@@ -116,6 +118,9 @@ fun ExploreScreen(
     // Track navigation history for back button
     var firstAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     
+    // Card bounds for shared element transition
+    var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
+    
     // Scope for coroutines - must be at composition level
     val scope = rememberCoroutineScope()
 
@@ -140,7 +145,9 @@ fun ExploreScreen(
             isOled = isOled,
             currentStatus = animeStatus,
             isFavorite = isAnimeFavorite,
+            initialCardBounds = currentCardBounds,
             onDismiss = { 
+                currentCardBounds = null
                 if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
                     selectedAnime = firstAnime
                 } else {
@@ -149,7 +156,11 @@ fun ExploreScreen(
                     onClearAnimeStack()
                 }
             },
-            onSwipeToClose = { showDialog = false; onClearAnimeStack() },
+            onSwipeToClose = { 
+                currentCardBounds = null
+                showDialog = false
+                onClearAnimeStack()
+            },
             onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
                     id = anime.id,
@@ -183,6 +194,8 @@ fun ExploreScreen(
                     scope.launch {
                         try {
                             delay(100)
+                            viewModel.clearExploreAnimeCardBounds()
+                            currentCardBounds = null
                             val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                             if (detailedData != null) {
                                 selectedAnime = ExploreAnime(
@@ -217,8 +230,13 @@ fun ExploreScreen(
     }
 
     // Stable callbacks to avoid recomposition
-    val onAnimeClickStable = remember<(ExploreAnime) -> Unit> {
-        { anime ->
+    val onAnimeClickStable = remember<(ExploreAnime, AnimeCardBounds?) -> Unit> {
+        { anime, bounds ->
+            val cardBounds = bounds?.let {
+                MainViewModel.CardBounds(anime.id, anime.cover, it.bounds)
+            }
+            currentCardBounds = cardBounds
+            viewModel.clearExploreAnimeCardBounds()
             selectedAnime = anime
             showDialog = true
         }
@@ -232,6 +250,14 @@ fun ExploreScreen(
             } else {
                 viewModel.addExploreAnimeToList(anime, "PLANNING")
             }
+        }
+    }
+
+    val onFeaturedAnimeClickStable = remember<(ExploreAnime) -> Unit> {
+        { anime ->
+            currentCardBounds = null
+            selectedAnime = anime
+            showDialog = true
         }
     }
 
@@ -302,7 +328,7 @@ fun ExploreScreen(
             if (filteredFeaturedAnime.isNotEmpty()) {
                 FeaturedCarousel(
                     animeList = filteredFeaturedAnime,
-                    onAnimeClick = onAnimeClickStable,
+                    onAnimeClick = onFeaturedAnimeClickStable,
                     autoScrollEnabled = isVisible && !showDialog
                 )
             } else if (apiError == null && !isOffline) {
@@ -351,7 +377,8 @@ fun ExploreScreen(
                     },
                     listIndex = 0,
                     screenKey = "explore",
-                    isVisible = isVisible
+                    isVisible = isVisible,
+                    viewModel = viewModel
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -391,7 +418,8 @@ fun ExploreScreen(
                     },
                     listIndex = 1,
                     screenKey = "explore",
-                    isVisible = isVisible
+                    isVisible = isVisible,
+                    viewModel = viewModel
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -431,7 +459,8 @@ fun ExploreScreen(
                     },
                     listIndex = 2,
                     screenKey = "explore",
-                    isVisible = isVisible
+                    isVisible = isVisible,
+                    viewModel = viewModel
                 )
             } else if (isLoading) {
                 LoadingPlaceholder(isOled)
@@ -471,7 +500,8 @@ fun ExploreScreen(
                 },
                 listIndex = 3,
                 screenKey = "explore",
-                isVisible = isVisible
+                isVisible = isVisible,
+                viewModel = viewModel
             )
 
             GenreSection(
@@ -507,7 +537,8 @@ fun ExploreScreen(
                 },
                 listIndex = 4,
                 screenKey = "explore",
-                isVisible = isVisible
+                isVisible = isVisible,
+                viewModel = viewModel
             )
 
             GenreSection(
@@ -543,7 +574,8 @@ fun ExploreScreen(
                 },
                 listIndex = 5,
                 screenKey = "explore",
-                isVisible = isVisible
+                isVisible = isVisible,
+                viewModel = viewModel
             )
 
             GenreSection(
@@ -579,7 +611,8 @@ fun ExploreScreen(
                 },
                 listIndex = 6,
                 screenKey = "explore",
-                isVisible = isVisible
+                isVisible = isVisible,
+                viewModel = viewModel
             )
 
             GenreSection(
@@ -615,7 +648,8 @@ fun ExploreScreen(
                 },
                 listIndex = 7,
                 screenKey = "explore",
-                isVisible = isVisible
+                isVisible = isVisible,
+                viewModel = viewModel
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -646,14 +680,15 @@ private fun GenreSection(
     isLoading: Boolean,
     isOled: Boolean,
     isLoggedIn: Boolean,
-    onAnimeClick: (ExploreAnime) -> Unit,
+    onAnimeClick: (ExploreAnime, AnimeCardBounds?) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
     localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap(),
     onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
     onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
     listIndex: Int = 0,
     screenKey: String = "explore",
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    viewModel: MainViewModel
 ) {
     if (animeList.isEmpty() && !isLoading) return
 
@@ -674,7 +709,8 @@ private fun GenreSection(
                 onRemoveFromLocalStatus = onRemoveFromLocalStatus,
                 listIndex = listIndex,
                 screenKey = screenKey,
-                isVisible = isVisible
+                isVisible = isVisible,
+                viewModel = viewModel
             )
         } else if (isLoading) {
             LoadingPlaceholder(isOled)

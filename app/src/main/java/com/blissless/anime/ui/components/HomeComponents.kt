@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +33,15 @@ import kotlin.math.absoluteValue
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.AnimeMedia
+import com.blissless.anime.MainViewModel
+
+import android.graphics.RectF
+
+data class HomeAnimeCardBounds(
+    val animeId: Int,
+    val coverUrl: String,
+    val bounds: android.graphics.RectF
+)
 
 @Composable
 fun LoadingSkeleton(isOled: Boolean) {
@@ -104,13 +115,14 @@ fun HomeAnimeHorizontalList(
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
-    onAnimeClick: (AnimeMedia) -> Unit,
+    onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
     onStatusClick: (AnimeMedia) -> Unit,
-    onInfoClick: (AnimeMedia) -> Unit = {},
+    onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
     listIndex: Int = 0,
     screenKey: String = "home",
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    viewModel: MainViewModel? = null
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -175,15 +187,27 @@ fun HomeAnimeHorizontalList(
                 val finalTranslationY = introTranslationY
                 
                 Box(
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = finalScale
-                        scaleY = finalScale
-                        alpha = finalAlpha
-                        translationX = translationXVal
-                        translationY = finalTranslationY
-                        rotationY = rotationYVal
-                        cameraDistance = cameraDistancePx
-                    }
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = finalScale
+                            scaleY = finalScale
+                            alpha = finalAlpha
+                            translationX = translationXVal
+                            translationY = finalTranslationY
+                            rotationY = rotationYVal
+                            cameraDistance = cameraDistancePx
+                        }
+                        .onGloballyPositioned { coordinates ->
+                            val position = coordinates.positionInRoot()
+                            val size = coordinates.size
+                            val bounds = android.graphics.RectF(
+                                position.x,
+                                position.y,
+                                position.x + size.width,
+                                position.y + size.height
+                            )
+                            viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds)
+                        }
                 ) {
                     HomeAnimeCard(
                         anime = anime,
@@ -193,10 +217,16 @@ fun HomeAnimeHorizontalList(
                         isLoggedIn = isLoggedIn,
                         playbackPositions = playbackPositions,
                         disableMaterialColors = disableMaterialColors,
-                        onClick = { onAnimeClick(anime) },
+                        onClick = { bounds ->
+                            viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
+                            onAnimeClick(anime, bounds)
+                        },
                         onPlayClick = { onPlayClick(anime) },
                         onStatusClick = { onStatusClick(anime) },
-                        onInfoClick = { onInfoClick(anime) }
+                        onInfoClick = { bounds ->
+                            viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
+                            onInfoClick(anime, bounds)
+                        }
                     )
                 }
             }
@@ -213,12 +243,13 @@ fun HomeAnimeCard(
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
-    onClick: () -> Unit,
+    onClick: (HomeAnimeCardBounds?) -> Unit,
     onPlayClick: () -> Unit,
     onStatusClick: () -> Unit,
-    onInfoClick: () -> Unit = {}
+    onInfoClick: (HomeAnimeCardBounds?) -> Unit = {}
 ) {
     val context = LocalContext.current
+    var cardBounds by remember { mutableStateOf<android.graphics.RectF?>(null) }
     val statusColor = HomeStatusColors.getColor(listType)
     
     // Progress bar color: bright white for monochrome, bright user-defined primary for material colors
@@ -271,7 +302,27 @@ fun HomeAnimeCard(
     }
 
     Column(modifier = Modifier.width(130.dp)) {
-        Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.height(185.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
+        Card(shape = RoundedCornerShape(12.dp), modifier = Modifier
+            .height(185.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable {
+                onClick(
+                    if (cardBounds != null && cardBounds!!.width() > 0 && cardBounds!!.height() > 0) {
+                        HomeAnimeCardBounds(anime.id, anime.cover, cardBounds!!)
+                    } else null
+                )
+            }
+            .onGloballyPositioned { coordinates ->
+                val position = coordinates.positionInRoot()
+                val size = coordinates.size
+                cardBounds = android.graphics.RectF(
+                    position.x,
+                    position.y,
+                    position.x + size.width,
+                    position.y + size.height
+                )
+            }
+        ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(model = imageRequest, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
 
@@ -343,7 +394,7 @@ fun HomeAnimeCard(
                 ) {
                     // Info Button
                     FilledTonalIconButton(
-                        onClick = onInfoClick,
+                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
                         modifier = Modifier.size(32.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -360,7 +411,7 @@ fun HomeAnimeCard(
                             if (listType == "CURRENT" || listType == "PAUSED") {
                                 onPlayClick()
                             } else {
-                                onClick()
+                                onClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) })
                             }
                         },
                         modifier = Modifier.size(32.dp),

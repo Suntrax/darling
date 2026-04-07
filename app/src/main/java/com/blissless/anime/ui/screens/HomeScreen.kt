@@ -36,10 +36,11 @@ import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.StoredFavorite
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.ui.components.HomeAnimeCardBounds
 import com.blissless.anime.ui.components.HomeAnimeHorizontalList
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.dialogs.OfflineFavoritesDialog
-import com.blissless.anime.dialogs.UserProfileDialog
+import com.blissless.anime.dialogs.UserProfileScreen
 import com.blissless.anime.dialogs.ExploreAnimeDialog
 import com.blissless.anime.ui.components.HomeStatusColors
 import com.blissless.anime.ui.components.LoadingSkeleton
@@ -103,6 +104,9 @@ fun HomeScreen(
     
     // Track first anime for back navigation
     var firstAnime by remember { mutableStateOf<AnimeMedia?>(null) }
+    
+    // Card bounds for shared element transition
+    var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
 
     val effectiveCurrentlyWatching = if (isLoggedIn) currentlyWatching else offlineCurrentlyWatching
     val effectivePlanningToWatch = if (isLoggedIn) planningToWatch else offlinePlanningToWatch
@@ -342,7 +346,7 @@ fun HomeScreen(
                 if (isLoading && allListsEmpty) {
                     LoadingSkeleton(isOled)
                 } else {
-                    val onAnimeClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showEpisodeSheet = true }
+                    val onAnimeClick: (AnimeMedia, com.blissless.anime.ui.components.HomeAnimeCardBounds?) -> Unit = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true }
                     val onPlayClick: (AnimeMedia, String) -> Unit = { anime, listType ->
                         if (listType == "CURRENT") {
                             val nextEp = anime.progress + 1
@@ -357,7 +361,12 @@ fun HomeScreen(
                         }
                     }
                     val onStatusClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showStatusDialog = true }
-                    val onInfoClick: (AnimeMedia) -> Unit = { anime ->
+                    val onInfoClick: (AnimeMedia, com.blissless.anime.ui.components.HomeAnimeCardBounds?) -> Unit = { anime, bounds ->
+                        val cardBounds = bounds?.let {
+                            MainViewModel.CardBounds(anime.id, anime.cover, it.bounds)
+                        }
+                        currentCardBounds = cardBounds
+                        viewModel.clearExploreAnimeCardBounds()
                         selectedAnime = anime
                         if (firstAnime == null) firstAnime = anime
                         showDetailedAnimeScreen = true
@@ -391,7 +400,9 @@ fun HomeScreen(
                                 onInfoClick = onInfoClick,
                                 listIndex = 0,
                                 screenKey = "home",
-                                isVisible = currentScreenIndex == 0)
+                                isVisible = currentScreenIndex == 0,
+                                viewModel = viewModel
+                            )
                         }
 
                         if (effectivePlanningToWatch.isNotEmpty()) {
@@ -416,7 +427,9 @@ fun HomeScreen(
                                 onInfoClick = onInfoClick,
                                 listIndex = 1,
                                 screenKey = "home",
-                                isVisible = currentScreenIndex == 0)
+                                isVisible = currentScreenIndex == 0,
+                                viewModel = viewModel
+                            )
                         }
 
                         if (effectiveCompleted.isNotEmpty()) {
@@ -441,7 +454,9 @@ fun HomeScreen(
                                 onInfoClick = onInfoClick,
                                 listIndex = 2,
                                 screenKey = "home",
-                                isVisible = currentScreenIndex == 0)
+                                isVisible = currentScreenIndex == 0,
+                                viewModel = viewModel
+                            )
                         }
 
                         if (effectiveOnHold.isNotEmpty()) {
@@ -466,7 +481,9 @@ fun HomeScreen(
                                 onInfoClick = onInfoClick,
                                 listIndex = 3,
                                 screenKey = "home",
-                                isVisible = currentScreenIndex == 0)
+                                isVisible = currentScreenIndex == 0,
+                                viewModel = viewModel
+                            )
                         }
 
                         if (effectiveDropped.isNotEmpty()) {
@@ -491,7 +508,9 @@ fun HomeScreen(
                                 onInfoClick = onInfoClick,
                                 listIndex = 4,
                                 screenKey = "home",
-                                isVisible = currentScreenIndex == 0)
+                                isVisible = currentScreenIndex == 0,
+                                viewModel = viewModel
+                            )
                         }
 
                         if (allListsEmpty && !showWelcomeCard) {
@@ -612,6 +631,17 @@ fun HomeScreen(
             })
     }
 
+    // Collect card bounds from ViewModel
+    val viewModelCardBounds by viewModel.exploreAnimeCardBounds.collectAsState()
+    val viewModelHomeCardBounds by viewModel.homeAnimeCardBounds.collectAsState()
+    val effectiveCardBounds = viewModelHomeCardBounds ?: viewModelCardBounds
+    
+    LaunchedEffect(effectiveCardBounds) {
+        if (effectiveCardBounds != null && currentCardBounds == null && showDetailedAnimeScreen) {
+            currentCardBounds = effectiveCardBounds
+        }
+    }
+
     if (showDetailedAnimeScreen && selectedAnime != null) {
         val detailedAnimeData = selectedAnime!!.toDetailedAnimeData()
         val currentStatus by remember(listVersion, selectedAnime!!.id) {
@@ -624,7 +654,9 @@ fun HomeScreen(
             currentStatus = currentStatus,
             isLoggedIn = isLoggedIn,
             isFavorite = favoriteIds.contains(selectedAnime!!.id),
+            initialCardBounds = currentCardBounds,
             onDismiss = {
+                currentCardBounds = null
                 // Go back to first anime if navigated, otherwise close
                 if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
                     selectedAnime = firstAnime
@@ -634,6 +666,7 @@ fun HomeScreen(
                 }
             },
             onSwipeToClose = {
+                currentCardBounds = null
                 showDetailedAnimeScreen = false
                 firstAnime = null
             },
@@ -671,6 +704,8 @@ fun HomeScreen(
             onRelationClick = { relation ->
                 scope.launch {
                     try {
+                        currentCardBounds = null
+                        viewModel.clearHomeAnimeCardBounds()
                         val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                         if (detailedData != null) {
                             selectedAnime = AnimeMedia(
@@ -716,7 +751,7 @@ fun HomeScreen(
     }
 
     if (showUserProfileDialog) {
-        UserProfileDialog(
+        UserProfileScreen(
             viewModel = viewModel,
             isOled = isOled,
             onDismiss = { showUserProfileDialog = false },
