@@ -18,7 +18,8 @@ data class JikanUserFavorites(
 data class JikanFavoriteAnime(
     val malId: Int,
     val title: String,
-    val images: JikanImages
+    val images: JikanImages,
+    val year: Int? = null
 )
 
 data class JikanFavoriteManga(

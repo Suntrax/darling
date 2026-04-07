@@ -385,6 +385,18 @@ class MainViewModel : ViewModel() {
     private val _userAvatar = MutableStateFlow<String?>(null)
     val userAvatar: StateFlow<String?> = _userAvatar.asStateFlow()
 
+    private val _userBanner = MutableStateFlow<String?>(null)
+    val userBanner: StateFlow<String?> = _userBanner.asStateFlow()
+
+    private val _userBio = MutableStateFlow<String?>(null)
+    val userBio: StateFlow<String?> = _userBio.asStateFlow()
+
+    private val _userSiteUrl = MutableStateFlow<String?>(null)
+    val userSiteUrl: StateFlow<String?> = _userSiteUrl.asStateFlow()
+
+    private val _userCreatedAt = MutableStateFlow<Long?>(null)
+    val userCreatedAt: StateFlow<Long?> = _userCreatedAt.asStateFlow()
+
     private val _isLoadingExplore = MutableStateFlow(false)
     val isLoadingExplore: StateFlow<Boolean> = _isLoadingExplore.asStateFlow()
     
@@ -470,6 +482,9 @@ class MainViewModel : ViewModel() {
     // Other UI state
     private val _userActivity = MutableStateFlow<List<UserActivity>>(emptyList())
     val userActivity: StateFlow<List<UserActivity>> = _userActivity.asStateFlow()
+
+    private val _userStats = MutableStateFlow<UserAnimeStats?>(null)
+    val userStats: StateFlow<UserAnimeStats?> = _userStats.asStateFlow()
 
     // AniList Favorites
     private val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
@@ -806,6 +821,7 @@ class MainViewModel : ViewModel() {
         cacheManager.clearAllCaches()
         _loginProvider.value = LoginProvider.NONE
         _userId.value = null; _userName.value = null; _userAvatar.value = null
+        _userBanner.value = null; _userBio.value = null; _userSiteUrl.value = null; _userCreatedAt.value = null
         _currentlyWatching.value = emptyList(); _planningToWatch.value = emptyList(); _completed.value = emptyList(); _onHold.value = emptyList(); _dropped.value = emptyList()
         _aniListFavorites.value = emptyList()
         _isLoadingHome.value = false
@@ -968,7 +984,15 @@ class MainViewModel : ViewModel() {
         val result = repository.fetchUser()?.let {
             _userId.value = it.data.Viewer.id
             _userName.value = it.data.Viewer.name
-            _userAvatar.value = it.data.Viewer.avatar?.medium
+            _userAvatar.value = it.data.Viewer.avatar?.large ?: it.data.Viewer.avatar?.medium
+            _userBanner.value = it.data.Viewer.bannerImage
+            android.util.Log.d("UserProfile", "API returned banner: ${it.data.Viewer.bannerImage}")
+            _userBio.value = it.data.Viewer.about
+            _userSiteUrl.value = it.data.Viewer.siteUrl
+            _userCreatedAt.value = it.data.Viewer.createdAt
+            it.data.Viewer.statistics?.anime?.let { stats ->
+                _userStats.value = stats
+            }
             true
         } ?: false
         return result
@@ -990,7 +1014,7 @@ class MainViewModel : ViewModel() {
                     id = entry.mediaId,
                     title = entry.media.title.romaji ?: entry.media.title.english ?: "Unknown",
                     titleEnglish = entry.media.title.english,
-                    cover = entry.media.coverImage?.large ?: entry.media.coverImage?.medium ?: "",
+                    cover = entry.media.coverImage?.extraLarge ?: entry.media.coverImage?.large ?: entry.media.coverImage?.medium ?: "",
                     banner = entry.media.bannerImage,
                     progress = entry.progress ?: 0,
                     totalEpisodes = entry.media.episodes ?: 0,
@@ -1065,7 +1089,7 @@ class MainViewModel : ViewModel() {
             id = media.id,
             title = title,
             titleEnglish = media.title.english,
-            cover = media.coverImage?.large ?: media.coverImage?.medium ?: "",
+            cover = media.coverImage?.extraLarge ?: media.coverImage?.large ?: media.coverImage?.medium ?: "",
             banner = media.bannerImage,
             episodes = episodes,
             latestEpisode = latestEpisode,
@@ -1106,7 +1130,7 @@ class MainViewModel : ViewModel() {
                 AiringScheduleAnime(
                     id = media.id,
                     title = title,
-                    cover = schedule.media.coverImage?.large ?: "",
+                    cover = schedule.media.coverImage?.extraLarge ?: schedule.media.coverImage?.large ?: "",
                     episodes = episodes,
                     airingEpisode = schedule.episode,
                     airingAt = schedule.airingAt,
@@ -1626,7 +1650,7 @@ class MainViewModel : ViewModel() {
                 AnimeRelation(
                     id = node.id,
                     title = node.title?.english ?: node.title?.romaji ?: "Unknown",
-                    cover = node.coverImage?.large ?: "",
+                    cover = node.coverImage?.extraLarge ?: node.coverImage?.large ?: "",
                     episodes = node.episodes,
                     latestEpisode = node.nextAiringEpisode?.episode?.let { it - 1 },
                     averageScore = node.averageScore,
@@ -1640,7 +1664,7 @@ class MainViewModel : ViewModel() {
             malId = media.idMal,
             title = media.title?.romaji ?: media.title?.english ?: "Unknown",
             titleRomaji = media.title?.romaji, titleEnglish = media.title?.english, titleNative = media.title?.native,
-            cover = media.coverImage?.large ?: "", banner = media.bannerImage, description = media.description,
+            cover = media.coverImage?.extraLarge ?: media.coverImage?.large ?: "", banner = media.bannerImage, description = media.description,
             episodes = media.episodes ?: 0, duration = media.duration, status = media.status,
             averageScore = media.averageScore, popularity = media.popularity, favourites = media.favourites,
             genres = media.genres ?: emptyList(), tags = media.tags ?: emptyList(), season = media.season, year = media.seasonYear ?: media.startDate?.year,
@@ -1698,6 +1722,14 @@ class MainViewModel : ViewModel() {
     fun fetchUserActivity() {
         val userId = _userId.value ?: return
         viewModelScope.launch { repository.fetchUserActivity(userId)?.let { _userActivity.value = it } }
+    }
+    fun fetchUserStats() {
+        val userId = _userId.value ?: return
+        viewModelScope.launch { 
+            repository.fetchUserStats(userId)?.let { 
+                _userStats.value = it.data.User.statistics.anime
+            } 
+        }
     }
     fun fetchAniListFavorites() {
         val userId = _userId.value ?: return

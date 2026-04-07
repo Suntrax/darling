@@ -41,7 +41,8 @@ data class AnimeMedia(
     val year: Int? = null,
     val malId: Int? = null,
     val format: String? = null,
-    val userScore: Int? = null
+    val userScore: Int? = null,
+    val siteUrl: String? = null
 )
 
 @Serializable
@@ -188,7 +189,8 @@ data class DetailedAnimeData(
     val latestEpisode: Int? = null,
     val malId: Int? = null,
     val relations: List<AnimeRelation> = emptyList(),
-    val characters: DetailedAnimeCharacters? = null
+    val characters: DetailedAnimeCharacters? = null,
+    val siteUrl: String? = null
 )
 
 @Serializable
@@ -387,11 +389,21 @@ data class ViewerData(val Viewer: Viewer)
 data class Viewer(
     val id: Int,
     val name: String,
-    val avatar: Avatar?
+    val about: String? = null,
+    val avatar: Avatar? = null,
+    val bannerImage: String? = null,
+    val siteUrl: String? = null,
+    val createdAt: Long? = null,
+    val statistics: ViewerStatistics? = null
 )
 
 @Serializable
-data class Avatar(val medium: String)
+data class ViewerStatistics(
+    val anime: UserAnimeStats? = null
+)
+
+@Serializable
+data class Avatar(val medium: String, val large: String? = null)
 
 @Serializable
 data class MediaListResponse(val data: MediaListData)
@@ -490,6 +502,7 @@ data class MediaTitle(
 
 @Serializable
 data class MediaCoverImage(
+    val extraLarge: String? = null,
     val large: String? = null,
     val medium: String? = null
 )
@@ -558,6 +571,26 @@ data class UserFavoriteAnime(
     val averageScore: Int?,
     val genres: List<String>?,
     val seasonYear: Int? = null
+)
+
+@Serializable
+data class UserStatsResponse(val data: UserStatsData)
+
+@Serializable
+data class UserStatsData(val User: UserStats)
+
+@Serializable
+data class UserStats(val statistics: UserStatistics)
+
+@Serializable
+data class UserStatistics(val anime: UserAnimeStats)
+
+@Serializable
+data class UserAnimeStats(
+    val count: Int = 0,
+    val episodesWatched: Int = 0,
+    val minutesWatched: Int = 0,
+    val meanScore: Double? = null
 )
 
 @Serializable
@@ -797,7 +830,8 @@ fun ExploreAnime.toDetailedAnimeData(): DetailedAnimeData {
         genres = genres,
         year = year,
         latestEpisode = latestEpisode,
-        malId = malId
+        malId = malId,
+        siteUrl = "https://anilist.co/anime/$id"
     )
 }
 
@@ -814,7 +848,8 @@ fun AnimeMedia.toDetailedAnimeData(): DetailedAnimeData {
         genres = genres,
         year = year,
         latestEpisode = latestEpisode,
-        malId = malId
+        malId = malId,
+        siteUrl = siteUrl ?: "https://anilist.co/anime/$id"
     )
 }
 

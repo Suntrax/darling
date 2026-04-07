@@ -68,6 +68,9 @@ fun SettingsScreen(
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
+    
+    // Collect settings from ViewModel
+    val showStatusColorsState by viewModel.showStatusColors.collectAsState(initial = true)
 
     // Collect the settings from ViewModel
     val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = false)
@@ -259,7 +262,7 @@ fun SettingsScreen(
             SettingsToggle(
                 title = "Status Color Indicators",
                 description = "Show colored status bars on anime cards",
-                checked = showStatusColors,
+                checked = showStatusColorsState,
                 onCheckedChange = { viewModel.setShowStatusColors(it) },
                 isOled = isOled
             )

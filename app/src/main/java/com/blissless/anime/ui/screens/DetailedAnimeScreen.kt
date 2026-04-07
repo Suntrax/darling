@@ -366,6 +366,31 @@ fun DetailedAnimeScreen(
                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
+            IconButton(
+                onClick = {
+                    val shareText = buildString {
+                        displayData.title?.let { append(it) }
+                        append("\n\n")
+                        append("https://anilist.co/anime/${displayData.id}")
+                    }
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, shareText)
+                        type = "text/plain"
+                    }
+                    val shareIntent = Intent.createChooser(sendIntent, null)
+                    context.startActivity(shareIntent)
+                },
+                modifier = Modifier
+                    .padding(top = 16.dp, start = 16.dp)
+                    .align(Alignment.TopStart)
+                    .size(40.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .zIndex(10f)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+
             Box(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
                     .width(40.dp).height(4.dp)

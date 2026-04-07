@@ -1,11 +1,20 @@
 package com.blissless.anime.dialogs
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
@@ -16,14 +25,19 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,9 +50,12 @@ import com.blissless.anime.data.JikanHistoryEntry
 import com.blissless.anime.data.LoginProvider
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.UserActivity
+import com.blissless.anime.data.models.UserAnimeStats
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.absoluteValue
+import androidx.compose.animation.core.Spring
 
 data class HistoryData(val entries: List<JikanHistoryEntry>, val statuses: List<String>, val progressList: List<String>)
 
@@ -55,19 +72,27 @@ fun UserProfileScreen(
     onShowDetailedAnimeFromMal: (Int) -> Unit
 ) {
     var selectedSection by remember { mutableStateOf(UserProfileSection.ABOUT_ME) }
+    val context = LocalContext.current
     
     val loginProvider by viewModel.loginProvider.collectAsState()
     val jikanFavorites by viewModel.jikanFavorites.collectAsState()
     val jikanHistory by viewModel.jikanHistory.collectAsState()
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val userActivity by viewModel.userActivity.collectAsState()
-    val malUsername by viewModel.malUsernameFlow.collectAsState()
+    val userStats by viewModel.userStats.collectAsState()
+    val userAvatar by viewModel.userAvatar.collectAsState()
+    val userName by viewModel.userName.collectAsState()
+    val userBanner by viewModel.userBanner.collectAsState()
+    val userBio by viewModel.userBio.collectAsState()
+    val userSiteUrl by viewModel.userSiteUrl.collectAsState()
+    val userCreatedAt by viewModel.userCreatedAt.collectAsState()
 
     LaunchedEffect(loginProvider) {
         if (loginProvider == LoginProvider.ANILIST) {
             viewModel.loadAniListFavoritesFromStorage()
             viewModel.fetchAniListFavorites()
             viewModel.fetchUserActivity()
+            viewModel.fetchUserStats()
         }
     }
 
@@ -83,7 +108,8 @@ fun UserProfileScreen(
                                 ?: aniListFavorite.coverImage?.medium 
                                 ?: ""
                         )
-                    )
+                    ),
+                    year = aniListFavorite.seasonYear
                 )
             }
         }
@@ -151,8 +177,26 @@ fun UserProfileScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (selectedSection == UserProfileSection.ABOUT_ME && userSiteUrl != null) {
+                        IconButton(onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, userSiteUrl)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
+                        }) {
+                            Icon(Icons.Default.Share, "Share", tint = Color.White)
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(48.dp))
+                    }
+                    
                     Text(
-                        "Profile",
+                        when (selectedSection) {
+                            UserProfileSection.ABOUT_ME -> "About Me"
+                            UserProfileSection.FAVORITES -> "Favorites"
+                            UserProfileSection.HISTORY -> "History"
+                        },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -170,9 +214,16 @@ fun UserProfileScreen(
                 ) {
                     when (selectedSection) {
                         UserProfileSection.ABOUT_ME -> AboutMeContent(
-                            username = malUsername ?: "User",
+                            username = userName ?: "User",
                             isOled = isOled,
-                            loginProvider = loginProvider
+                            loginProvider = loginProvider,
+                            userAvatar = userAvatar,
+                            userBanner = userBanner,
+                            userBio = userBio,
+                            userSiteUrl = userSiteUrl,
+                            userCreatedAt = userCreatedAt,
+                            userStats = userStats,
+                            onShareClick = { /* TODO */ }
                         )
                         UserProfileSection.FAVORITES -> FavoritesContent(
                             favorites = favorites,
@@ -275,30 +326,213 @@ private fun UserProfileNavButton(
 private fun AboutMeContent(
     username: String,
     isOled: Boolean,
-    loginProvider: LoginProvider
+    loginProvider: LoginProvider,
+    userAvatar: String? = null,
+    userBanner: String? = null,
+    userBio: String? = null,
+    userSiteUrl: String? = null,
+    userCreatedAt: Long? = null,
+    userStats: UserAnimeStats? = null,
+    onShareClick: () -> Unit = {}
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            username,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            when (loginProvider) {
-                LoginProvider.ANILIST -> "AniList Profile"
-                LoginProvider.MAL -> "MyAnimeList Profile"
-                LoginProvider.NONE -> "Not logged in"
-            },
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.6f)
-        )
+    val bgColor = if (isOled) Color.Black else Color(0xFF1A1A1A)
+    var showFullscreenAvatar by remember { mutableStateOf(false) }
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background banner - show full banner without cropping sides
+        userBanner?.let { bannerUrl ->
+            AsyncImage(
+                model = bannerUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentScale = ContentScale.Inside
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(160.dp))
+            
+            // Avatar (clickable)
+            Box {
+                userAvatar?.let { avatarUrl ->
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = "Avatar",
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(50.dp))
+                            .clickable { showFullscreenAvatar = true },
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Username
+            Text(
+                username,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            
+            // Bio
+            userBio?.let { bio ->
+                if (bio.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        bio.take(150) + if (bio.length > 150) "..." else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 3,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+            
+            // Created date
+            userCreatedAt?.let { timestamp ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Joined ${formatDate(timestamp)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Stats cards
+            if (userStats != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    StatCard(
+                        value = userStats.count.toString(),
+                        label = "Anime",
+                        color = Color(0xFF2196F3)
+                    )
+                    StatCard(
+                        value = formatEpisodes(userStats.episodesWatched),
+                        label = "Episodes",
+                        color = Color(0xFF4CAF50)
+                    )
+                    StatCard(
+                        value = userStats.meanScore?.let { "%.1f".format(it / 10.0) } ?: "-",
+                        label = "Mean",
+                        color = Color(0xFFFFC107)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Time watched
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        "Total: ${formatMinutesWatched(userStats.minutesWatched)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        // Fullscreen avatar dialog
+        if (showFullscreenAvatar) {
+            Dialog(onDismissRequest = { showFullscreenAvatar = false }) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures { showFullscreenAvatar = false }
+                            }
+                    )
+                    userAvatar?.let { avatarUrl ->
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = "Avatar",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun StatCard(
+    value: String,
+    label: String,
+    color: Color
+) {
+    Card(
+        modifier = Modifier.width(100.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.15f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+private fun formatEpisodes(episodes: Int): String = when {
+    episodes >= 1000 -> "%.1fK".format(episodes / 1000.0)
+    else -> episodes.toString()
+}
+
+private fun formatMinutesWatched(minutes: Int): String {
+    val hours = minutes / 60
+    val days = hours / 24
+    return when {
+        days > 0 -> "$days days"
+        hours > 0 -> "$hours hours"
+        else -> "$minutes min"
+    }
+}
+
+private fun formatDate(timestamp: Long): String {
+    val sdf = SimpleDateFormat("d MMMM, yyyy", Locale("de", "DE"))
+    return sdf.format(Date(timestamp * 1000))
 }
 
 @Composable
@@ -321,15 +555,90 @@ private fun FavoritesContent(
             }
         }
     } else {
+        val listState = rememberLazyListState()
+        val resultsVisible = remember { mutableStateOf(true) }
+        
+        LaunchedEffect(favorites) { resultsVisible.value = true }
+        
+        val cinematicProgress by animateFloatAsState(
+            targetValue = if (resultsVisible.value) 1f else 0f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            label = "cinematicProgress"
+        )
+        
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            items(favorites) { anime ->
-                FavoriteItem(
-                    anime = anime,
-                    isOled = isOled,
-                    onClick = { onAnimeClick(anime) }
+            itemsIndexed(favorites) { index, anime ->
+                val isScrolling by remember {
+                    derivedStateOf { listState.isScrollInProgress }
+                }
+                
+                val layoutInfo = listState.layoutInfo
+                val visibleItems = layoutInfo.visibleItemsInfo
+                val itemInfo = visibleItems.find { it.index == index }
+                
+                val centerOffset = if (itemInfo != null) {
+                    val itemCenter = itemInfo.offset + itemInfo.size / 2
+                    val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                    (itemCenter - screenCenter) / screenCenter
+                } else {
+                    0f
+                }
+                
+                val animatedOffset by animateFloatAsState(
+                    targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                    animationSpec = if (isScrolling) {
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    } else {
+                        spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        )
+                    },
+                    label = "centerOffset"
                 )
+                
+                val staggerDelay = minOf(index, 15) * 40f
+                val staggerMs = staggerDelay / 1000f
+                val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                val easedProgress = easeOutCubic(rawProgress.coerceAtMost(1f))
+                
+                val introScale = 0.3f + easedProgress * 0.7f
+                val introAlpha = easedProgress
+                val introTranslationY = -40f * (1f - easedProgress)
+                
+                val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
+                val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                val scrollParallax = animatedOffset * 25f
+                
+                val finalScale = scrollScale * introScale
+                val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                val finalTranslationY = scrollParallax + introTranslationY
+                
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = finalScale
+                            scaleY = finalScale
+                            alpha = finalAlpha
+                            translationY = finalTranslationY
+                        }
+                ) {
+                    FavoriteItem(
+                        anime = anime,
+                        isOled = isOled,
+                        onClick = { onAnimeClick(anime) }
+                    )
+                }
             }
         }
     }
@@ -341,31 +650,49 @@ private fun FavoriteItem(
     isOled: Boolean,
     onClick: () -> Unit
 ) {
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isOled) Color.Black else Color(0xFF2A2A2A))
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        AsyncImage(
-            model = anime.images.jpg?.imageUrl,
-            contentDescription = anime.title,
+        Row(
             modifier = Modifier
-                .size(60.dp)
-                .clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            anime.title,
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = anime.images.jpg?.imageUrl,
+                contentDescription = anime.title,
+                modifier = Modifier
+                    .width(70.dp)
+                    .height(95.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    anime.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                anime.year?.let { year ->
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        year.toString(),
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -391,17 +718,92 @@ private fun HistoryContent(
             }
         }
     } else {
+        val listState = rememberLazyListState()
+        val resultsVisible = remember { mutableStateOf(true) }
+        
+        LaunchedEffect(history) { resultsVisible.value = true }
+        
+        val cinematicProgress by animateFloatAsState(
+            targetValue = if (resultsVisible.value) 1f else 0f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            label = "cinematicProgress"
+        )
+        
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            items(history.indices.toList()) { index ->
-                HistoryItem(
-                    entry = history[index],
-                    isOled = isOled,
-                    onClick = { onAnimeClick(history[index]) },
-                    status = statuses.getOrNull(index),
-                    progress = progressList.getOrNull(index)
+            itemsIndexed(history) { index, entry ->
+                val isScrolling by remember {
+                    derivedStateOf { listState.isScrollInProgress }
+                }
+                
+                val layoutInfo = listState.layoutInfo
+                val visibleItems = layoutInfo.visibleItemsInfo
+                val itemInfo = visibleItems.find { it.index == index }
+                
+                val centerOffset = if (itemInfo != null) {
+                    val itemCenter = itemInfo.offset + itemInfo.size / 2
+                    val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                    (itemCenter - screenCenter) / screenCenter
+                } else {
+                    0f
+                }
+                
+                val animatedOffset by animateFloatAsState(
+                    targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                    animationSpec = if (isScrolling) {
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    } else {
+                        spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        )
+                    },
+                    label = "centerOffset"
                 )
+                
+                val staggerDelay = minOf(index, 15) * 40f
+                val staggerMs = staggerDelay / 1000f
+                val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                val easedProgress = easeOutCubic(rawProgress.coerceAtMost(1f))
+                
+                val introScale = 0.3f + easedProgress * 0.7f
+                val introAlpha = easedProgress
+                val introTranslationY = -40f * (1f - easedProgress)
+                
+                val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
+                val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                val scrollParallax = animatedOffset * 25f
+                
+                val finalScale = scrollScale * introScale
+                val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                val finalTranslationY = scrollParallax + introTranslationY
+                
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = finalScale
+                            scaleY = finalScale
+                            alpha = finalAlpha
+                            translationY = finalTranslationY
+                        }
+                ) {
+                    HistoryItem(
+                        entry = entry,
+                        isOled = isOled,
+                        onClick = { onAnimeClick(entry) },
+                        status = statuses.getOrNull(index),
+                        progress = progressList.getOrNull(index)
+                    )
+                }
             }
         }
     }
@@ -424,54 +826,64 @@ private fun HistoryItem(
         else -> Triple(Icons.Default.PlayArrow, Color(0xFF2196F3), status ?: "")
     }
     
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isOled) Color.Black else Color(0xFF2A2A2A))
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        AsyncImage(
-            model = entry.images.jpg?.imageUrl,
-            contentDescription = entry.title,
+        Row(
             modifier = Modifier
-                .size(60.dp)
-                .clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                entry.title,
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = entry.images.jpg?.imageUrl,
+                contentDescription = entry.title,
+                modifier = Modifier
+                    .width(70.dp)
+                    .height(95.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    statusIcon,
-                    contentDescription = null,
-                    tint = statusColor,
-                    modifier = Modifier.size(16.dp)
-                )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "$statusLabel $progress",
-                    color = statusColor,
-                    style = MaterialTheme.typography.bodySmall
+                    entry.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-            }
-            entry.date?.let { date ->
-                Text(
-                    date,
-                    color = Color.White.copy(alpha = 0.5f),
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        statusIcon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "$statusLabel $progress",
+                        color = statusColor,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                entry.date?.let { date ->
+                    Text(
+                        date,
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }
@@ -481,3 +893,5 @@ private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("d MMMM, yyyy - HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp * 1000))
 }
+
+private fun easeOutCubic(t: Float): Float = (1f - (1f - t) * (1f - t) * (1f - t)).coerceIn(0f, 1f)
