@@ -714,14 +714,14 @@ fun HomeScreen(
                                 titleEnglish = detailedData.titleEnglish,
                                 cover = detailedData.cover,
                                 banner = detailedData.banner,
-                                progress = selectedAnime!!.progress,
+                                progress = 0,
                                 totalEpisodes = detailedData.episodes,
                                 latestEpisode = detailedData.latestEpisode,
                                 status = detailedData.status ?: "",
                                 averageScore = detailedData.averageScore,
                                 genres = detailedData.genres,
-                                listStatus = selectedAnime!!.listStatus,
-                                listEntryId = selectedAnime!!.listEntryId,
+                                listStatus = "",
+                                listEntryId = 0,
                                 year = detailedData.year,
                                 malId = detailedData.malId
                             )
