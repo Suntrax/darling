@@ -53,7 +53,6 @@ fun SettingsScreen(
     isOled: Boolean,
     isLoggedIn: Boolean,
     showStatusColors: Boolean = true,
-    hideNavbarText: Boolean = false,
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = true,
@@ -264,16 +263,6 @@ fun SettingsScreen(
                 description = "Show colored status bars on anime cards",
                 checked = showStatusColorsState,
                 onCheckedChange = { viewModel.setShowStatusColors(it) },
-                isOled = isOled
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsToggle(
-                title = "Compact Navigation",
-                description = "Hide text labels in bottom navigation",
-                checked = hideNavbarText,
-                onCheckedChange = { viewModel.setHideNavbarText(it) },
                 isOled = isOled
             )
 

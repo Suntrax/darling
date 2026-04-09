@@ -8,6 +8,12 @@ import kotlin.math.absoluteValue
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.input.pointer.pointerInput
@@ -52,7 +58,6 @@ import kotlinx.coroutines.MainScope
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
@@ -384,7 +389,6 @@ fun MainScreen(
 
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
-    val hideNavbarText by viewModel.hideNavbarText.collectAsState(initial = false)
 
     val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
     val hideAdultContent by viewModel.hideAdultContent.collectAsState(initial = false)
@@ -1532,51 +1536,7 @@ fun MainScreen(
     } else {
         Scaffold(
             containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.background,
-            bottomBar = {
-                NavigationBar(
-                    containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface,
-                    contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                    modifier = if (hideNavbarText) Modifier.height(64.dp) else Modifier
-                ) {
-                    val items = listOf("Schedule", "Explore", "Home", "Settings")
-                    val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
-
-                    items.forEachIndexed { index, item ->
-                        NavigationBarItem(
-                            icon = {
-                                Icon(
-                                    icons[index],
-                                    contentDescription = item,
-                                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                                    modifier = if (hideNavbarText) Modifier.size(26.dp) else Modifier
-                                )
-                            },
-                            label = if (hideNavbarText) null else {
-                                { Text(item, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) }
-                            },
-                            selected = pagerState.targetPage == index,
-                            onClick = {
-                                scope.launch {
-                                    val currentPage = pagerState.currentPage
-                                    val isAdjacent = (index - currentPage).absoluteValue <= 1
-                                    if (isAdjacent) {
-                                        pagerState.animateScrollToPage(index)
-                                    } else {
-                                        pagerState.scrollToPage(index)
-                                    }
-                                }
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                selectedTextColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-                                unselectedTextColor = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = if (isOled) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primaryContainer
-                            )
-                        )
-                    }
-                }
-            }
+            contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 HorizontalPager(
@@ -1588,7 +1548,8 @@ fun MainScreen(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMediumLow
                         )
-                    )
+                    ),
+                    modifier = Modifier.fillMaxSize()
                 ) { page ->
                     val isCurrentPage = pagerState.currentPage == page
                     val isScheduleVisible = pagerState.currentPage == 0
@@ -1713,7 +1674,6 @@ fun MainScreen(
                             isOled = isOled,
                             isLoggedIn = isLoggedIn,
                             showStatusColors = showStatusColors,
-                            hideNavbarText = hideNavbarText,
                             autoSkipOpening = autoSkipOpening,
                             autoSkipEnding = autoSkipEnding,
                             autoPlayNextEpisode = autoPlayNextEpisode,
@@ -1735,6 +1695,136 @@ fun MainScreen(
                             CircularProgressIndicator()
                             Spacer(modifier = Modifier.height(16.dp))
                             Text("Loading stream...", color = Color.White)
+                        }
+                    }
+                }
+
+                val isOledTheme = isOled
+                val primaryColor = MaterialTheme.colorScheme.primary
+                val surfaceColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface
+                val onSurfaceColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = surfaceColor.copy(alpha = 0.95f),
+                        tonalElevation = 4.dp,
+                        shadowElevation = 8.dp,
+                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
+                    ) {
+                        val selectedIndex = pagerState.targetPage
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val items = listOf("Schedule", "Explore", "Home", "Settings")
+                            val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
+
+                            items.forEachIndexed { index, item ->
+                                val isSelected = index == selectedIndex
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(if (isSelected) 1.6f else 0.7f)
+                                        .animateContentSize(
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessLow
+                                            )
+                                        )
+                                        .height(56.dp)
+                                        .pointerInput(Unit) {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    val event = awaitPointerEvent()
+                                                    if (event.changes.any { it.pressed }) {
+                                                        scope.launch {
+                                                            val currentPage = pagerState.currentPage
+                                                            val isAdjacent = (index - currentPage).absoluteValue <= 1
+                                                            if (isAdjacent) {
+                                                                pagerState.animateScrollToPage(index)
+                                                            } else {
+                                                                pagerState.scrollToPage(index)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val alpha by animateFloatAsState(
+                                        targetValue = if (isSelected) 1f else 0f,
+                                        animationSpec = tween(
+                                            durationMillis = 200,
+                                            easing = LinearEasing
+                                        ),
+                                        label = "alpha_$index"
+                                    )
+
+                                    if (isSelected) {
+                                        val pillColor = if (disableMaterialColors) {
+                                            Color.White.copy(alpha = 0.2f)
+                                        } else {
+                                            primaryContainerColor
+                                        }
+                                        val pillTextColor = if (disableMaterialColors) {
+                                            Color.White
+                                        } else {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        }
+
+                                        Surface(
+                                            shape = MaterialTheme.shapes.extraLarge,
+                                            color = pillColor,
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .padding(vertical = 6.dp)
+                                                .fillMaxWidth(0.95f)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    icons[index],
+                                                    contentDescription = item,
+                                                    tint = pillTextColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    item,
+                                                    color = pillTextColor,
+                                                    style = MaterialTheme.typography.labelMedium
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Icon(
+                                            icons[index],
+                                            contentDescription = item,
+                                            tint = if (isOledTheme) Color.White.copy(alpha = 0.6f) else onSurfaceColor.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

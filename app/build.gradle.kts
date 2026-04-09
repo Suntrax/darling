@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 35
-        versionName = "3.9.1"
+        versionCode = 36
+        versionName = "3.9.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
