@@ -39,6 +39,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +55,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import com.blissless.anime.ui.components.rememberCinematicAnimation
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.TagData
 import com.blissless.anime.data.models.DetailedAnimeData
@@ -422,6 +424,8 @@ fun DetailedAnimeScreen(
 
             val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
             val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+            val cinematicProgress = rememberCinematicAnimation("detailed_anime")
+            val density = LocalDensity.current
             
             LazyColumn(
                 state = lazyListState,
@@ -1089,12 +1093,21 @@ fun DetailedAnimeScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(filteredRelations) { relation ->
+                                        val indexFloat = filteredRelations.indexOf(relation).toFloat()
+                                        val staggeredProgress = ((cinematicProgress * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                        val easedProgress = easeOut(staggeredProgress)
+
                                         Column(
                                             modifier = Modifier
                                                 .width(110.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .clickable {
                                                     onRelationClick(relation)
+                                                }
+                                                .graphicsLayer {
+                                                    scaleX = 0.85f + easedProgress * 0.15f
+                                                    scaleY = 0.85f + easedProgress * 0.15f
+                                                    this.alpha = easedProgress
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1225,13 +1238,22 @@ fun DetailedAnimeScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(castList) { character ->
+                                        val indexFloat = castList.indexOf(character).toFloat()
+                                        val staggeredProgress = ((cinematicProgress * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                        val easedProgress = easeOut(staggeredProgress)
+
                                         Column(
                                             modifier = Modifier
                                                 .width(80.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .clickable { 
+                                                .clickable {
                                                     val id = character.id
                                                     onCharacterClick(id)
+                                                }
+                                                .graphicsLayer {
+                                                    scaleX = 0.85f + easedProgress * 0.15f
+                                                    scaleY = 0.85f + easedProgress * 0.15f
+                                                    this.alpha = easedProgress
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1307,11 +1329,20 @@ fun DetailedAnimeScreen(
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(staffList) { staffEdge ->
                                         staffEdge.node?.let { staff ->
+                                            val indexFloat = staffList.indexOf(staffEdge).toFloat()
+                                            val staggeredProgress = ((cinematicProgress * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                            val easedProgress = easeOut(staggeredProgress)
+
                                             Column(
                                                 modifier = Modifier
                                                     .width(80.dp)
                                                     .clip(RoundedCornerShape(12.dp))
                                                     .clickable { staffEdge.node?.id?.let { id -> onStaffClick(id) } }
+                                                    .graphicsLayer {
+                                                        scaleX = 0.85f + easedProgress * 0.15f
+                                                        scaleY = 0.85f + easedProgress * 0.15f
+                                                        this.alpha = easedProgress
+                                                    }
                                                     .padding(4.dp)
                                             ) {
                                                 Box(
@@ -1510,4 +1541,9 @@ private fun formatNumber(num: Int): String = when {
     num >= 1_000_000 -> String.format(Locale.US, "%.1fM", num / 1_000_000.0)
     num >= 1_000 -> String.format(Locale.US, "%.1fK", num / 1_000.0)
     else -> num.toString()
+}
+
+private fun easeOut(t: Float): Float {
+    val t1 = t - 1f
+    return t1 * t1 * t1 + 1f
 }

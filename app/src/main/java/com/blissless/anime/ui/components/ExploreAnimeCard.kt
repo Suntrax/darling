@@ -436,21 +436,30 @@ fun ExploreAnimeCard(
 
 @Composable
 internal fun LoadingPlaceholder(isOled: Boolean = false) {
+    val skeletonColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(5, key = { "loading_$it" }) {
-            Card(
-                modifier = Modifier
-                    .width(110.dp)
-                    .height(160.dp),
-                shape = RoundedCornerShape(4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+        items(3, key = { "loading_$it" }) {
+            Column(modifier = Modifier.width(110.dp)) {
+                // Image area matching actual card height
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .background(skeletonColor, RoundedCornerShape(4.dp))
                 )
-            ) {
-                Box(modifier = Modifier.fillMaxSize())
+                // Title text skeleton
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(12.dp)
+                        .padding(horizontal = 4.dp)
+                        .background(skeletonColor, RoundedCornerShape(4.dp))
+                )
             }
         }
     }

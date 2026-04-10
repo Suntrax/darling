@@ -1,10 +1,17 @@
 package com.blissless.anime.ui.components
 
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,25 +52,100 @@ data class HomeAnimeCardBounds(
 
 @Composable
 fun LoadingSkeleton(isOled: Boolean) {
-    Column {
-        Text(
-            "Currently Watching",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(4) {
-                Card(
-                    modifier = Modifier.width(130.dp).height(220.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+    val shimmerColors = listOf(
+        if (isOled) Color(0xFF2A2A2A) else Color(0xFFE0E0E0),
+        if (isOled) Color(0xFF1A1A1A) else Color(0xFFD0D0D0),
+        if (isOled) Color(0xFF2A2A2A) else Color(0xFFE0E0E0),
+    )
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val shimmerOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer_offset"
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        repeat(3) { sectionIndex ->
+            // Section header skeleton
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.width(20.dp).height(20.dp).background(
+                        shimmerColors[0], RoundedCornerShape(4.dp)
                     )
-                ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier.width(140.dp).height(18.dp).background(
+                        shimmerColors[0], RoundedCornerShape(4.dp)
+                    )
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier.width(24.dp).height(18.dp).background(
+                        shimmerColors[0], RoundedCornerShape(12.dp)
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                items(4, key = { "skeleton_${sectionIndex}_$it" }) {
+                    Column(modifier = Modifier.width(130.dp)) {
+                        // Image area
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(185.dp)
+                                .background(
+                                    shimmerColors[0],
+                                    RoundedCornerShape(8.dp)
+                                )
+                        )
+                        // Title area
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(12.dp)
+                                .padding(horizontal = 4.dp)
+                                .background(
+                                    shimmerColors[0],
+                                    RoundedCornerShape(4.dp)
+                                )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // Progress bar skeleton
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .padding(horizontal = 4.dp)
+                                .background(
+                                    if (isOled) Color(0xFF333333) else Color(0xFFE8E8E8),
+                                    RoundedCornerShape(2.dp)
+                                )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .height(3.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                                        RoundedCornerShape(2.dp)
+                                    )
+                            )
+                        }
                     }
                 }
             }

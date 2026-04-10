@@ -1742,7 +1742,7 @@ fun MainScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(bottom = 8.dp, start = 32.dp, end = 32.dp),
+                                .padding(bottom = 4.dp, start = 64.dp, end = 64.dp),
                             shape = MaterialTheme.shapes.extraLarge,
                             color = surfaceColor.copy(alpha = 0.95f),
                             tonalElevation = 4.dp,
@@ -1754,7 +1754,7 @@ fun MainScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 4.dp),
+                                    .padding(horizontal = 2.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -1766,14 +1766,14 @@ fun MainScreen(
 
                                 Box(
                                     modifier = Modifier
-                                        .weight(if (isSelected) 1.6f else 0.7f)
+                                        .weight(if (isSelected) 0.67f else 0.25f)
                                         .animateContentSize(
                                             animationSpec = spring(
                                                 dampingRatio = Spring.DampingRatioNoBouncy,
                                                 stiffness = Spring.StiffnessLow
                                             )
                                         )
-                                        .height(56.dp)
+                                        .height(50.dp)
                                         .pointerInput(Unit) {
                                             awaitPointerEventScope {
                                                 while (true) {
@@ -1820,7 +1820,7 @@ fun MainScreen(
                                             color = pillColor,
                                             modifier = Modifier
                                                 .fillMaxHeight()
-                                                .padding(vertical = 6.dp)
+                                                .padding(vertical = 5.dp)
                                                 .fillMaxWidth(0.95f)
                                         ) {
                                             Row(

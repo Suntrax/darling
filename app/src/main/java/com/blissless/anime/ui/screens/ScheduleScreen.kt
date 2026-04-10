@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -789,12 +790,7 @@ fun ScheduleScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             if (isLoading && airingList.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                ScheduleLoadingSkeleton(isOled)
             } else {
                 val timelineItems = if (viewMode == 0) allUpcomingTimelineItems else byDayTimelineItems
                 val currentListState = if (viewMode == 0) listStateAllUpcoming else listStateByDay
@@ -1414,6 +1410,127 @@ private fun CurrentTimeIndicator(
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleLoadingSkeleton(isOled: Boolean) {
+    val skeletonColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
+    val timeColor = if (isOled) Color(0xFF2A2A2A) else Color(0xFFC0C0C0)
+    val dotColor = if (isOled) Color(0xFF2A2A2A) else Color(0xFFC0C0C0)
+    val lineColor = if (isOled) Color(0xFF333333) else Color(0xFFE0E0E0)
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        items(6) { index ->
+            // Day header skeleton
+            if (index == 0 || index == 3) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 58.dp, end = 8.dp, top = 24.dp, bottom = 12.dp)
+                        .height(40.dp)
+                        .background(skeletonColor, RoundedCornerShape(8.dp))
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                // Time marker skeleton
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(50.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(14.dp)
+                            .background(timeColor, RoundedCornerShape(4.dp))
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(dotColor, CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .width(2.dp)
+                            .height(90.dp)
+                            .background(lineColor)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Card skeleton matching TimelineAnimeItem layout
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = skeletonColor)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Cover image skeleton
+                        Box(
+                            modifier = Modifier
+                                .width(70.dp)
+                                .height(95.dp)
+                                .background(skeletonColor, RoundedCornerShape(8.dp))
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            // Title skeleton
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.8f)
+                                    .height(14.dp)
+                                    .background(timeColor, RoundedCornerShape(4.dp))
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .height(14.dp)
+                                    .background(timeColor, RoundedCornerShape(4.dp))
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            // Episode tag skeleton
+                            Box(
+                                modifier = Modifier
+                                    .width(50.dp)
+                                    .height(18.dp)
+                                    .background(timeColor, RoundedCornerShape(4.dp))
+                            )
+                        }
+
+                        // Arrow skeleton
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(timeColor, RoundedCornerShape(14.dp))
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }

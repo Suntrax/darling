@@ -243,13 +243,13 @@ fun FeaturedCarousel(
                         
                         IconButton(
                             onClick = { onStatusClick(currentAnime) },
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                                 contentDescription = "Save",
                                 tint = if (isSaved) statusColor else Color.White,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                         
@@ -273,13 +273,13 @@ fun FeaturedCarousel(
                         
                         IconButton(
                             onClick = { onInfoClick(currentAnime) },
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 Icons.Outlined.Info,
                                 contentDescription = "Info",
                                 tint = Color.White,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
