@@ -83,7 +83,7 @@ fun ExploreAnimeHorizontalList(
     LazyRow(
         state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         itemsIndexed(
             items = animeList,
@@ -253,12 +253,12 @@ fun ExploreAnimeCard(
         }
     }
 
-    Column(modifier = Modifier.width(130.dp)) {
+    Column(modifier = Modifier.width(110.dp)) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
-                .height(185.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .height(160.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .clickable(onClick = {
                     val bounds = cardBounds
                     onClick(
@@ -316,7 +316,7 @@ fun ExploreAnimeCard(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(6.dp),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
@@ -334,7 +334,7 @@ fun ExploreAnimeCard(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(6.dp),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
@@ -372,7 +372,7 @@ fun ExploreAnimeCard(
                             modifier = Modifier
                                 .size(32.dp)
                                 .scale(if (showAnimation) bookmarkScale else 1f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(4.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                 containerColor = buttonContainerColor,
                                 contentColor = Color.White
@@ -399,7 +399,7 @@ fun ExploreAnimeCard(
                         FilledTonalIconButton(
                             onClick = { onClick(null) },
                             modifier = Modifier.size(32.dp),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(4.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                 containerColor = Color.Black.copy(alpha = 0.6f),
                                 contentColor = Color.White
@@ -433,14 +433,14 @@ fun ExploreAnimeCard(
 internal fun LoadingPlaceholder(isOled: Boolean = false) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(5, key = { "loading_$it" }) {
             Card(
                 modifier = Modifier
-                    .width(130.dp)
-                    .height(200.dp),
-                shape = RoundedCornerShape(8.dp),
+                    .width(110.dp)
+                    .height(160.dp),
+                shape = RoundedCornerShape(4.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
                 )
@@ -459,14 +459,14 @@ internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = f
     ) {
         Text(
             title,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
         )
         count?.let {
             Spacer(modifier = Modifier.width(8.dp))
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = if (isOled) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
             ) {
                 Text(

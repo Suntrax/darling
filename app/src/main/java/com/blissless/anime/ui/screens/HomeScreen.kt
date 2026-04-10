@@ -157,7 +157,7 @@ fun HomeScreen(
             onRefresh = { isRefreshing = true; viewModel.refreshHome() },
             modifier = Modifier.fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().padding(top = 20.dp)) {
                 // Error/Offline Banner
                 if (apiError != null || isOffline) {
                     Surface(

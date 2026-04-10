@@ -490,6 +490,7 @@ fun ScheduleScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(top = 20.dp)
             .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
     ) {
         // Error/Offline Banner - always visible at top
@@ -774,7 +775,7 @@ fun ScheduleScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Content with pull-to-refresh
         PullToRefreshBox(

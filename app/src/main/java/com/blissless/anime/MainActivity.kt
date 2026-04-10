@@ -1709,7 +1709,7 @@ fun MainScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .navigationBarsPadding()
-                        .padding(bottom = 8.dp)
+                        .padding(bottom = 4.dp)
                 ) {
                     Surface(
                         modifier = Modifier
