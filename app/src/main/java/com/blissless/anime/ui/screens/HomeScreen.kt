@@ -150,6 +150,10 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(showSearchOverlay) {
+        viewModel.setHideNavbar(showSearchOverlay)
+    }
+
     androidx.activity.compose.BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
 
     Box(modifier = Modifier.fillMaxSize()) {

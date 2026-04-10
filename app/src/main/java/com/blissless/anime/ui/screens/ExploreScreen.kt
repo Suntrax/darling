@@ -288,6 +288,7 @@ fun ExploreScreen(
             banner = anime.banner,
             totalEpisodes = anime.episodes,
             latestEpisode = anime.latestEpisode,
+            listStatus = animeStatusMap[anime.id] ?: "",
             status = animeStatusMap[anime.id] ?: "",
             averageScore = anime.averageScore,
             genres = anime.genres
@@ -295,6 +296,7 @@ fun ExploreScreen(
         HomeAnimeStatusDialog(
             anime = animeMedia,
             isOled = isOled,
+            showStatusColors = showStatusColors,
             onDismiss = { showStatusDialog = false },
             onRemove = {
                 viewModel.removeAnimeFromList(anime.id)
@@ -419,6 +421,7 @@ fun ExploreScreen(
                     animeStatusMap = animeStatusMap,
                     preferEnglishTitles = preferEnglishTitles,
                     isOled = isOled,
+                    isDialogOpen = showDialog || showStatusDialog || showEpisodeSelection,
                     autoScrollEnabled = isVisible && !showDialog
                 )
             } else if (apiError == null && !isOffline) {

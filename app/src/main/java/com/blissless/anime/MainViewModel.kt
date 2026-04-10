@@ -584,6 +584,52 @@ class MainViewModel : ViewModel() {
     private val _homeAnimeCardBounds = MutableStateFlow<CardBounds?>(null)
     val homeAnimeCardBounds: StateFlow<CardBounds?> = _homeAnimeCardBounds.asStateFlow()
 
+    private val _hideNavbar = MutableStateFlow(false)
+    val hideNavbar: StateFlow<Boolean> = _hideNavbar.asStateFlow()
+
+    fun setHideNavbar(hide: Boolean) {
+        _hideNavbar.value = hide
+    }
+
+    private val _detailedAnimeScreenData = MutableStateFlow<DetailedAnimeData?>(null)
+    val detailedAnimeScreenData: StateFlow<DetailedAnimeData?> = _detailedAnimeScreenData.asStateFlow()
+
+    fun setDetailedAnimeScreenData(anime: DetailedAnimeData?) {
+        _detailedAnimeScreenData.value = anime
+    }
+
+    private val _richEpisodeScreenAnime = MutableStateFlow<AnimeMedia?>(null)
+    val richEpisodeScreenAnime: StateFlow<AnimeMedia?> = _richEpisodeScreenAnime.asStateFlow()
+
+    fun setRichEpisodeScreenAnime(anime: AnimeMedia?) {
+        _richEpisodeScreenAnime.value = anime
+    }
+
+    private val _userProfileScreenUserId = MutableStateFlow<Int?>(null)
+    val userProfileScreenUserId: StateFlow<Int?> = _userProfileScreenUserId.asStateFlow()
+
+    fun setUserProfileScreenUserId(userId: Int?) {
+        _userProfileScreenUserId.value = userId
+    }
+
+    private val _screenNavigationStack = MutableStateFlow<List<Int>>(emptyList())
+
+    fun navigateToScreen(screenIndex: Int, currentPage: Int) {
+        val currentStack = _screenNavigationStack.value.toMutableList()
+        if (currentStack.isEmpty() || currentStack.last() != screenIndex) {
+            currentStack.add(currentPage)
+            _screenNavigationStack.value = currentStack
+        }
+    }
+
+    fun navigateBack() {
+        val currentStack = _screenNavigationStack.value.toMutableList()
+        if (currentStack.isNotEmpty()) {
+            val previousPage = currentStack.removeLast()
+            _screenNavigationStack.value = currentStack
+        }
+    }
+
     fun setExploreAnimeCardBounds(animeId: Int, coverUrl: String, bounds: android.graphics.RectF?) {
         if (bounds != null && bounds.width() > 0 && bounds.height() > 0) {
             _exploreAnimeCardBounds.value = CardBounds(animeId, coverUrl, bounds)

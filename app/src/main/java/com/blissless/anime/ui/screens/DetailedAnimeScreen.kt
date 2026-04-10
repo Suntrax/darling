@@ -47,6 +47,10 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
@@ -324,6 +328,7 @@ fun DetailedAnimeScreen(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
             dismissOnBackPress = true,
             dismissOnClickOutside = false
         )
@@ -363,7 +368,7 @@ fun DetailedAnimeScreen(
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .padding(top = 16.dp, end = 16.dp)
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, end = 16.dp)
                     .align(Alignment.TopEnd)
                     .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
@@ -388,7 +393,7 @@ fun DetailedAnimeScreen(
                     context.startActivity(shareIntent)
                 },
                 modifier = Modifier
-                    .padding(top = 16.dp, start = 16.dp)
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 16.dp)
                     .align(Alignment.TopStart)
                     .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
@@ -398,22 +403,33 @@ fun DetailedAnimeScreen(
             }
 
             Box(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp)
                     .width(40.dp).height(4.dp)
                     .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f)
             )
 
             if (isLoadingDetails) {
                 CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 70.dp).zIndex(10f),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 60.dp)
+                        .zIndex(10f),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
+            val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+            val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+            
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 200.dp, bottom = 24.dp)
+                contentPadding = PaddingValues(
+                    top = 200.dp + statusBarsPadding.calculateTopPadding(),
+                    bottom = 24.dp + navigationBarsPadding.calculateBottomPadding()
+                )
             ) {
                 item {
                     Row(

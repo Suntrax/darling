@@ -43,9 +43,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -332,7 +335,10 @@ fun RichEpisodeScreen(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = false)) {
+    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnBackPress = true, dismissOnClickOutside = false)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -375,7 +381,7 @@ fun RichEpisodeScreen(
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .padding(top = 16.dp, end = 16.dp)
+                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, end = 16.dp)
                     .align(Alignment.TopEnd)
                     .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
@@ -383,10 +389,19 @@ fun RichEpisodeScreen(
             ) {
                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
             }
-            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).width(40.dp).height(4.dp).background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f))
-            if (isLoadingEpisodes) { CircularProgressIndicator(modifier = Modifier.align(Alignment.TopCenter).padding(top = 70.dp).zIndex(10f), color = MaterialTheme.colorScheme.primary) }
+            Box(modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp)
+                .width(40.dp).height(4.dp)
+                .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f))
+            if (isLoadingEpisodes) { CircularProgressIndicator(modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarsPadding.calculateTopPadding() + 60.dp).zIndex(10f), color = MaterialTheme.colorScheme.primary) }
 
-            Column(modifier = Modifier.fillMaxSize().padding(top = 160.dp)) {
+            Column(modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    top = 160.dp + statusBarsPadding.calculateTopPadding(),
+                    bottom = navigationBarsPadding.calculateBottomPadding()
+                )) {
                 Surface(modifier = Modifier.fillMaxWidth(), color = Color.Transparent) {
                     Column(
                         modifier = Modifier

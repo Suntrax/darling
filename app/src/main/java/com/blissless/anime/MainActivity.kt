@@ -24,6 +24,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,11 +48,13 @@ import com.blissless.anime.ui.screens.StaffScreen
 import com.blissless.anime.ui.screens.AllCastScreen
 import com.blissless.anime.ui.screens.AllStaffScreen
 import com.blissless.anime.dialogs.ExploreAnimeDialog
+import com.blissless.anime.dialogs.UserProfileScreen
 import com.blissless.anime.ui.screens.ExploreScreen
 import com.blissless.anime.ui.screens.HomeScreen
 import com.blissless.anime.ui.screens.PlayerScreen
 import com.blissless.anime.ui.screens.ScheduleScreen
 import com.blissless.anime.ui.screens.SettingsScreen
+import com.blissless.anime.ui.components.RichEpisodeScreen
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.delay
@@ -372,6 +377,7 @@ fun MainScreen(
     preventScheduleSync: Boolean,
     isLoggedIn: Boolean
 ) {
+    val hideNavbar by viewModel.hideNavbar.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -381,6 +387,20 @@ fun MainScreen(
     var committedPage by remember { mutableIntStateOf(startupScreen) }
 
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
+
+    var screenNavigationStack by remember { mutableStateOf<List<Int>>(emptyList()) }
+
+    val onNavigateBack: () -> Unit = {
+        val stack = screenNavigationStack.toMutableList()
+        if (stack.isNotEmpty()) {
+            val prevPage = stack.removeLast()
+            screenNavigationStack = stack
+            scope.launch { pagerState.animateScrollToPage(prevPage) }
+        }
+    }
+
+    val detailedAnimeScreenData by viewModel.detailedAnimeScreenData.collectAsState()
+    val richEpisodeScreenAnime by viewModel.richEpisodeScreenAnime.collectAsState()
 
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
@@ -1717,28 +1737,29 @@ fun MainScreen(
                         .navigationBarsPadding()
                         .offset(y = (-16).dp)
                 ) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp, start = 32.dp, end = 32.dp),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        color = surfaceColor.copy(alpha = 0.95f),
-                        tonalElevation = 4.dp,
-                        shadowElevation = 8.dp,
-                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
-                    ) {
-                        val selectedIndex = pagerState.targetPage
-
-                        Row(
+                    if (!hideNavbar) {
+                        Surface(
                             modifier = Modifier
+                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(bottom = 8.dp, start = 32.dp, end = 32.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            color = surfaceColor.copy(alpha = 0.95f),
+                            tonalElevation = 4.dp,
+                            shadowElevation = 8.dp,
+                            border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
                         ) {
-                            val items = listOf("Schedule", "Explore", "Home", "Settings")
-                            val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
+                            val selectedIndex = pagerState.targetPage
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val items = listOf("Schedule", "Explore", "Home", "Settings")
+                                val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
 
                             items.forEachIndexed { index, item ->
                                 val isSelected = index == selectedIndex
@@ -1832,6 +1853,7 @@ fun MainScreen(
                                 }
                             }
                         }
+                    }
                     }
                 }
 

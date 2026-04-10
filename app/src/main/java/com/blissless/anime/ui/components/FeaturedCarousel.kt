@@ -15,11 +15,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +51,7 @@ fun FeaturedCarousel(
     animeStatusMap: Map<Int, String> = emptyMap(),
     preferEnglishTitles: Boolean = true,
     isOled: Boolean = false,
+    isDialogOpen: Boolean = false,
     autoScrollEnabled: Boolean = true,
     isVisible: Boolean = true
 ) {
@@ -93,8 +94,8 @@ fun FeaturedCarousel(
         }
     }
 
-    LaunchedEffect(autoScrollEnabled, isVisible, isHeaderSwiping, timerResetSignal) {
-        if (autoScrollEnabled && isVisible && !isHeaderSwiping) {
+    LaunchedEffect(autoScrollEnabled, isVisible, isHeaderSwiping, isDialogOpen, timerResetSignal) {
+        if (autoScrollEnabled && isVisible && !isHeaderSwiping && !isDialogOpen) {
             while (true) {
                 delay(4500)
                 if (isHeaderSwiping) continue
@@ -120,7 +121,7 @@ fun FeaturedCarousel(
         onDispose { autoScrollJob?.cancel() }
     }
 
-    Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().height(520.dp)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
@@ -212,8 +213,10 @@ fun FeaturedCarousel(
                         Text(text = formatText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
                         if (avgScore != null) {
                             Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                            val scoreValue = avgScore / 10.0
+                            val scoreFormatted = "%,.1f".format(scoreValue).replace(".", ",")
                             Text(
-                                text = "★ ${String.format(Locale.US, "%,.0f", avgScore / 10.0).replace(".", ",")}",
+                                text = "★ $scoreFormatted",
                                 color = Color(0xFFFFD700),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold
@@ -255,7 +258,7 @@ fun FeaturedCarousel(
                             modifier = Modifier.height(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isOled) Color(0xFF2A2A2A) else MaterialTheme.colorScheme.primaryContainer,
+                                containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         ) {
@@ -273,55 +276,14 @@ fun FeaturedCarousel(
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
-                                Icons.Default.Info,
-                                    contentDescription = "Info",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                Icons.Outlined.Info,
+                                contentDescription = "Info",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                 }
-            }
-        }
-
-Row(
-            modifier = Modifier.padding(top = 48.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val currentPageIndex = pagerState.currentPage % actualCount
-            val targetPageIndex = pagerState.targetPage % actualCount
-
-            repeat(actualCount) { index ->
-                val isCurrentSelected = index == currentPageIndex
-                val isTargetSelected = index == targetPageIndex
-                
-                val width by animateDpAsState(
-                    targetValue = when {
-                        isCurrentSelected && !isDragged -> 24.dp
-                        isCurrentSelected && isDragged -> 16.dp
-                        isTargetSelected && isDragged -> 16.dp
-                        else -> 8.dp
-                    },
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                    label = "w$index"
-                )
-                val alpha by animateFloatAsState(
-                    targetValue = when {
-                        isCurrentSelected -> 1f
-                        isDragged && isTargetSelected -> 1f
-                        else -> 0.4f
-                    },
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                    label = "a$index"
-                )
-                Box(
-                    modifier = Modifier
-                        .height(4.dp)
-                        .width(width)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = alpha))
-                )
             }
         }
     }

@@ -74,11 +74,14 @@ fun HomeAnimeInfoDialog(
                                 Text("★ ${String.format(Locale.US, "%.1f", score)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.width(12.dp))
                             }
-                            when {
-                                anime.totalEpisodes > 0 -> Text("${anime.totalEpisodes} eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                anime.latestEpisode != null && anime.latestEpisode > 0 -> Text("Ep ${anime.latestEpisode}", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                                else -> Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                            val episodeText = when {
+                                anime.latestEpisode != null && anime.latestEpisode > 0 -> "Ep ${anime.latestEpisode}"
+                                anime.totalEpisodes != null && anime.totalEpisodes > 0 -> "${anime.totalEpisodes} eps"
+                                else -> null
                             }
+                            episodeText?.let { text ->
+                                Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                            } ?: Text("? eps", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         if (anime.genres.isNotEmpty()) { Text(anime.genres.take(3).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f), maxLines = 2, overflow = TextOverflow.Ellipsis) }
@@ -92,7 +95,7 @@ fun HomeAnimeInfoDialog(
                         }
                         if (anime.progress > 0) {
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("Progress: ${anime.progress} / ${anime.totalEpisodes.takeIf { it > 0 } ?: "?"}", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.6f))
+                            Text("Progress: ${anime.progress} / ${anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 } ?: "?"}", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.6f))
                         }
                     }
                 }
@@ -223,7 +226,7 @@ fun HomeAnimeStatusDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("Progress: ${anime.progress} / ${anime.totalEpisodes.takeIf { it > 0 } ?: "?"}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                        Text("Progress: ${anime.progress} / ${anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 } ?: "?"}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
                         anime.year?.let { Text("Released: $it", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f)) }
                     }
                 }

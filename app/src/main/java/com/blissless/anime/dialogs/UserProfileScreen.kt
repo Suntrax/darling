@@ -43,6 +43,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import coil.compose.AsyncImage
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.JikanFavoriteAnime
@@ -156,10 +160,13 @@ fun UserProfileScreen(
     val history = historyData.entries
     val statuses = historyData.statuses
     val progressDisplay = historyData.progressList
+    
+    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         Card(
             modifier = Modifier
@@ -174,7 +181,12 @@ fun UserProfileScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(
+                            top = statusBarsPadding.calculateTopPadding() + 8.dp,
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = 8.dp
+                        ),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -247,7 +259,12 @@ fun UserProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(if (isOled) Color.Black else Color(0xFF121212))
-                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                        .padding(
+                            start = 24.dp,
+                            end = 24.dp,
+                            top = 16.dp,
+                            bottom = navigationBarsPadding.calculateBottomPadding() + 16.dp
+                        ),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
