@@ -1742,7 +1742,7 @@ fun MainScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(bottom = 4.dp, start = 64.dp, end = 64.dp),
+                                .padding(bottom = 4.dp, start = 48.dp, end = 48.dp),
                             shape = MaterialTheme.shapes.extraLarge,
                             color = surfaceColor.copy(alpha = 0.95f),
                             tonalElevation = 4.dp,

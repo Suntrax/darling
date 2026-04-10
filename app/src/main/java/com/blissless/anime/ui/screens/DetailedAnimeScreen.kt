@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -67,6 +68,7 @@ import java.util.Locale
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+import kotlin.math.absoluteValue
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
@@ -160,10 +162,10 @@ fun DetailedAnimeScreen(
     )
 
     var transitionProgress by remember { mutableFloatStateOf(0f) }
-    
+
     val slideInProgress = remember { Animatable(0f) }
     val coverAnimationProgress = remember(anime.id) { Animatable(0f) }
-    
+
     val animatedCoverScale by animateFloatAsState(
         targetValue = if (initialCardBounds != null) 1f else 1f,
         animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
@@ -206,7 +208,7 @@ fun DetailedAnimeScreen(
 
     LaunchedEffect(anime.id, initialCardBounds) {
         isLoadingDetails = true
-        
+
         if (previousAnimeId != 0 && previousAnimeId != anime.id) {
             isTransitioning = true
             // Reset cover animation when switching anime
@@ -215,7 +217,7 @@ fun DetailedAnimeScreen(
             isTransitioning = false
         }
         previousAnimeId = anime.id
-        
+
         try {
             detailedData = viewModel.fetchDetailedAnimeData(anime.id)
             relations = detailedData?.relations ?: anime.relations
@@ -224,7 +226,7 @@ fun DetailedAnimeScreen(
             isLoadingDetails = false
         }
     }
-    
+
     DisposableEffect(Unit) {
         onDispose {
             isLoadingDetails = false
@@ -426,7 +428,7 @@ fun DetailedAnimeScreen(
             val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
             val cinematicProgress = rememberCinematicAnimation("detailed_anime")
             val density = LocalDensity.current
-            
+
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
@@ -445,7 +447,7 @@ fun DetailedAnimeScreen(
                             val cardHeight = 171.dp
                             val targetX = 0.dp
                             val targetY = 0.dp
-                            
+
                             Box(
                                 modifier = Modifier
                                     .width(cardWidth)
@@ -459,12 +461,12 @@ fun DetailedAnimeScreen(
                                             val startY = startBounds.bounds.top
                                             val startWidth = startBounds.bounds.width()
                                             val startHeight = startBounds.bounds.height()
-                                            
+
                                             val currentWidth = startWidth + (cardWidth.toPx() - startWidth) * progress
                                             val currentHeight = startHeight + (cardHeight.toPx() - startHeight) * progress
                                             val currentX = startX + (targetX.toPx() - startX) * progress
                                             val currentY = startY + (targetY.toPx() - startY) * progress
-                                            
+
                                             scaleX = currentWidth / size.width
                                             scaleY = currentHeight / size.height
                                             translationX = currentX
@@ -781,7 +783,7 @@ fun DetailedAnimeScreen(
                             Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                 color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                             Spacer(modifier = Modifier.height(12.dp))
-                            
+
                             // Main stats row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -802,11 +804,11 @@ fun DetailedAnimeScreen(
                                     InfoStat("Score", String.format(Locale.US, "%.1f", score / 10.0), Icons.Default.Star, Color(0xFFFFD700))
                                 }
                             }
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
                             HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.08f) else Color.Gray.copy(alpha = 0.15f))
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             // Details grid
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 displayData.format?.let { formatDisplay }
@@ -1091,11 +1093,60 @@ fun DetailedAnimeScreen(
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(filteredRelations) { relation ->
-                                        val indexFloat = filteredRelations.indexOf(relation).toFloat()
+
+                                val relationListState = rememberLazyListState()
+                                val isRelationScrolling by remember {
+                                    derivedStateOf { relationListState.isScrollInProgress }
+                                }
+                                val cameraDistancePx = with(density) { 12.dp.toPx() }
+
+                                LazyRow(
+                                    state = relationListState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = filteredRelations,
+                                        key = { _, relation -> relation.id }
+                                    ) { index, relation ->
+                                        val layoutInfo = relationListState.layoutInfo
+                                        val visibleItems = layoutInfo.visibleItemsInfo
+                                        val itemInfo = visibleItems.find { it.index == index }
+
+                                        val centerOffset = if (itemInfo != null) {
+                                            val itemCenter = itemInfo.offset + itemInfo.size / 2
+                                            val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                                            (itemCenter - screenCenter) / screenCenter
+                                        } else {
+                                            0f
+                                        }
+
+                                        val animatedOffset by animateFloatAsState(
+                                            targetValue = if (isRelationScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                            animationSpec = if (isRelationScrolling) {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = Spring.StiffnessMedium
+                                                )
+                                            } else {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                    stiffness = Spring.StiffnessLow
+                                                )
+                                            },
+                                            label = "relationCenterOffset"
+                                        )
+
+                                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                        val scrollTranslationX = animatedOffset * -20f
+                                        val scrollRotationY = (animatedOffset * 15f).coerceIn(-15f, 15f)
+
+                                        val indexFloat = index.toFloat()
                                         val staggeredProgress = ((cinematicProgress * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
                                         val easedProgress = easeOut(staggeredProgress)
+
+                                        val introScale = if (cinematicProgress >= 1f) 1f else 0.85f + easedProgress * 0.15f
+                                        val introAlpha = if (cinematicProgress >= 1f) 1f else easedProgress
 
                                         Column(
                                             modifier = Modifier
@@ -1105,9 +1156,12 @@ fun DetailedAnimeScreen(
                                                     onRelationClick(relation)
                                                 }
                                                 .graphicsLayer {
-                                                    scaleX = 0.85f + easedProgress * 0.15f
-                                                    scaleY = 0.85f + easedProgress * 0.15f
-                                                    this.alpha = easedProgress
+                                                    scaleX = introScale * scrollScale
+                                                    scaleY = introScale * scrollScale
+                                                    this.alpha = introAlpha * scrollAlpha
+                                                    translationX = scrollTranslationX
+                                                    rotationY = scrollRotationY
+                                                    cameraDistance = cameraDistancePx
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1236,11 +1290,60 @@ fun DetailedAnimeScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(castList) { character ->
-                                        val indexFloat = castList.indexOf(character).toFloat()
+
+                                val castListState = rememberLazyListState()
+                                val isCastScrolling by remember {
+                                    derivedStateOf { castListState.isScrollInProgress }
+                                }
+                                val cameraDistancePx = with(density) { 12.dp.toPx() }
+
+                                LazyRow(
+                                    state = castListState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = castList,
+                                        key = { _, character -> character.id }
+                                    ) { index, character ->
+                                        val layoutInfo = castListState.layoutInfo
+                                        val visibleItems = layoutInfo.visibleItemsInfo
+                                        val itemInfo = visibleItems.find { it.index == index }
+
+                                        val centerOffset = if (itemInfo != null) {
+                                            val itemCenter = itemInfo.offset + itemInfo.size / 2
+                                            val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                                            (itemCenter - screenCenter) / screenCenter
+                                        } else {
+                                            0f
+                                        }
+
+                                        val animatedOffset by animateFloatAsState(
+                                            targetValue = if (isCastScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                            animationSpec = if (isCastScrolling) {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = Spring.StiffnessMedium
+                                                )
+                                            } else {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                    stiffness = Spring.StiffnessLow
+                                                )
+                                            },
+                                            label = "castCenterOffset"
+                                        )
+
+                                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                        val scrollTranslationX = animatedOffset * -20f
+                                        val scrollRotationY = (animatedOffset * 15f).coerceIn(-15f, 15f)
+
+                                        val indexFloat = index.toFloat()
                                         val staggeredProgress = ((cinematicProgress * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
                                         val easedProgress = easeOut(staggeredProgress)
+
+                                        val introScale = if (cinematicProgress >= 1f) 1f else 0.85f + easedProgress * 0.15f
+                                        val introAlpha = if (cinematicProgress >= 1f) 1f else easedProgress
 
                                         Column(
                                             modifier = Modifier
@@ -1251,9 +1354,12 @@ fun DetailedAnimeScreen(
                                                     onCharacterClick(id)
                                                 }
                                                 .graphicsLayer {
-                                                    scaleX = 0.85f + easedProgress * 0.15f
-                                                    scaleY = 0.85f + easedProgress * 0.15f
-                                                    this.alpha = easedProgress
+                                                    scaleX = introScale * scrollScale
+                                                    scaleY = introScale * scrollScale
+                                                    this.alpha = introAlpha * scrollAlpha
+                                                    translationX = scrollTranslationX
+                                                    rotationY = scrollRotationY
+                                                    cameraDistance = cameraDistancePx
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1326,12 +1432,61 @@ fun DetailedAnimeScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(staffList) { staffEdge ->
+
+                                val staffListState = rememberLazyListState()
+                                val isStaffScrolling by remember {
+                                    derivedStateOf { staffListState.isScrollInProgress }
+                                }
+                                val cameraDistancePx = with(density) { 12.dp.toPx() }
+
+                                LazyRow(
+                                    state = staffListState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = staffList,
+                                        key = { index, _ -> "staff_$index" }
+                                    ) { index, staffEdge ->
                                         staffEdge.node?.let { staff ->
-                                            val indexFloat = staffList.indexOf(staffEdge).toFloat()
+                                            val layoutInfo = staffListState.layoutInfo
+                                            val visibleItems = layoutInfo.visibleItemsInfo
+                                            val itemInfo = visibleItems.find { it.index == index }
+
+                                            val centerOffset = if (itemInfo != null) {
+                                                val itemCenter = itemInfo.offset + itemInfo.size / 2
+                                                val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                                                (itemCenter - screenCenter) / screenCenter
+                                            } else {
+                                                0f
+                                            }
+
+                                            val animatedOffset by animateFloatAsState(
+                                                targetValue = if (isStaffScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                                animationSpec = if (isStaffScrolling) {
+                                                    spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMedium
+                                                    )
+                                                } else {
+                                                    spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    )
+                                                },
+                                                label = "staffCenterOffset"
+                                            )
+
+                                            val scrollScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                            val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                            val scrollTranslationX = animatedOffset * -20f
+                                            val scrollRotationY = (animatedOffset * 15f).coerceIn(-15f, 15f)
+
+                                            val indexFloat = index.toFloat()
                                             val staggeredProgress = ((cinematicProgress * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
                                             val easedProgress = easeOut(staggeredProgress)
+
+                                            val introScale = if (cinematicProgress >= 1f) 1f else 0.85f + easedProgress * 0.15f
+                                            val introAlpha = if (cinematicProgress >= 1f) 1f else easedProgress
 
                                             Column(
                                                 modifier = Modifier
@@ -1339,9 +1494,12 @@ fun DetailedAnimeScreen(
                                                     .clip(RoundedCornerShape(12.dp))
                                                     .clickable { staffEdge.node?.id?.let { id -> onStaffClick(id) } }
                                                     .graphicsLayer {
-                                                        scaleX = 0.85f + easedProgress * 0.15f
-                                                        scaleY = 0.85f + easedProgress * 0.15f
-                                                        this.alpha = easedProgress
+                                                        scaleX = introScale * scrollScale
+                                                        scaleY = introScale * scrollScale
+                                                        this.alpha = introAlpha * scrollAlpha
+                                                        translationX = scrollTranslationX
+                                                        rotationY = scrollRotationY
+                                                        cameraDistance = cameraDistancePx
                                                     }
                                                     .padding(4.dp)
                                             ) {
@@ -1447,7 +1605,7 @@ fun DetailedAnimeScreen(
             }
         }
     }
-    
+
     if (fullscreenImageUrl != null) {
         Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
             Box(
