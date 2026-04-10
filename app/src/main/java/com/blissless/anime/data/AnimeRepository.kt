@@ -1683,6 +1683,7 @@ class AnimeRepository(
                             createdAt = activity.createdAt,
                             mediaId = activity.media?.id ?: 0,
                             mediaTitle = activity.media?.title?.romaji ?: activity.media?.title?.english ?: "Unknown",
+                            mediaTitleEnglish = activity.media?.title?.english,
                             mediaCover = activity.media?.coverImage?.extraLarge ?: "",
                             episodes = null,
                             averageScore = null,

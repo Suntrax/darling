@@ -567,6 +567,7 @@ fun HomeScreen(
                 viewModel = viewModel,
                 isOled = isOled,
                 isLoggedIn = isLoggedIn,
+                preferEnglishTitles = preferEnglishTitles,
                 hideAdultContent = hideAdultContent,
                 currentlyWatching = currentlyWatching,
                 planningToWatch = planningToWatch,
@@ -760,6 +761,7 @@ fun HomeScreen(
         UserProfileScreen(
             viewModel = viewModel,
             isOled = isOled,
+            preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showUserProfileDialog = false },
             onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) },
             onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal

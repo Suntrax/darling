@@ -70,6 +70,7 @@ fun SearchOverlay(
     viewModel: MainViewModel,
     isOled: Boolean,
     isLoggedIn: Boolean,
+    preferEnglishTitles: Boolean = true,
     hideAdultContent: Boolean = false,
     currentlyWatching: List<AnimeMedia>,
     planningToWatch: List<AnimeMedia>,
@@ -175,6 +176,7 @@ fun SearchOverlay(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.92f))
+            .padding(top = 22.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -361,6 +363,7 @@ fun SearchOverlay(
                             SearchResultItem(
                                 anime = anime,
                                 isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
                                 currentStatus = savedAnimeMap[anime.id],
                                 onClick = {
                                     keyboardController?.hide() // Hide keyboard on selection
@@ -487,6 +490,7 @@ fun SearchOverlay(
 private fun SearchResultItem(
     anime: ExploreAnime,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     currentStatus: String?,
     onClick: () -> Unit
 ) {
@@ -532,8 +536,9 @@ private fun SearchResultItem(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
                     Text(
-                        anime.title,
+                        displayTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -630,6 +635,7 @@ private fun SearchResultItem(
 fun SearchAnimeDetailDialog(
     anime: ExploreAnime,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     currentStatus: String?,
     onDismiss: () -> Unit,
     onPlayEpisode: (Int) -> Unit,

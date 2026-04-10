@@ -71,6 +71,7 @@ data class UserActivity(
     val createdAt: Long,
     val mediaId: Int,
     val mediaTitle: String,
+    val mediaTitleEnglish: String? = null,
     val mediaCover: String,
     val episodes: Int?,
     val averageScore: Int?,

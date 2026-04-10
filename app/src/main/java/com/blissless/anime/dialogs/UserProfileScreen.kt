@@ -67,6 +67,7 @@ enum class UserProfileSection {
 fun UserProfileScreen(
     viewModel: MainViewModel,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     onDismiss: () -> Unit,
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit,
     onShowDetailedAnimeFromMal: (Int) -> Unit
@@ -101,7 +102,8 @@ fun UserProfileScreen(
             aniListFavorites.map { aniListFavorite ->
                 JikanFavoriteAnime(
                     malId = 0,
-                    title = aniListFavorite.title.english ?: aniListFavorite.title.romaji ?: "",
+                    title = aniListFavorite.title.romaji ?: aniListFavorite.title.english ?: "",
+                    titleEnglish = aniListFavorite.title.english,
                     images = com.blissless.anime.data.JikanImages(
                         jpg = com.blissless.anime.data.JikanImageUrls(
                             aniListFavorite.coverImage?.extraLarge ?: ""
@@ -132,6 +134,7 @@ fun UserProfileScreen(
                 JikanHistoryEntry(
                     malId = activity.mediaId,
                     title = activity.mediaTitle,
+                    titleEnglish = activity.mediaTitleEnglish,
                     images = com.blissless.anime.data.JikanImages(
                         jpg = com.blissless.anime.data.JikanImageUrls(activity.mediaCover)
                     ),
@@ -226,11 +229,13 @@ fun UserProfileScreen(
                         UserProfileSection.FAVORITES -> FavoritesContent(
                             favorites = favorites,
                             isOled = isOled,
+                            preferEnglishTitles = preferEnglishTitles,
                             onAnimeClick = { onShowDetailedAnimeFromMal(it.malId) }
                         )
                         UserProfileSection.HISTORY -> HistoryContent(
                             history = history,
                             isOled = isOled,
+                            preferEnglishTitles = preferEnglishTitles,
                             onAnimeClick = { onShowDetailedAnimeFromMal(it.malId) },
                             statuses = statuses,
                             progressList = progressDisplay
@@ -537,6 +542,7 @@ private fun formatDate(timestamp: Long): String {
 private fun FavoritesContent(
     favorites: List<JikanFavoriteAnime>,
     isOled: Boolean,
+    preferEnglishTitles: Boolean,
     onAnimeClick: (JikanFavoriteAnime) -> Unit
 ) {
     if (favorites.isEmpty()) {
@@ -634,6 +640,7 @@ private fun FavoritesContent(
                     FavoriteItem(
                         anime = anime,
                         isOled = isOled,
+                        preferEnglishTitles = preferEnglishTitles,
                         onClick = { onAnimeClick(anime) }
                     )
                 }
@@ -646,6 +653,7 @@ private fun FavoritesContent(
 private fun FavoriteItem(
     anime: JikanFavoriteAnime,
     isOled: Boolean,
+    preferEnglishTitles: Boolean,
     onClick: () -> Unit
 ) {
     Card(
@@ -674,8 +682,9 @@ private fun FavoriteItem(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
+                val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
                 Text(
-                    anime.title,
+                    displayTitle,
                     color = Color.White,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
@@ -698,6 +707,7 @@ private fun FavoriteItem(
 private fun HistoryContent(
     history: List<JikanHistoryEntry>,
     isOled: Boolean,
+    preferEnglishTitles: Boolean,
     onAnimeClick: (JikanHistoryEntry) -> Unit,
     statuses: List<String> = emptyList(),
     progressList: List<String> = emptyList()
@@ -797,6 +807,7 @@ private fun HistoryContent(
                     HistoryItem(
                         entry = entry,
                         isOled = isOled,
+                        preferEnglishTitles = preferEnglishTitles,
                         onClick = { onAnimeClick(entry) },
                         status = statuses.getOrNull(index),
                         progress = progressList.getOrNull(index)
@@ -811,6 +822,7 @@ private fun HistoryContent(
 private fun HistoryItem(
     entry: JikanHistoryEntry,
     isOled: Boolean,
+    preferEnglishTitles: Boolean,
     onClick: () -> Unit,
     status: String? = null,
     progress: String? = null
@@ -850,8 +862,9 @@ private fun HistoryItem(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
+                val displayTitle = if (preferEnglishTitles && !entry.titleEnglish.isNullOrEmpty()) entry.titleEnglish else entry.title
                 Text(
-                    entry.title,
+                    displayTitle,
                     color = Color.White,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,

@@ -1119,6 +1119,7 @@ class MainViewModel : ViewModel() {
             val airingList = schedules.filter { it.media != null }.map { schedule ->
                 val media = schedule.media!!
                 val title = media.title.romaji ?: media.title.english ?: "Unknown"
+                val titleEnglish = media.title.english
                 val episodes = media.episodes ?: 0
 
                 if (title.contains("JoJo", ignoreCase = true) || title.contains("jojo", ignoreCase = true)) {
@@ -1131,6 +1132,7 @@ class MainViewModel : ViewModel() {
                 AiringScheduleAnime(
                     id = media.id,
                     title = title,
+                    titleEnglish = titleEnglish,
                     cover = schedule.media.coverImage?.extraLarge ?: "",
                     episodes = episodes,
                     airingEpisode = schedule.episode,
