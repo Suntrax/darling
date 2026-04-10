@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
             val showAnimeCardButtons by mainViewModel.showAnimeCardButtons.collectAsState()
+            val preferEnglishTitles by mainViewModel.preferEnglishTitles.collectAsState()
             val preventScheduleSync by mainViewModel.preventScheduleSync.collectAsState()
 
             var isLoggedIn by remember { mutableStateOf(savedToken != null) }
@@ -236,6 +237,7 @@ class MainActivity : ComponentActivity() {
                     isOled = isOled,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
+                    preferEnglishTitles = preferEnglishTitles,
                     preventScheduleSync = preventScheduleSync,
                     isLoggedIn = isLoggedIn
                 )
@@ -366,6 +368,7 @@ fun MainScreen(
     isOled: Boolean,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean,
+    preferEnglishTitles: Boolean,
     preventScheduleSync: Boolean,
     isLoggedIn: Boolean
 ) {
@@ -1563,6 +1566,7 @@ fun MainScreen(
                             showStatusColors = showStatusColors,
                             disableMaterialColors = disableMaterialColors,
                             hideAdultContent = hideAdultContent,
+                            preferEnglishTitles = preferEnglishTitles,
                             isLoggedIn = isLoggedIn,
                             onPlayEpisode = onPlayEpisode,
                             onShowAnimeDialog = onShowAnimeDialog,
@@ -1587,6 +1591,7 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             showAnimeCardButtons = showAnimeCardButtons,
+                            preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleFavorite = { anime -> 
@@ -1641,6 +1646,7 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
+                            preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
@@ -1709,13 +1715,13 @@ fun MainScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .navigationBarsPadding()
-                        .padding(bottom = 4.dp)
+                        .offset(y = (-16).dp)
                 ) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(horizontal = 32.dp),
+                            .padding(bottom = 8.dp, start = 32.dp, end = 32.dp),
                         shape = MaterialTheme.shapes.extraLarge,
                         color = surfaceColor.copy(alpha = 0.95f),
                         tonalElevation = 4.dp,

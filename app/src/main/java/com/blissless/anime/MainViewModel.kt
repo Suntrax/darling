@@ -520,6 +520,7 @@ class MainViewModel : ViewModel() {
     val preferredCategory: StateFlow<String> get() = userPreferences.preferredCategory
     val showStatusColors: StateFlow<Boolean> get() = userPreferences.showStatusColors
     val showAnimeCardButtons: StateFlow<Boolean> get() = userPreferences.showAnimeCardButtons
+    val preferEnglishTitles: StateFlow<Boolean> get() = userPreferences.preferEnglishTitles
     val preventScheduleSync: StateFlow<Boolean> get() = userPreferences.preventScheduleSync
     val trackingPercentage: StateFlow<Int> get() = userPreferences.trackingPercentage
     val forwardSkipSeconds: StateFlow<Int> get() = userPreferences.forwardSkipSeconds
@@ -1432,6 +1433,7 @@ class MainViewModel : ViewModel() {
     fun setPreferredCategory(category: String) = userPreferences.setPreferredCategory(category)
     fun setShowStatusColors(enabled: Boolean) = userPreferences.setShowStatusColors(enabled)
     fun setShowAnimeCardButtons(enabled: Boolean) = userPreferences.setShowAnimeCardButtons(enabled)
+    fun setPreferEnglishTitles(enabled: Boolean) = userPreferences.setPreferEnglishTitles(enabled)
     fun setPreventScheduleSync(enabled: Boolean) = userPreferences.setPreventScheduleSync(enabled)
     fun setTrackingPercentage(percentage: Int) = userPreferences.setTrackingPercentage(percentage)
     fun setForwardSkipSeconds(seconds: Int) = userPreferences.setForwardSkipSeconds(seconds)

@@ -49,6 +49,7 @@ data class AnimeMedia(
 data class AiringScheduleAnime(
     val id: Int,
     val title: String,
+    val titleEnglish: String? = null,
     val cover: String,
     val episodes: Int = 0,
     val airingEpisode: Int = 0,

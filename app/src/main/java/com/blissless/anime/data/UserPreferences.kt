@@ -25,6 +25,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_PREFERRED_CATEGORY = "preferred_category"
         private const val KEY_SHOW_STATUS_COLORS = "show_status_colors"
         private const val KEY_SHOW_ANIME_CARD_BUTTONS = "show_anime_card_buttons"
+        private const val KEY_PREFER_ENGLISH_TITLES = "prefer_english_titles"
         private const val KEY_PREVENT_SCHEDULE_SYNC = "prevent_schedule_sync"
         private const val KEY_TRACKING_PERCENTAGE = "tracking_percentage"
         private const val KEY_FORWARD_SKIP_SECONDS = "forward_skip_seconds"
@@ -73,6 +74,9 @@ class UserPreferences(private val context: Context) {
 
     private val _showAnimeCardButtons = MutableStateFlow(false)
     val showAnimeCardButtons: StateFlow<Boolean> = _showAnimeCardButtons.asStateFlow()
+
+    private val _preferEnglishTitles = MutableStateFlow(true)
+    val preferEnglishTitles: StateFlow<Boolean> = _preferEnglishTitles.asStateFlow()
 
     private val _preventScheduleSync = MutableStateFlow(false)
     val preventScheduleSync: StateFlow<Boolean> = _preventScheduleSync.asStateFlow()
@@ -202,6 +206,8 @@ class UserPreferences(private val context: Context) {
         _preferredCategory.value = sharedPreferences.getString(KEY_PREFERRED_CATEGORY, "sub") ?: "sub"
         _showStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_STATUS_COLORS, false)
         _showAnimeCardButtons.value = sharedPreferences.getBoolean(KEY_SHOW_ANIME_CARD_BUTTONS, false)
+        _preferEnglishTitles.value = sharedPreferences.getBoolean(KEY_PREFER_ENGLISH_TITLES, true)
+
         _preventScheduleSync.value = sharedPreferences.getBoolean(KEY_PREVENT_SCHEDULE_SYNC, false)
         _trackingPercentage.value = sharedPreferences.getInt(KEY_TRACKING_PERCENTAGE, 85)
         _forwardSkipSeconds.value = sharedPreferences.getInt(KEY_FORWARD_SKIP_SECONDS, 10)
@@ -272,6 +278,11 @@ class UserPreferences(private val context: Context) {
     fun setShowAnimeCardButtons(enabled: Boolean) {
         _showAnimeCardButtons.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SHOW_ANIME_CARD_BUTTONS, enabled) }
+    }
+
+    fun setPreferEnglishTitles(enabled: Boolean) {
+        _preferEnglishTitles.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_PREFER_ENGLISH_TITLES, enabled) }
     }
 
     fun setPreventScheduleSync(enabled: Boolean) {

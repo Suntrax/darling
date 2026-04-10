@@ -64,6 +64,7 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     var showLogoutConfirmation by remember { mutableStateOf(false) }
     val showAnimeCardButtons by viewModel.showAnimeCardButtons.collectAsState(initial = true)
+    val preferEnglishTitles by viewModel.preferEnglishTitles.collectAsState(initial = true)
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
@@ -283,6 +284,16 @@ fun SettingsScreen(
                 description = "Show bookmark and play buttons on anime cards in Explore",
                 checked = showAnimeCardButtons,
                 onCheckedChange = { viewModel.setShowAnimeCardButtons(it) },
+                isOled = isOled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsToggle(
+                title = "English Titles",
+                description = "Show English titles instead of Romaji",
+                checked = preferEnglishTitles,
+                onCheckedChange = { viewModel.setPreferEnglishTitles(it) },
                 isOled = isOled
             )
 

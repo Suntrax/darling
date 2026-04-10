@@ -112,6 +112,7 @@ fun HomeAnimeHorizontalList(
     listType: String,
     isOled: Boolean,
     showStatusColors: Boolean = false,
+    preferEnglishTitles: Boolean = true,
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
@@ -214,6 +215,7 @@ fun HomeAnimeHorizontalList(
                         listType = listType,
                         isOled = isOled,
                         showStatusColors = showStatusColors,
+                        preferEnglishTitles = preferEnglishTitles,
                         isLoggedIn = isLoggedIn,
                         playbackPositions = playbackPositions,
                         disableMaterialColors = disableMaterialColors,
@@ -240,6 +242,7 @@ fun HomeAnimeCard(
     listType: String,
     isOled: Boolean,
     showStatusColors: Boolean = false,
+    preferEnglishTitles: Boolean = true,
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
@@ -431,8 +434,9 @@ fun HomeAnimeCard(
             }
         }
         // Title
+        val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
         Box(modifier = Modifier.width(130.dp).height(36.dp)) {
-            Text(text = anime.title, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+            Text(text = displayTitle, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
         }
     }
 }

@@ -58,6 +58,7 @@ fun HomeScreen(
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
     simplifyEpisodeMenu: Boolean = true,
+    preferEnglishTitles: Boolean = true,
     hideAdultContent: Boolean = false,
     favoriteIds: Set<Int> = emptySet(),
     onToggleLocalFavorite: (Int) -> Unit = {},
@@ -391,6 +392,7 @@ fun HomeScreen(
                                 listType = "CURRENT",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
+                                preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
@@ -418,6 +420,7 @@ fun HomeScreen(
                                 listType = "PLANNING",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
+                                preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
@@ -445,6 +448,7 @@ fun HomeScreen(
                                 listType = "COMPLETED",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
+                                preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
@@ -472,6 +476,7 @@ fun HomeScreen(
                                 listType = "PAUSED",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
+                                preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
@@ -499,6 +504,7 @@ fun HomeScreen(
                                 listType = "DROPPED",
                                 isOled = isOled,
                                 showStatusColors = showStatusColors,
+                                preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 disableMaterialColors = disableMaterialColors,
@@ -523,7 +529,7 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
             }

@@ -85,6 +85,7 @@ fun ScheduleScreen(
     showStatusColors: Boolean = false,
     disableMaterialColors: Boolean = false,
     hideAdultContent: Boolean = false,
+    preferEnglishTitles: Boolean = true,
     isLoggedIn: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
@@ -829,6 +830,7 @@ fun ScheduleScreen(
                         currentTime = currentTime,
                         isOled = isOled,
                         showStatusColors = showStatusColors,
+                        preferEnglishTitles = preferEnglishTitles,
                         animeStatusMap = animeStatusMap,
                         listState = currentListState,
                         screenKey = "schedule",
@@ -837,6 +839,7 @@ fun ScheduleScreen(
                             val exploreAnime = ExploreAnime(
                                 id = anime.id,
                                 title = anime.title,
+                                titleEnglish = anime.titleEnglish,
                                 cover = anime.cover,
                                 banner = null,
                                 episodes = anime.episodes,
@@ -969,6 +972,7 @@ private fun TimelineScheduleList(
     currentTime: Long,
     isOled: Boolean,
     showStatusColors: Boolean,
+    preferEnglishTitles: Boolean,
     animeStatusMap: Map<Int, String>,
     listState: LazyListState,
     screenKey: String = "schedule",
@@ -1070,6 +1074,7 @@ private fun TimelineScheduleList(
                             isOled = isOled,
                             isPast = item.isPast,
                             showStatusColors = showStatusColors,
+                            preferEnglishTitles = preferEnglishTitles,
                             animeStatus = animeStatusMap[item.data.id],
                             onClick = { onAnimeClick(item.data) }
                         )
@@ -1155,6 +1160,7 @@ private fun TimelineAnimeItem(
     isOled: Boolean,
     isPast: Boolean,
     showStatusColors: Boolean,
+    preferEnglishTitles: Boolean,
     animeStatus: String?,
     onClick: () -> Unit
 ) {
@@ -1231,8 +1237,9 @@ private fun TimelineAnimeItem(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
+                    val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
                     Text(
-                        text = anime.title,
+                        text = displayTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,

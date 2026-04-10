@@ -54,6 +54,7 @@ fun ExploreAnimeHorizontalList(
     animeStatusMap: Map<Int, String>,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean = true,
+    preferEnglishTitles: Boolean = true,
     onAnimeClick: (ExploreAnime, AnimeCardBounds?) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
     isLoggedIn: Boolean = false,
@@ -162,6 +163,7 @@ fun ExploreAnimeHorizontalList(
                     currentStatus = animeStatusMap[anime.id],
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
+                    preferEnglishTitles = preferEnglishTitles,
                     onClick = { bounds ->
                         viewModel?.setExploreAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
                         onAnimeClick(anime, bounds)
@@ -189,6 +191,7 @@ fun ExploreAnimeCard(
     currentStatus: String?,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean = true,
+    preferEnglishTitles: Boolean = true,
     onClick: (AnimeCardBounds?) -> Unit,
     onBookmarkClick: () -> Unit,
     isLoggedIn: Boolean = false,
@@ -416,8 +419,10 @@ fun ExploreAnimeCard(
             }
         }
 
-        Text(
-            text = anime.title,
+        val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
+    
+    Text(
+            text = displayTitle,
             modifier = Modifier
                 .padding(top = 6.dp)
                 .height(32.dp),
@@ -466,13 +471,13 @@ internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = f
         count?.let {
             Spacer(modifier = Modifier.width(8.dp))
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isOled) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                shape = RoundedCornerShape(12.dp),
+                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
             ) {
                 Text(
                     "$it",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
