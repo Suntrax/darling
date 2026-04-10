@@ -2,39 +2,35 @@ package com.blissless.anime.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -49,6 +45,12 @@ import java.util.Locale
 fun FeaturedCarousel(
     animeList: List<ExploreAnime>,
     onAnimeClick: (ExploreAnime) -> Unit,
+    onStatusClick: (ExploreAnime) -> Unit,
+    onPlayClick: (ExploreAnime) -> Unit,
+    onInfoClick: (ExploreAnime) -> Unit,
+    animeStatusMap: Map<Int, String> = emptyMap(),
+    preferEnglishTitles: Boolean = true,
+    isOled: Boolean = false,
     autoScrollEnabled: Boolean = true,
     isVisible: Boolean = true
 ) {
@@ -118,7 +120,7 @@ fun FeaturedCarousel(
         onDispose { autoScrollJob?.cancel() }
     }
 
-    Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
@@ -128,11 +130,11 @@ fun FeaturedCarousel(
         ) { page ->
             val anime = animeList[page % actualCount]
             
-            Box(modifier = Modifier.fillMaxSize().graphicsLayer { clip = true }) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
-                        .data(anime.banner ?: anime.cover)
-                        .memoryCacheKey(anime.banner ?: anime.cover)
+                        .data(anime.cover)
+                        .memoryCacheKey(anime.cover)
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
@@ -145,8 +147,9 @@ fun FeaturedCarousel(
                         Brush.verticalGradient(
                             listOf(
                                 Color.Black.copy(alpha = 0.3f),
-                                Color.Black.copy(alpha = 0.5f),
-                                Color.Black.copy(alpha = 0.9f)
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.7f),
+                                Color.Black.copy(alpha = 0.95f)
                             )
                         )
                     )
@@ -155,8 +158,8 @@ fun FeaturedCarousel(
         }
 
         Box(
-            modifier = Modifier.fillMaxWidth().padding(16.dp).align(Alignment.BottomCenter),
-            contentAlignment = Alignment.BottomStart
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.BottomCenter),
+            contentAlignment = Alignment.BottomCenter
         ) {
             val currentAnime by remember {
                 derivedStateOf { animeList[pagerState.currentPage % actualCount] }
@@ -175,122 +178,120 @@ fun FeaturedCarousel(
                             targetOffsetY = { it / 2 }
                         )
             ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            var totalDragX = 0f
-                            var hasTriggeredSwipe = false
-                            detectHorizontalDragGestures(
-                                onDragStart = {
-                                    totalDragX = 0f
-                                    hasTriggeredSwipe = false
-                                    isHeaderSwiping = true
-                                },
-                                onDragEnd = {
-                                    totalDragX = 0f
-                                    isHeaderSwiping = false
-                                },
-                                onDragCancel = {
-                                    totalDragX = 0f
-                                    isHeaderSwiping = false
-                                },
-                                onHorizontalDrag = { _, dragAmount ->
-                                    totalDragX += dragAmount
-                                    val threshold = 50f
-                                    if (!hasTriggeredSwipe) {
-                                        if (totalDragX > threshold) {
-                                            scope.launch {
-                                                try {
-                                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                                                } catch (_: Exception) {}
-                                            }
-                                            hasTriggeredSwipe = true
-                                        } else if (totalDragX < -threshold) {
-                                            scope.launch {
-                                                try {
-                                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                                } catch (_: Exception) {}
-                                            }
-                                            hasTriggeredSwipe = true
-                                        }
-                                    }
-                                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val displayTitle = (if (preferEnglishTitles && currentAnime.titleEnglish != null) currentAnime.titleEnglish else currentAnime.title) ?: "Unknown"
+                    Text(
+                        text = displayTitle,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val avgScore = currentAnime.averageScore
+                        val format = currentAnime.format
+                        currentAnime.year?.let { year ->
+                            Text(text = year.toString(), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                        }
+                        val formatText = when (format?.uppercase()) {
+                            "MOVIE" -> "Movie"
+                            "ONA", "OVA", "TV" -> "Series"
+                            else -> "Series"
+                        }
+                        Text(text = formatText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                        if (avgScore != null) {
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                text = "★ ${String.format(Locale.US, "%,.0f", avgScore / 10.0).replace(".", ",")}",
+                                color = Color(0xFFFFD700),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { onAnimeClick(currentAnime) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(
-                            model = currentAnime.cover,
-                            contentDescription = currentAnime.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .width(50.dp)
-                                .height(70.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = currentAnime.title,
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val currentStatus = animeStatusMap[currentAnime.id]
+                        val isSaved = currentStatus != null
+                        val statusColor = when (currentStatus) {
+                            "COMPLETED" -> Color(0xFF4CAF50)
+                            "CURRENT" -> Color(0xFF2196F3)
+                            "PLANNING" -> Color(0xFF9C27B0)
+                            "PAUSED" -> Color(0xFFFFC107)
+                            "DROPPED" -> Color(0xFFF44336)
+                            else -> Color.White
+                        }
+                        
+                        IconButton(
+                            onClick = { onStatusClick(currentAnime) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                contentDescription = "Save",
+                                tint = if (isSaved) statusColor else Color.White,
+                                modifier = Modifier.size(28.dp)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                currentAnime.year?.let { year ->
-                                    Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
-                                    Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
-                                }
-                                Text(
-                                    text = currentAnime.genres.take(3).joinToString(" - "),
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                        }
+                        
+                        Button(
+                            onClick = { onPlayClick(currentAnime) },
+                            modifier = Modifier.height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isOled) Color(0xFF2A2A2A) else MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Watch",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Watch Now", style = MaterialTheme.typography.labelMedium)
+                        }
+                        
+                        IconButton(
+                            onClick = { onInfoClick(currentAnime) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                    contentDescription = "Info",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val score = currentAnime.averageScore
-                                if (score != null) {
-                                    Text(
-                                        text = "★ ${String.format(Locale.US, "%.1f", score / 10.0)}",
-                                        color = Color(0xFFFFD700),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                }
-                                val latestEp = currentAnime.latestEpisode
-                                if (latestEp != null && latestEp > 0) {
-                                    val epText = "Ep $latestEp${if (currentAnime.episodes > 0) " / ${currentAnime.episodes}" else ""}"
-                                    Text(text = epText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
-                                }
-                            }
                         }
                     }
                 }
             }
         }
 
-        Row(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+Row(
+            modifier = Modifier.padding(top = 48.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             val currentPageIndex = pagerState.currentPage % actualCount
             val targetPageIndex = pagerState.targetPage % actualCount
-            
+
             repeat(actualCount) { index ->
                 val isCurrentSelected = index == currentPageIndex
                 val isTargetSelected = index == targetPageIndex

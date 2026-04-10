@@ -125,7 +125,7 @@ fun EpisodeSelectionDialog(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     val nextEp = currentProgress + 1
                     if (nextEp <= released) {
-                        Button(onClick = { onEpisodeSelect(nextEp, null) }, shape = RoundedCornerShape(10.dp)) { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Resume Ep $nextEp") }
+                        Button(onClick = { onEpisodeSelect(nextEp, null) }, shape = RoundedCornerShape(10.dp)) { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Resume Ep $nextEp", color = if (isOled || disableMaterialColors) Color.Black else Color.White) }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     TextButton(onClick = onDismiss) { Text("Close") }
@@ -416,7 +416,7 @@ fun RichEpisodeScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             val nextEp = currentProgress + 1
-                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp, null) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = if (disableMaterialColors) Color.Black else Color.White)) } }
+                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp, null) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White)) } }
                             item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(0) } }, label = { Text("Ep 1") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) }
                             if (released > 1) { item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(released - 1) } }, label = { Text("Latest: Ep $released") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) } }
                         }

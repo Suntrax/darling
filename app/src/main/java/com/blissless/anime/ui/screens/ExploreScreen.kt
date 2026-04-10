@@ -20,10 +20,13 @@ import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.dialogs.ExploreAnimeDialog
+import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
 import com.blissless.anime.ui.components.ExploreAnimeCard
 import com.blissless.anime.ui.components.AnimeCardBounds
 import com.blissless.anime.ui.components.FeaturedCarousel
+import com.blissless.anime.ui.components.EpisodeSelectionDialog
+import com.blissless.anime.ui.components.RichEpisodeScreen
 import com.blissless.anime.ui.components.LoadingPlaceholder
 import com.blissless.anime.ui.components.SectionTitle
 import android.widget.Toast
@@ -71,6 +74,7 @@ fun ExploreScreen(
     val isLoading by viewModel.isLoadingExplore.collectAsState()
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
+    val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -107,6 +111,8 @@ fun ExploreScreen(
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+    var showEpisodeSelection by remember { mutableStateOf(false) }
+    var showStatusDialog by remember { mutableStateOf(false) }
     
     // Force recomposition when lists change by tracking a version counter
     var listVersion by remember { mutableIntStateOf(0) }
@@ -230,6 +236,77 @@ fun ExploreScreen(
         )
     }
 
+    // Episode selection dialog for Watch Now button
+    if (showEpisodeSelection && selectedAnime != null) {
+        val anime = selectedAnime!!
+        val animeMedia = AnimeMedia(
+            id = anime.id,
+            title = anime.title,
+            titleEnglish = anime.titleEnglish,
+            cover = anime.cover,
+            banner = anime.banner,
+            totalEpisodes = anime.episodes,
+            latestEpisode = anime.latestEpisode,
+            status = "",
+            averageScore = anime.averageScore,
+            genres = anime.genres,
+            listStatus = "",
+            listEntryId = 0
+        )
+        if (simplifyEpisodeMenu) {
+            EpisodeSelectionDialog(
+                anime = animeMedia,
+                isOled = isOled,
+                onDismiss = { showEpisodeSelection = false },
+                onEpisodeSelect = { episode, _ ->
+                    onPlayEpisode(animeMedia, episode, null)
+                    showEpisodeSelection = false
+                }
+            )
+        } else {
+            RichEpisodeScreen(
+                anime = animeMedia,
+                viewModel = viewModel,
+                isOled = isOled,
+                onDismiss = { showEpisodeSelection = false },
+                onEpisodeSelect = { episode, _ ->
+                    onPlayEpisode(animeMedia, episode, null)
+                    showEpisodeSelection = false
+                }
+            )
+        }
+    }
+
+    // Status dialog for carousel Save button
+    if (showStatusDialog && selectedAnime != null) {
+        val anime = selectedAnime!!
+        val animeMedia = AnimeMedia(
+            id = anime.id,
+            title = anime.title,
+            titleEnglish = anime.titleEnglish,
+            cover = anime.cover,
+            banner = anime.banner,
+            totalEpisodes = anime.episodes,
+            latestEpisode = anime.latestEpisode,
+            status = animeStatusMap[anime.id] ?: "",
+            averageScore = anime.averageScore,
+            genres = anime.genres
+        )
+        HomeAnimeStatusDialog(
+            anime = animeMedia,
+            isOled = isOled,
+            onDismiss = { showStatusDialog = false },
+            onRemove = {
+                viewModel.removeAnimeFromList(anime.id)
+                showStatusDialog = false
+            },
+            onUpdate = { status, _ ->
+                viewModel.addExploreAnimeToList(anime, status)
+                showStatusDialog = false
+            }
+        )
+    }
+
     // Stable callbacks to avoid recomposition
     val onAnimeClickStable = remember<(ExploreAnime, AnimeCardBounds?) -> Unit> {
         { anime, bounds ->
@@ -330,6 +407,18 @@ fun ExploreScreen(
                 FeaturedCarousel(
                     animeList = filteredFeaturedAnime,
                     onAnimeClick = onFeaturedAnimeClickStable,
+                    onStatusClick = { anime ->
+                        selectedAnime = anime
+                        showStatusDialog = true
+                    },
+                    onPlayClick = { anime ->
+                        selectedAnime = anime
+                        showEpisodeSelection = true
+                    },
+                    onInfoClick = onFeaturedAnimeClickStable,
+                    animeStatusMap = animeStatusMap,
+                    preferEnglishTitles = preferEnglishTitles,
+                    isOled = isOled,
                     autoScrollEnabled = isVisible && !showDialog
                 )
             } else if (apiError == null && !isOffline) {
