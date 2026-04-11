@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -263,7 +263,7 @@ fun FeaturedCarousel(
                             )
                         ) {
                             Icon(
-                                Icons.Default.PlayArrow,
+                                Icons.Outlined.PlayArrow,
                                 contentDescription = "Watch",
                                 modifier = Modifier.size(24.dp)
                             )
