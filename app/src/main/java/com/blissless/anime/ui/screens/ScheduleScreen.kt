@@ -1003,10 +1003,10 @@ private fun TimelineScheduleList(
             val staggerDelay = minOf(index, 20) * 30f
             val staggerMs = staggerDelay / 1000f
             val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
-            val easedProgress = easeOutCubic(rawProgress.coerceAtMost(1f))
+            val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
             
             val introScale = 0.3f + easedProgress * 0.7f
-            val introAlpha = easedProgress
+            val introAlpha = easedProgress.coerceAtLeast(0f)
             val introTranslationY = translationYOffset * (1f - easedProgress)
             
             val layoutInfo = listState.layoutInfo
