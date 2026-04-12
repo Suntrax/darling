@@ -543,6 +543,9 @@ fun MainScreen(
         val currentDialog = overlayState as? OverlayState.ExploreAnimeDialog
         val firstAnime = currentDialog?.firstAnime ?: previousAnime ?: anime
         val isFirstOpen = currentDialog == null
+        // Clear the card bounds when opening the detailed screen to hide the source card
+        viewModel.clearExploreAnimeCardBounds()
+        viewModel.clearHomeAnimeCardBounds()
         overlayState = OverlayState.ExploreAnimeDialog(anime = anime, firstAnime = firstAnime, isFirstOpen = isFirstOpen)
     }
     

@@ -137,33 +137,37 @@ fun DetailedAnimeScreen(
     val effectiveOnUpdateStatus = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
     val effectiveOnRemove = if (isLoggedIn) onRemove else onRemoveLocalStatus
 
-    val scale by animateFloatAsState(
-        targetValue = when {
-            isTransitioning -> 0.95f
-            isVisible -> 1f
-            initialCardBounds != null -> 0.85f
-            else -> 0f
-        },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "scale"
-    )
+    val slideOffset = remember { Animatable(1000f) }
+    val dismissSlideOffset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    
+    LaunchedEffect(Unit) {
+        slideOffset.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(200, easing = LinearEasing)
+        )
+    }
+
+    fun dismissWithAnimation() {
+        scope.launch {
+            dismissSlideOffset.snapTo(0f)
+            dismissSlideOffset.animateTo(
+                targetValue = 1000f,
+                animationSpec = tween(150, easing = LinearEasing)
+            )
+            onDismiss()
+            onSwipeToClose()
+        }
+    }
+
     val alpha by animateFloatAsState(
-        targetValue = when {
-            isTransitioning -> 0.7f
-            isVisible -> 1f
-            initialCardBounds != null -> 0.9f
-            else -> 0f
-        },
-        animationSpec = tween(durationMillis = 300),
+        targetValue = if (slideOffset.value > 0 || dismissSlideOffset.value > 0) 0f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
         label = "alpha"
     )
 
     var transitionProgress by remember { mutableFloatStateOf(0f) }
 
-    val slideInProgress = remember { Animatable(0f) }
     val coverAnimationProgress = remember(anime.id) { Animatable(0f) }
 
     val animatedCoverScale by animateFloatAsState(
@@ -191,15 +195,12 @@ fun DetailedAnimeScreen(
         if (initialCardBounds != null) {
             transitionProgress = 1f
             coverAnimationProgress.snapTo(0f)
-            // Start cover animation immediately
             coverAnimationProgress.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
             )
-            // Immediately after cover animation finishes, show the rest of screen
             isVisible = true
         } else {
-            // Reset animation state for relation navigation
             isVisible = true
             coverAnimationProgress.snapTo(0f)
             transitionProgress = 0f
@@ -240,7 +241,6 @@ fun DetailedAnimeScreen(
     val dismissThreshold = screenHeightPx / 2f
 
     val offsetY = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
 
     val lazyListState = rememberLazyListState(
         initialFirstVisibleItemIndex = 0,
@@ -312,11 +312,7 @@ fun DetailedAnimeScreen(
                 val shouldDismiss = currentOffset > dismissThreshold || available.y > 500f
 
                 if (shouldDismiss && isAtTop) {
-                    scope.launch {
-                        offsetY.animateTo(screenHeightPx, tween(180, easing = FastOutSlowInEasing))
-                        onDismiss()
-                        onSwipeToClose()
-                    }
+                    dismissWithAnimation()
                 } else {
                     scope.launch {
                         offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
@@ -340,9 +336,8 @@ fun DetailedAnimeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(0, (slideOffset.value + dismissSlideOffset.value).roundToInt()) }
                 .graphicsLayer {
-                    this.scaleX = scale
-                    this.scaleY = scale
                     this.alpha = alpha
                 }
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }

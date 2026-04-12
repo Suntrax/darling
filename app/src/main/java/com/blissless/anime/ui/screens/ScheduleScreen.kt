@@ -983,7 +983,7 @@ private fun TimelineScheduleList(
         derivedStateOf { listState.isScrollInProgress }
     }
 
-    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible)
+    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible, true)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

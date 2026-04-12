@@ -1,7 +1,6 @@
 package com.blissless.anime.dialogs
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -59,7 +59,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.Spring
+import kotlinx.coroutines.launch
 
 data class HistoryData(val entries: List<JikanHistoryEntry>, val statuses: List<String>, val progressList: List<String>)
 
@@ -164,13 +166,45 @@ fun UserProfileScreen(
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
 
+    val slideOffset = remember { Animatable(1000f) }
+    val dismissSlideOffset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    
+    LaunchedEffect(Unit) {
+        slideOffset.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(200, easing = LinearEasing)
+        )
+    }
+    
+    fun dismissWithAnimation() {
+        scope.launch {
+            dismissSlideOffset.snapTo(0f)
+            dismissSlideOffset.animateTo(
+                targetValue = 1000f,
+                animationSpec = tween(150, easing = LinearEasing)
+            )
+            onDismiss()
+        }
+    }
+    
+    val alpha by animateFloatAsState(
+        targetValue = if (slideOffset.value > 0 || dismissSlideOffset.value > 0) 0f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+        label = "alpha"
+    )
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { dismissWithAnimation() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         Card(
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(0, (slideOffset.value + dismissSlideOffset.value).roundToInt()) }
+                .graphicsLayer {
+                    this.alpha = alpha
+                }
                 .padding(0.dp),
             shape = RoundedCornerShape(0.dp),
             colors = CardDefaults.cardColors(
@@ -214,7 +248,7 @@ fun UserProfileScreen(
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = { dismissWithAnimation() }) {
                         Icon(Icons.Default.Close, "Close", tint = Color.White)
                     }
                 }
@@ -676,11 +710,12 @@ private fun FavoriteItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier
@@ -694,7 +729,7 @@ private fun FavoriteItem(
                 modifier = Modifier
                     .width(70.dp)
                     .height(95.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -856,11 +891,12 @@ private fun HistoryItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier
@@ -874,7 +910,7 @@ private fun HistoryItem(
                 modifier = Modifier
                     .width(70.dp)
                     .height(95.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
             Spacer(modifier = Modifier.width(12.dp))

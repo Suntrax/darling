@@ -211,17 +211,30 @@ fun RichEpisodeScreen(
 
     // Animation states for entry
     var isVisible by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0.92f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "scale"
-    )
+    val slideOffset = remember { Animatable(1000f) }
+    val dismissSlideOffset = remember { Animatable(0f) }
+    
+    LaunchedEffect(Unit) {
+        slideOffset.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(200, easing = LinearEasing)
+        )
+    }
+    
+    fun dismissWithAnimation() {
+        scope.launch {
+            dismissSlideOffset.snapTo(0f)
+            dismissSlideOffset.animateTo(
+                targetValue = 1000f,
+                animationSpec = tween(150, easing = LinearEasing)
+            )
+            onDismiss()
+        }
+    }
+
     val alpha by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 300),
+        targetValue = if (slideOffset.value > 0 || dismissSlideOffset.value > 0) 0f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
         label = "alpha"
     )
 
@@ -284,10 +297,7 @@ fun RichEpisodeScreen(
                 val shouldDismiss = currentOffset > dismissThreshold || available.y > 2000f
 
                 if (shouldDismiss) {
-                    scope.launch {
-                        offsetY.animateTo(screenHeightPx, tween(250, easing = FastOutSlowInEasing))
-                        onDismiss()
-                    }
+                    dismissWithAnimation()
                 } else {
                     scope.launch {
                         offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
@@ -305,8 +315,7 @@ fun RichEpisodeScreen(
 
         val shouldDismiss = currentOffset > dismissThreshold
         if (shouldDismiss) {
-            offsetY.animateTo(screenHeightPx, tween(250, easing = FastOutSlowInEasing))
-            onDismiss()
+            dismissWithAnimation()
         } else {
             offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
         }
@@ -342,9 +351,8 @@ fun RichEpisodeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(0, (slideOffset.value + dismissSlideOffset.value).roundToInt()) }
                 .graphicsLayer {
-                    this.scaleX = scale
-                    this.scaleY = scale
                     this.alpha = alpha
                 }
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }

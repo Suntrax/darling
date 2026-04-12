@@ -13,13 +13,23 @@ private class ScreenAnimation {
     val animatable = Animatable(0f)
     private var lastScreenKey: String = ""
     private var animationJob: Job? = null
+    private var hasPlayedOnce = false
     
-    fun startAnimation(scope: CoroutineScope, screenKey: String) {
+    fun startAnimation(scope: CoroutineScope, screenKey: String, playOncePerSession: Boolean = true) {
         if (animationJob?.isActive == true) return
         
-        // Reset animation when screen changes
-        if (screenKey != lastScreenKey || animatable.value >= 1f) {
+        // Skip animation if already played once (for playOncePerSession = true)
+        if (playOncePerSession && hasPlayedOnce && screenKey == lastScreenKey) {
+            scope.launch(Dispatchers.Default) {
+                animatable.snapTo(1f)
+            }
+            return
+        }
+        
+        // Reset animation when screen changes or on first play
+        if (screenKey != lastScreenKey || !hasPlayedOnce) {
             lastScreenKey = screenKey
+            hasPlayedOnce = true
             scope.launch(Dispatchers.Default) {
                 animatable.snapTo(0f)
                 animatable.animateTo(
@@ -35,13 +45,13 @@ private class ScreenAnimation {
 }
 
 @Composable
-fun rememberCinematicAnimation(screenKey: String = "default", isVisible: Boolean = true): Float {
+fun rememberCinematicAnimation(screenKey: String = "default", isVisible: Boolean = true, playOncePerSession: Boolean = true): Float {
     val animation = screenAnimations.getOrPut(screenKey) { ScreenAnimation() }
     val scope = rememberCoroutineScope()
     
     LaunchedEffect(screenKey, isVisible) {
         if (isVisible) {
-            animation.startAnimation(scope, screenKey)
+            animation.startAnimation(scope, screenKey, playOncePerSession)
         }
     }
     
