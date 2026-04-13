@@ -13,7 +13,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
-import java.util.UUID
 
 class MalApiService(private val context: Context) {
     

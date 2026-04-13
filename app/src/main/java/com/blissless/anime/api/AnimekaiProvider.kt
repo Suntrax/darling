@@ -1,11 +1,9 @@
 package com.blissless.anime.api
 
-import com.blissless.anime.BuildConfig
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.EpisodeStreams
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType

@@ -1,6 +1,5 @@
 package com.blissless.anime.api
 
-import com.blissless.anime.BuildConfig
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.EpisodeStreams

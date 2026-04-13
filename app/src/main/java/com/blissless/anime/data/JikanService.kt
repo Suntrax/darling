@@ -1,7 +1,6 @@
 package com.blissless.anime.data
 
 import android.content.Context
-import com.blissless.anime.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
