@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.character
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

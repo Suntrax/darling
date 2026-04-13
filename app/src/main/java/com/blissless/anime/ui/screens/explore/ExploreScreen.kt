@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.explore
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -47,12 +47,12 @@ import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.ui.components.AnimeCardBounds
-import com.blissless.anime.ui.components.EpisodeSelectionDialog
+import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
-import com.blissless.anime.ui.components.FeaturedCarousel
 import com.blissless.anime.ui.components.LoadingPlaceholder
-import com.blissless.anime.ui.components.RichEpisodeScreen
+import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
 import com.blissless.anime.ui.components.SectionTitle
+import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -174,7 +174,7 @@ fun ExploreScreen(
             currentStatus = animeStatus,
             isFavorite = isAnimeFavorite,
             initialCardBounds = currentCardBounds,
-            onDismiss = { 
+            onDismiss = {
                 currentCardBounds = null
                 if (firstAnime != null && selectedAnime?.id != firstAnime?.id) {
                     selectedAnime = firstAnime
@@ -184,7 +184,7 @@ fun ExploreScreen(
                     onClearAnimeStack()
                 }
             },
-            onSwipeToClose = { 
+            onSwipeToClose = {
                 currentCardBounds = null
                 showDialog = false
                 onClearAnimeStack()
@@ -240,10 +240,15 @@ fun ExploreScreen(
                                     format = detailedData.format
                                 )
                             } else {
-                                Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    "Anime not found - ID: ${relation.id}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT)
+                                .show()
                         }
                     }
                 } catch (e: Exception) {
@@ -375,7 +380,7 @@ fun ExploreScreen(
     // Refresh data when screen becomes visible
     LaunchedEffect(isVisible, seasonalAnime) {
         if (isVisible && seasonalAnime.isEmpty()) {
-            kotlinx.coroutines.delay(100)
+            delay(100)
             viewModel.forceRefreshExplore()
         }
     }
@@ -778,7 +783,7 @@ fun ExploreScreen(
         if (isRefreshing) {
             // Use a much shorter timeout when offline to avoid long spinner
             val timeout = if (isOffline) 2000L else 15000L
-            kotlinx.coroutines.delay(timeout)
+            delay(timeout)
             isRefreshing = false
         }
         if (!isLoading && isRefreshing) {

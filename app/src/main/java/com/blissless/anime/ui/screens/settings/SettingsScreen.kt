@@ -1,5 +1,6 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.settings
 
+import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -77,7 +78,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.data.LoginProvider
+import com.blissless.anime.R
+import com.blissless.anime.api.myanimelist.LoginProvider
 import kotlin.math.round
 
 @Composable
@@ -96,6 +98,10 @@ fun SettingsScreen(
 ) {
     var selectedGroup by remember { mutableStateOf<String?>(null) }
 
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    
     val settingsGroups = remember {
         listOf(
             SettingsGroup(
@@ -103,42 +109,42 @@ fun SettingsScreen(
                 title = "Account",
                 description = "Login and manage your anime list",
                 icon = Icons.Default.Person,
-                iconBackgroundColor = Color(0xFF0D9FFF)
+                iconBackgroundColor = if (isOled) Color.White else primary
             ),
             SettingsGroup(
                 id = "appearance",
                 title = "Appearance",
                 description = "Theme, colors, and display options",
                 icon = Icons.Default.Palette,
-                iconBackgroundColor = Color(0xFF9C27B0)
+                iconBackgroundColor = if (isOled) Color.White else secondary
             ),
             SettingsGroup(
                 id = "general",
                 title = "General",
                 description = "Startup screen and sync settings",
                 icon = Icons.Default.Settings,
-                iconBackgroundColor = Color(0xFF4CAF50)
+                iconBackgroundColor = if (isOled) Color.White else tertiary
             ),
             SettingsGroup(
                 id = "stream",
                 title = "Stream Settings",
                 description = "Audio preferences and buffering",
                 icon = Icons.Default.PlayArrow,
-                iconBackgroundColor = Color(0xFFFF9800)
+                iconBackgroundColor = if (isOled) Color.White else primary
             ),
             SettingsGroup(
                 id = "player",
                 title = "Player Settings",
                 description = "Playback controls and skipping",
                 icon = Icons.Default.Subscriptions,
-                iconBackgroundColor = Color(0xFFE91E63)
+                iconBackgroundColor = if (isOled) Color.White else secondary
             ),
             SettingsGroup(
                 id = "cache",
                 title = "Cache Management",
                 description = "Storage and data cleanup",
                 icon = Icons.Default.Memory,
-                iconBackgroundColor = Color(0xFF00BCD4)
+                iconBackgroundColor = if (isOled) Color.White else tertiary
             )
         )
     }
@@ -228,7 +234,7 @@ private fun SettingsLandingPage(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             AsyncImage(
-                model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                model = R.mipmap.ic_launcher_round,
                 contentDescription = "App",
                 modifier = Modifier.size(32.dp).clip(CircleShape)
             )
@@ -411,7 +417,7 @@ private fun AccountSettingsPage(
     SettingsPageScaffold(
         title = "Account",
         icon = Icons.Default.Person,
-        iconBackgroundColor = Color(0xFF0D9FFF),
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
         onBack = onBack,
         isOled = isOled
     ) {
@@ -578,7 +584,7 @@ private fun AppearanceSettingsPage(
     SettingsPageScaffold(
         title = "Appearance",
         icon = Icons.Default.Palette,
-        iconBackgroundColor = Color(0xFF9C27B0),
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.secondary,
         onBack = onBack,
         isOled = isOled
     ) {
@@ -657,7 +663,7 @@ private fun GeneralSettingsPage(
     SettingsPageScaffold(
         title = "General",
         icon = Icons.Default.Settings,
-        iconBackgroundColor = Color(0xFF4CAF50),
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.tertiary,
         onBack = onBack,
         isOled = isOled
     ) {
@@ -734,7 +740,7 @@ private fun StreamSettingsPage(
     SettingsPageScaffold(
         title = "Stream Settings",
         icon = Icons.Default.PlayArrow,
-        iconBackgroundColor = Color(0xFFFF9800),
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
         onBack = onBack,
         isOled = isOled
     ) {
@@ -959,7 +965,7 @@ private fun PlayerSettingsPage(
 @Composable
 private fun CacheSettingsPage(
     viewModel: MainViewModel,
-    context: android.content.Context,
+    context: Context,
     isOled: Boolean,
     onBack: () -> Unit
 ) {

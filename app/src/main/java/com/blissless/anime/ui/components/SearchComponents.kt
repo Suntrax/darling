@@ -83,7 +83,7 @@ import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.toDetailedAnimeData
-import com.blissless.anime.ui.screens.DetailedAnimeScreen
+import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale

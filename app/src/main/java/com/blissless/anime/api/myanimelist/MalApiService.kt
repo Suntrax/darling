@@ -1,8 +1,9 @@
-package com.blissless.anime.data
+package com.blissless.anime.api.myanimelist
 
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import com.blissless.anime.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,30 +16,30 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 
 class MalApiService(private val context: Context) {
-    
+
     companion object {
         private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
         private const val TIMEOUT_MS = 15000
     }
-    
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
-    
+
     private val authManager = MalAuthManager(context)
-    
+
     fun getAuthUrl(clientId: String, state: String = "random_state_string"): Uri {
-        android.util.Log.d("MAL_LOGIN", "getAuthUrl: Generating new code verifier...")
+        Log.d("MAL_LOGIN", "getAuthUrl: Generating new code verifier...")
         val redirectUri = "animescraper://success"
-        
+
         val codeVerifier = generateCodeVerifier()
-        android.util.Log.d("MAL_LOGIN", "getAuthUrl: Code verifier length: ${codeVerifier.length}")
+        Log.d("MAL_LOGIN", "getAuthUrl: Code verifier length: ${codeVerifier.length}")
         authManager.saveCodeVerifier(codeVerifier)
-        android.util.Log.d("MAL_LOGIN", "getAuthUrl: Code verifier saved")
-        
+        Log.d("MAL_LOGIN", "getAuthUrl: Code verifier saved")
+
         val scope = "write:users+read:users+profile"
-        
+
         val url = "https://myanimelist.net/v1/oauth2/authorize" +
                 "?response_type=code" +
                 "&client_id=$clientId" +
@@ -47,107 +48,114 @@ class MalApiService(private val context: Context) {
                 "&code_challenge_method=plain" +
                 "&code_challenge=$codeVerifier" +
                 "&scope=${URLEncoder.encode(scope, "UTF-8")}"
-        
+
         return Uri.parse(url)
     }
-    
+
     private fun generateCodeVerifier(): String {
         // 43-128 characters - use alphanumeric only for maximum compatibility
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         return (1..64).map { chars.random() }.joinToString("")
     }
-    
+
     private fun generateS256Challenge(verifier: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(verifier.toByteArray(Charsets.US_ASCII))
         // Base64url encode without padding
         return Base64.encodeToString(hash, Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING)
     }
-    
-    suspend fun exchangeCodeForToken(code: String, clientId: String, clientSecret: String? = null): Boolean = withContext(Dispatchers.IO) {
-        try {
-            android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken: Getting code verifier...")
-            val redirectUri = "animescraper://success"
-            val codeVerifier = authManager.getCodeVerifier()
-            android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken: Code verifier is ${if(codeVerifier != null) "present (${codeVerifier.length} chars)" else "NULL"}")
-            
-            if (codeVerifier == null) {
-                android.util.Log.e("MAL_LOGIN", "exchangeCodeForToken: Code verifier is null!")
-                return@withContext false
-            }
-            
-            authManager.clearCodeVerifier()
-            
-            val url = URL("https://myanimelist.net/v1/oauth2/token")
-            android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken: Connecting to MAL token endpoint...")
-            
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            
-            val useClientSecret = !clientSecret.isNullOrBlank()
-            if (useClientSecret) {
-                val authString = android.util.Base64.encodeToString("$clientId:$clientSecret".toByteArray(), android.util.Base64.NO_WRAP)
-                conn.setRequestProperty("Authorization", "Basic $authString")
-            } else {
-                conn.setRequestProperty("X-MAL-CLIENT-ID", clientId)
-            }
-            conn.connectTimeout = TIMEOUT_MS
-            conn.readTimeout = TIMEOUT_MS
-            
-            val postData = buildString {
-                append("client_id=$clientId")
-                if (useClientSecret && !clientSecret.isNullOrBlank()) {
-                    append("&client_secret=$clientSecret")
+
+    suspend fun exchangeCodeForToken(code: String, clientId: String, clientSecret: String? = null): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                Log.d("MAL_LOGIN", "exchangeCodeForToken: Getting code verifier...")
+                val redirectUri = "animescraper://success"
+                val codeVerifier = authManager.getCodeVerifier()
+                Log.d(
+                    "MAL_LOGIN",
+                    "exchangeCodeForToken: Code verifier is ${if (codeVerifier != null) "present (${codeVerifier.length} chars)" else "NULL"}"
+                )
+
+                if (codeVerifier == null) {
+                    Log.e("MAL_LOGIN", "exchangeCodeForToken: Code verifier is null!")
+                    return@withContext false
                 }
-                append("&grant_type=authorization_code")
-                append("&code=$code")
-                append("&redirect_uri=${URLEncoder.encode(redirectUri, "UTF-8")}")
-                append("&code_verifier=$codeVerifier")
-            }
-            
-            conn.outputStream.use { it.write(postData.toByteArray()) }
-            
-            val responseCode = conn.responseCode
-            android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken: Response code: $responseCode")
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                val response = reader.readText()
-                reader.close()
-                
-                android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken: Token response received")
-                parseAndSaveToken(response)
-                fetchUserInfo()
-                true
-            } else {
-                android.util.Log.e("MAL_LOGIN", "exchangeCodeForToken: Failed with code $responseCode")
-                val errorReader = BufferedReader(InputStreamReader(conn.errorStream))
-                val errorResponse = errorReader.readText()
-                errorReader.close()
-                android.util.Log.e("MAL_LOGIN", "exchangeCodeForToken: Error response: $errorResponse")
+
+                authManager.clearCodeVerifier()
+
+                val url = URL("https://myanimelist.net/v1/oauth2/token")
+                Log.d("MAL_LOGIN", "exchangeCodeForToken: Connecting to MAL token endpoint...")
+
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+
+                val useClientSecret = !clientSecret.isNullOrBlank()
+                if (useClientSecret) {
+                    val authString = Base64.encodeToString(
+                        "$clientId:$clientSecret".toByteArray(),
+                        Base64.NO_WRAP
+                    )
+                    conn.setRequestProperty("Authorization", "Basic $authString")
+                } else {
+                    conn.setRequestProperty("X-MAL-CLIENT-ID", clientId)
+                }
+                conn.connectTimeout = TIMEOUT_MS
+                conn.readTimeout = TIMEOUT_MS
+
+                val postData = buildString {
+                    append("client_id=$clientId")
+                    if (useClientSecret && !clientSecret.isNullOrBlank()) {
+                        append("&client_secret=$clientSecret")
+                    }
+                    append("&grant_type=authorization_code")
+                    append("&code=$code")
+                    append("&redirect_uri=${URLEncoder.encode(redirectUri, "UTF-8")}")
+                    append("&code_verifier=$codeVerifier")
+                }
+
+                conn.outputStream.use { it.write(postData.toByteArray()) }
+
+                val responseCode = conn.responseCode
+                Log.d("MAL_LOGIN", "exchangeCodeForToken: Response code: $responseCode")
+
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                    val response = reader.readText()
+                    reader.close()
+
+                    Log.d("MAL_LOGIN", "exchangeCodeForToken: Token response received")
+                    parseAndSaveToken(response)
+                    fetchUserInfo()
+                    true
+                } else {
+                    Log.e("MAL_LOGIN", "exchangeCodeForToken: Failed with code $responseCode")
+                    val errorReader = BufferedReader(InputStreamReader(conn.errorStream))
+                    val errorResponse = errorReader.readText()
+                    errorReader.close()
+                    Log.e("MAL_LOGIN", "exchangeCodeForToken: Error response: $errorResponse")
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e("MAL_LOGIN", "exchangeCodeForToken: Exception: ${e.message}")
+                e.printStackTrace()
                 false
             }
-        } catch (e: Exception) {
-            android.util.Log.e("MAL_LOGIN", "exchangeCodeForToken: Exception: ${e.message}")
-            e.printStackTrace()
-            false
         }
-    }
-    
+
     private fun parseAndSaveToken(response: String) {
         try {
             val tokenMatch = Regex("\"access_token\"\\s*:\\s*\"([^\"]+)\"").find(response)
             val tokenTypeMatch = Regex("\"token_type\"\\s*:\\s*\"([^\"]+)\"").find(response)
             val expiresMatch = Regex("\"expires_in\"\\s*:\\s*(\\d+)").find(response)
             val refreshMatch = Regex("\"refresh_token\"\\s*:\\s*\"([^\"]+)\"").find(response)
-            
+
             val token = tokenMatch?.groupValues?.get(1)
             val tokenType = tokenTypeMatch?.groupValues?.get(1) ?: "Bearer"
             val expiresIn = expiresMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
             val refreshToken = refreshMatch?.groupValues?.get(1)
-            
+
             if (token != null) {
                 authManager.saveToken(token, tokenType, expiresIn, refreshToken)
             }
@@ -155,17 +163,17 @@ class MalApiService(private val context: Context) {
             e.printStackTrace()
         }
     }
-    
+
     private suspend fun fetchUserInfo() {
         val response = makeGetRequest("$MAL_API_BASE/users/@me?fields=name,picture")
         if (response != null) {
             try {
                 val nameMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(response)
                 val pictureMatch = Regex("\"picture\"\\s*:\\s*\"([^\"]+)\"").find(response)
-                
+
                 val name = nameMatch?.groupValues?.get(1)
                 val picture = pictureMatch?.groupValues?.get(1)
-                
+
                 if (name != null) {
                     authManager.saveUserInfo(name, picture)
                 }
@@ -174,48 +182,51 @@ class MalApiService(private val context: Context) {
             }
         }
     }
-    
-    suspend fun getAnimeList(status: String? = null, limit: Int = 1000): List<MalAnimeListEntry> = withContext(Dispatchers.IO) {
-        val entries = mutableListOf<MalAnimeListEntry>()
-        var offset = 0
-        val maxTotal = 1000
-        
-        while (offset < maxTotal) {
-            val fields = "list_status{status,score,num_episodes_watched,updated_at},title,main_picture,num_episodes"
-            var url = "$MAL_API_BASE/users/@me/animelist?fields=$fields&limit=$limit&offset=$offset"
-            if (status != null) {
-                url += "&status=$status"
-            }
-            
-            val response = makeGetRequest(url, paginated = true)
-            if (response == null) {
-                break
-            }
-            
-            try {
-                val items = parseAnimeListResponse(response)
-                if (items.isEmpty()) {
+
+    suspend fun getAnimeList(status: String? = null, limit: Int = 1000): List<MalAnimeListEntry> =
+        withContext(Dispatchers.IO) {
+            val entries = mutableListOf<MalAnimeListEntry>()
+            var offset = 0
+            val maxTotal = 1000
+
+            while (offset < maxTotal) {
+                val fields =
+                    "list_status{status,score,num_episodes_watched,updated_at},title,main_picture,num_episodes"
+                var url =
+                    "$MAL_API_BASE/users/@me/animelist?fields=$fields&limit=$limit&offset=$offset"
+                if (status != null) {
+                    url += "&status=$status"
+                }
+
+                val response = makeGetRequest(url, paginated = true)
+                if (response == null) {
                     break
                 }
-                entries.addAll(items)
-                offset += limit
-                
-                val pagingMatch = Regex("\"next\"\\s*:\\s*\"([^\"]+)\"").find(response)
-                if (pagingMatch == null) {
+
+                try {
+                    val items = parseAnimeListResponse(response)
+                    if (items.isEmpty()) {
+                        break
+                    }
+                    entries.addAll(items)
+                    offset += limit
+
+                    val pagingMatch = Regex("\"next\"\\s*:\\s*\"([^\"]+)\"").find(response)
+                    if (pagingMatch == null) {
+                        break
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                     break
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                break
             }
+
+            entries
         }
-        
-        entries
-    }
-    
+
     private fun parseAnimeListResponse(jsonStr: String): List<MalAnimeListEntry> {
         val entries = mutableListOf<MalAnimeListEntry>()
-        
+
         val dataMatch = Regex("\"data\"\\s*:\\s*\\[(.*?)\\]\\s*,\\s*\"paging\"", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
         val dataStr = if (dataMatch != null) {
             dataMatch.groupValues[1]
@@ -223,81 +234,83 @@ class MalApiService(private val context: Context) {
             val altMatch = Regex("\"data\"\\s*:\\s*\\[(.*)\\]", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
             if (altMatch != null) altMatch.groupValues[1] else jsonStr
         }
-        
+
         var searchIndex = 0
         while (searchIndex < dataStr.length) {
             val nodeStart = dataStr.indexOf("{\"node\":{", searchIndex)
             if (nodeStart == -1) break
-            
+
             val nodeEnd = findMatchingBrace(dataStr, nodeStart + 8)
             if (nodeEnd == -1) break
-            
+
             val listStatusStart = dataStr.indexOf("\"list_status\":{", nodeEnd)
             if (listStatusStart == -1 || listStatusStart > nodeEnd + 100) {
                 searchIndex = nodeEnd + 1
                 continue
             }
-            
+
             val listStatusEnd = findMatchingBrace(dataStr, listStatusStart + 14)
             if (listStatusEnd == -1) {
                 searchIndex = nodeEnd + 1
                 continue
             }
-            
+
             val block = dataStr.substring(nodeStart, listStatusEnd + 1)
-            
+
             try {
                 val idMatch = Regex("\"id\"\\s*:\\s*(\\d+)").find(block)
                 val id = idMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                
+
                 val titleMatch = Regex("\"title\"\\s*:\\s*\"([^\"]+)\"").find(block)
                 val title = titleMatch?.groupValues?.get(1) ?: "Unknown"
-                
+
                 val mediumPic = Regex("\"medium\"\\s*:\\s*\"([^\"]+)\"").find(block)?.groupValues?.get(1)
                 val largePic = Regex("\"large\"\\s*:\\s*\"([^\"]+)\"").find(block)?.groupValues?.get(1)
-                
+
                 val totalEpisodesMatch = Regex("\"num_episodes\"\\s*:\\s*(\\d+)").find(block)
                 val totalEpisodes = totalEpisodesMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                
+
                 val statusMatch = Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(block)
                 val status = statusMatch?.groupValues?.get(1)
-                
+
                 val scoreMatch = Regex("\"score\"\\s*:\\s*(\\d+)").find(block)
                 val score = scoreMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                
+
                 val episodesMatch = Regex("\"num_episodes_watched\"\\s*:\\s*(\\d+)").find(block)
                 val episodes = episodesMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                
-                entries.add(MalAnimeListEntry(
-                    node = MalAnimeNode(
-                        id = id,
-                        title = title,
-                        main_picture = MalPicture(medium = mediumPic, large = largePic),
-                        num_episodes = totalEpisodes
-                    ),
-                    list_status = if (status != null) MalListStatus(
-                        status = status,
-                        score = score,
-                        num_episodes_watched = episodes
-                    ) else null
-                ))
+
+                entries.add(
+                    MalAnimeListEntry(
+                        node = MalAnimeNode(
+                            id = id,
+                            title = title,
+                            main_picture = MalPicture(medium = mediumPic, large = largePic),
+                            num_episodes = totalEpisodes
+                        ),
+                        list_status = if (status != null) MalListStatus(
+                            status = status,
+                            score = score,
+                            num_episodes_watched = episodes
+                        ) else null
+                    )
+                )
             } catch (e: Exception) {
                 // skip malformed entries
             }
-            
+
             searchIndex = listStatusEnd + 1
         }
-        
+
         return entries
     }
-    
+
     private fun findMatchingBrace(str: String, startIndex: Int): Int {
         if (startIndex >= str.length || str[startIndex] != '{') return -1
         var braceCount = 1
         var i = startIndex + 1
         var inString = false
         var escapeNext = false
-        
+
         while (i < str.length && braceCount > 0) {
             val c = str[i]
             when {
@@ -311,71 +324,78 @@ class MalApiService(private val context: Context) {
             }
             i++
         }
-        
+
         return if (braceCount == 0) i - 1 else -1
     }
-    
-    suspend fun updateAnimeStatus(animeId: Int, status: String?, score: Int? = null, episodesWatched: Int? = null): Boolean = withContext(Dispatchers.IO) {
-        try {
-            android.util.Log.d("MAL_API", "updateAnimeStatus called: animeId=$animeId, status=$status, score=$score, episodesWatched=$episodesWatched")
-            
-            val authHeader = authManager.getAuthHeader()
-            android.util.Log.d("MAL_API", "Auth header: ${authHeader?.take(20)}...")
-            
-            if (authHeader == null) {
-                android.util.Log.e("MAL_API", "No auth header available!")
-                return@withContext false
+
+    suspend fun updateAnimeStatus(animeId: Int, status: String?, score: Int? = null, episodesWatched: Int? = null): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                Log.d(
+                    "MAL_API",
+                    "updateAnimeStatus called: animeId=$animeId, status=$status, score=$score, episodesWatched=$episodesWatched"
+                )
+
+                val authHeader = authManager.getAuthHeader()
+                Log.d("MAL_API", "Auth header: ${authHeader?.take(20)}...")
+
+                if (authHeader == null) {
+                    Log.e("MAL_API", "No auth header available!")
+                    return@withContext false
+                }
+
+                val url = URL("$MAL_API_BASE/anime/$animeId/my_list_status")
+                Log.d("MAL_API", "URL: $url")
+
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "PUT"
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                conn.setRequestProperty("Authorization", authHeader)
+                conn.setRequestProperty("X-MAL-CLIENT-ID", BuildConfig.MAL_CLIENT_ID)
+                conn.connectTimeout = TIMEOUT_MS
+                conn.readTimeout = TIMEOUT_MS
+
+                val params = mutableListOf<String>()
+                status?.let { params.add("status=$it") }
+                score?.let { params.add("score=$it") }
+                episodesWatched?.let { params.add("num_watched_episodes=$it") }
+
+                Log.d("MAL_API", "Params: ${params.joinToString("&")}")
+
+                if (params.isEmpty()) {
+                    Log.e("MAL_API", "No params to send!")
+                    return@withContext false
+                }
+
+                conn.outputStream.use { it.write(params.joinToString("&").toByteArray()) }
+
+                val responseCode = conn.responseCode
+                Log.d("MAL_API", "Response code: $responseCode")
+
+                val success = responseCode == HttpURLConnection.HTTP_OK || responseCode == 201
+                Log.d("MAL_API", "Update result: $success")
+
+                success
+            } catch (e: Exception) {
+                Log.e("MAL_API", "Exception: ${e.message}")
+                e.printStackTrace()
+                false
             }
-            
-            val url = URL("$MAL_API_BASE/anime/$animeId/my_list_status")
-            android.util.Log.d("MAL_API", "URL: $url")
-            
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "PUT"
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            conn.setRequestProperty("Authorization", authHeader)
-            conn.setRequestProperty("X-MAL-CLIENT-ID", BuildConfig.MAL_CLIENT_ID)
-            conn.connectTimeout = TIMEOUT_MS
-            conn.readTimeout = TIMEOUT_MS
-            
-            val params = mutableListOf<String>()
-            status?.let { params.add("status=$it") }
-            score?.let { params.add("score=$it") }
-            episodesWatched?.let { params.add("num_watched_episodes=$it") }
-            
-            android.util.Log.d("MAL_API", "Params: ${params.joinToString("&")}")
-            
-            if (params.isEmpty()) {
-                android.util.Log.e("MAL_API", "No params to send!")
-                return@withContext false
-            }
-            
-            conn.outputStream.use { it.write(params.joinToString("&").toByteArray()) }
-            
-            val responseCode = conn.responseCode
-            android.util.Log.d("MAL_API", "Response code: $responseCode")
-            
-            val success = responseCode == HttpURLConnection.HTTP_OK || responseCode == 201
-            android.util.Log.d("MAL_API", "Update result: $success")
-            
-            success
-        } catch (e: Exception) {
-            android.util.Log.e("MAL_API", "Exception: ${e.message}")
-            e.printStackTrace()
-            false
         }
-    }
-    
+
     suspend fun deleteAnimeFromList(animeId: Int): Boolean = withContext(Dispatchers.IO) {
         try {
             val url = URL("$MAL_API_BASE/anime/$animeId/my_list_status")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "DELETE"
-            conn.setRequestProperty("Authorization", authManager.getAuthHeader() ?: return@withContext false)
+            conn.setRequestProperty(
+                "Authorization",
+                authManager.getAuthHeader() ?: return@withContext false
+            )
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
-            
+
             val responseCode = conn.responseCode
             responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_NOT_FOUND
         } catch (e: Exception) {
@@ -383,36 +403,36 @@ class MalApiService(private val context: Context) {
             false
         }
     }
-    
+
     suspend fun getAnimeDetails(animeId: Int): Map<String, Any>? = withContext(Dispatchers.IO) {
         val fields = "id,title,main_picture,num_episodes,status,mean,rank,popularity,genres"
         val response = makeGetRequest("$MAL_API_BASE/anime/$animeId?fields=$fields")
         response?.let { parseJsonToMap(it) }
     }
-    
+
     private fun parseJsonToMap(jsonStr: String): Map<String, Any> {
         val result = mutableMapOf<String, Any>()
-        
+
         Regex("\"(\\w+)\"\\s*:\\s*(?:\"([^\"]*)\"|(\\d+)|(\\[.*?\\]))").findAll(jsonStr).forEach { match ->
             val key = match.groupValues[1]
             val strVal = match.groupValues[2]
             val numVal = match.groupValues[3]
             val arrVal = match.groupValues[4]
-            
+
             when {
                 strVal.isNotEmpty() -> result[key] = strVal
                 numVal.isNotEmpty() -> result[key] = numVal.toIntOrNull() ?: 0
                 arrVal.isNotEmpty() -> result[key] = arrVal
             }
         }
-        
+
         return result
     }
-    
+
     private fun makeGetRequest(path: String, paginated: Boolean = false): String? {
         return try {
             val authHeader = authManager.getAuthHeader() ?: return null
-            
+
             val url = URL(path)
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
@@ -420,7 +440,7 @@ class MalApiService(private val context: Context) {
             conn.setRequestProperty("X-MAL-CLIENT-ID", BuildConfig.MAL_CLIENT_ID)
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
-            
+
             val responseCode = conn.responseCode
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
@@ -435,6 +455,6 @@ class MalApiService(private val context: Context) {
             null
         }
     }
-    
+
     fun getAuthManager() = authManager
 }

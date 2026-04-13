@@ -1,4 +1,4 @@
-package com.blissless.anime.dialogs
+package com.blissless.anime.ui.screens.profile
 
 import android.content.Intent
 import androidx.compose.animation.core.Animatable
@@ -68,6 +68,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -75,9 +76,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.blissless.anime.MainViewModel
-import com.blissless.anime.data.JikanFavoriteAnime
-import com.blissless.anime.data.JikanHistoryEntry
-import com.blissless.anime.data.LoginProvider
+import com.blissless.anime.api.jikan.JikanFavoriteAnime
+import com.blissless.anime.api.jikan.JikanHistoryEntry
+import com.blissless.anime.api.jikan.JikanImageUrls
+import com.blissless.anime.api.jikan.JikanImages
+import com.blissless.anime.api.myanimelist.LoginProvider
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.UserAnimeStats
 import kotlinx.coroutines.launch
@@ -134,8 +137,8 @@ fun UserProfileScreen(
                     malId = 0,
                     title = aniListFavorite.title.romaji ?: aniListFavorite.title.english ?: "",
                     titleEnglish = aniListFavorite.title.english,
-                    images = com.blissless.anime.data.JikanImages(
-                        jpg = com.blissless.anime.data.JikanImageUrls(
+                    images = JikanImages(
+                        jpg = JikanImageUrls(
                             aniListFavorite.coverImage?.extraLarge ?: ""
                         )
                     ),
@@ -165,8 +168,8 @@ fun UserProfileScreen(
                     malId = activity.mediaId,
                     title = activity.mediaTitle,
                     titleEnglish = activity.mediaTitleEnglish,
-                    images = com.blissless.anime.data.JikanImages(
-                        jpg = com.blissless.anime.data.JikanImageUrls(activity.mediaCover)
+                    images = JikanImages(
+                        jpg = JikanImageUrls(activity.mediaCover)
                     ),
                     episodesWatched = episodeDisplay?.filter { it.isDigit() }?.toIntOrNull(),
                     chaptersRead = null,
@@ -471,7 +474,7 @@ private fun AboutMeContent(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f),
                         maxLines = 3,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                 }
             }

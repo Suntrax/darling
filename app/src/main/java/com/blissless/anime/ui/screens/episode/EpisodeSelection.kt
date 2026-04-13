@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.components
+package com.blissless.anime.ui.screens.episode
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -213,7 +214,7 @@ private fun EpisodeButton(
         color = backgroundColor,
         contentColor = contentColor,
         modifier = Modifier.size(48.dp).alpha(if (hasAired) 1f else 0.9f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+        border = BorderStroke(1.dp, borderColor)
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("$episodeNumber", style = MaterialTheme.typography.labelLarge, fontWeight = if (isWatched || isCurrent) FontWeight.Bold else FontWeight.Medium)

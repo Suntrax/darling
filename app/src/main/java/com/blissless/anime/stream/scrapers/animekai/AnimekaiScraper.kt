@@ -1,5 +1,6 @@
-package com.blissless.anime.api
+package com.blissless.anime.stream.scrapers.animekai
 
+import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.EpisodeStreams
@@ -12,8 +13,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.URI
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import kotlin.collections.iterator
+import kotlin.math.abs
 
 data class AnimekaiStreamResult(
     val url: String,
@@ -346,7 +350,7 @@ object AnimekaiScraper {
         }
 
         // Prefer result that is closer in length (more specific match)
-        val lengthDiff = kotlin.math.abs(normalizedSearch.length - normalizedResult.length)
+        val lengthDiff = abs(normalizedSearch.length - normalizedResult.length)
         score -= lengthDiff / 10
 
         return score
@@ -686,7 +690,7 @@ object AnimekaiScraper {
 
             // Extract embed origin
             val embedOrigin = try {
-                val uri = java.net.URI(embedUrl)
+                val uri = URI(embedUrl)
                 "${uri.scheme}://${uri.host}"
             } catch (e: Exception) {
                 "https://4spromax.site"
@@ -941,8 +945,8 @@ object AnimekaiScraper {
         null
     }
 
-    fun toAniwatchStreamResult(result: AnimekaiStreamResult): com.blissless.anime.data.models.AniwatchStreamResult {
-        return com.blissless.anime.data.models.AniwatchStreamResult(
+    fun toAniwatchStreamResult(result: AnimekaiStreamResult): AniwatchStreamResult {
+        return AniwatchStreamResult(
             url = result.url,
             isDirectStream = result.isDirectStream,
             headers = result.headers,

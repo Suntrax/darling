@@ -1,20 +1,11 @@
 package com.blissless.anime.ui.components
 
 import androidx.compose.ui.graphics.Color
+import com.blissless.anime.ui.theme.StatusColors as ThemeStatusColors
+import com.blissless.anime.ui.theme.StatusLabels as ThemeStatusLabels
 
-// Status colors for different list types
-val StatusColors = mapOf(
-    "CURRENT" to Color(0xFF2196F3),    // Blue - Watching
-    "PLANNING" to Color(0xFF9C27B0),   // Purple - Planning
-    "COMPLETED" to Color(0xFF4CAF50),  // Green - Completed
-    "PAUSED" to Color(0xFFFFC107),     // Amber - On Hold
-    "DROPPED" to Color(0xFFF44336)     // Red - Dropped
-)
+@Deprecated("Use StatusColors from com.blissless.anime.ui.theme instead")
+val StatusColors: Map<String, Color> get() = ThemeStatusColors
 
-val StatusLabels = mapOf(
-    "CURRENT" to "Watching",
-    "PLANNING" to "Planning",
-    "COMPLETED" to "Completed",
-    "PAUSED" to "On Hold",
-    "DROPPED" to "Dropped"
-)
+@Deprecated("Use StatusLabels from com.blissless.anime.ui.theme instead")
+val StatusLabels: Map<String, String> get() = ThemeStatusLabels

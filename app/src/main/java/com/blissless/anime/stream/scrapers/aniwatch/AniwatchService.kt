@@ -1,11 +1,10 @@
-package com.blissless.anime.api
+package com.blissless.anime.stream.scrapers.aniwatch
 
 import com.blissless.anime.BuildConfig
 import com.blissless.anime.data.models.AniwatchStreamResult
-import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.QualityOption
-
+import com.blissless.anime.data.models.ServerInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -61,11 +60,13 @@ object AniwatchService {
                         baseUrl + lines[i + 1].trim()
                     }
 
-                    qualities.add(QualityOption(
-                        quality = qualityName,
-                        url = streamUrl,
-                        width = width
-                    ))
+                    qualities.add(
+                        QualityOption(
+                            quality = qualityName,
+                            url = streamUrl,
+                            width = width
+                        )
+                    )
                 }
             }
         }
@@ -79,148 +80,166 @@ object AniwatchService {
     /**
      * Fetch master playlist and extract all qualities.
      */
-    private suspend fun fetchAllQualities(masterUrl: String): List<QualityOption> = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder()
-                .url(masterUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .build()
-            val response = client.newCall(request).execute()
+    private suspend fun fetchAllQualities(masterUrl: String): List<QualityOption> =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url(masterUrl)
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    )
+                    .build()
+                val response = client.newCall(request).execute()
 
-            if (!response.isSuccessful) {
-                return@withContext emptyList()
+                if (!response.isSuccessful) {
+                    return@withContext emptyList()
+                }
+
+                val content = response.body.string()
+                parseM3U8Qualities(masterUrl, content)
+            } catch (e: Exception) {
+                emptyList()
             }
-
-            val content = response.body.string()
-            parseM3U8Qualities(masterUrl, content)
-        } catch (e: Exception) {
-            emptyList()
         }
-    }
 
     // Get anime ID and episode ID for pre-fetching
-    suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int): EpisodeStreams? = withContext(Dispatchers.IO) {
-        retry {
-            // 1. SEARCH
-            val encodedName = URLEncoder.encode(animeName, "UTF-8")
-            val searchUrl = "$API_BASE/search?q=$encodedName"
+    suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int): EpisodeStreams? =
+        withContext(Dispatchers.IO) {
+            retry {
+                // 1. SEARCH
+                val encodedName = URLEncoder.encode(animeName, "UTF-8")
+                val searchUrl = "$API_BASE/search?q=$encodedName"
 
-            val searchRequest = Request.Builder()
-                .url(searchUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .build()
-            val searchResponse = client.newCall(searchRequest).execute()
+                val searchRequest = Request.Builder()
+                    .url(searchUrl)
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    )
+                    .build()
+                val searchResponse = client.newCall(searchRequest).execute()
 
-            if (!searchResponse.isSuccessful) {
-                return@retry null
-            }
-
-            val searchData = JSONObject(searchResponse.body.string())
-
-            if (searchData.getInt("status") != 200) return@retry null
-            val animes = searchData.getJSONObject("data").getJSONArray("animes")
-            if (animes.length() == 0) {
-                return@retry null
-            }
-
-            var animeId: String? = null
-            for (i in 0 until animes.length()) {
-                val anime = animes.getJSONObject(i)
-                val name = anime.getString("name")
-                if (name.equals(animeName, ignoreCase = true)) {
-                    animeId = anime.getString("id")
-                    break
+                if (!searchResponse.isSuccessful) {
+                    return@retry null
                 }
-            }
-            if (animeId == null) {
-                animeId = animes.getJSONObject(0).getString("id")
-            }
 
-            // 2. GET EPISODES
-            val epUrl = "$API_BASE/anime/$animeId/episodes"
+                val searchData = JSONObject(searchResponse.body.string())
 
-            val epRequest = Request.Builder()
-                .url(epUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .build()
-            val epResponse = client.newCall(epRequest).execute()
-
-            if (!epResponse.isSuccessful) {
-                return@retry null
-            }
-
-            val epData = JSONObject(epResponse.body.string())
-            val episodes = epData.getJSONObject("data").getJSONArray("episodes")
-
-            var episodeId: String? = null
-            for (i in 0 until episodes.length()) {
-                val ep = episodes.getJSONObject(i)
-                val epNum = ep.get("number").toString()
-                if (epNum == episodeNumber.toString()) {
-                    episodeId = ep.getString("episodeId")
-                    break
+                if (searchData.getInt("status") != 200) return@retry null
+                val animes = searchData.getJSONObject("data").getJSONArray("animes")
+                if (animes.length() == 0) {
+                    return@retry null
                 }
-            }
-            if (episodeId == null) {
-                return@retry null
-            }
 
-            // 3. GET SERVERS - single call returns both sub and dub
-            val subServers = mutableListOf<ServerInfo>()
-            val dubServers = mutableListOf<ServerInfo>()
-
-            // Fetch servers (no category param - returns both)
-            val serversUrl = "$API_BASE/episode/servers?animeEpisodeId=$episodeId"
-
-            val serversRequest = Request.Builder()
-                .url(serversUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .build()
-            val serversResponse = client.newCall(serversRequest).execute()
-
-            if (serversResponse.isSuccessful) {
-                val serversData = JSONObject(serversResponse.body.string())
-
-                if (serversData.getInt("status") == 200) {
-                    val dataObj = serversData.getJSONObject("data")
-
-                    // Parse sub servers - uses "serverName" field
-                    val subArray = dataObj.optJSONArray("sub")
-                    if (subArray != null) {
-                        for (i in 0 until subArray.length()) {
-                            val server = subArray.getJSONObject(i)
-                            val serverName = server.getString("serverName")
-                            subServers.add(ServerInfo(
-                                name = serverName,
-                                url = "" // URL not provided in servers list
-                            ))
-                        }
+                var animeId: String? = null
+                for (i in 0 until animes.length()) {
+                    val anime = animes.getJSONObject(i)
+                    val name = anime.getString("name")
+                    if (name.equals(animeName, ignoreCase = true)) {
+                        animeId = anime.getString("id")
+                        break
                     }
-
-                    // Parse dub servers - uses "serverName" field
-                    val dubArray = dataObj.optJSONArray("dub")
-                    if (dubArray != null) {
-                        for (i in 0 until dubArray.length()) {
-                            val server = dubArray.getJSONObject(i)
-                            val serverName = server.getString("serverName")
-                            dubServers.add(ServerInfo(
-                                name = serverName,
-                                url = ""
-                            ))
-                        }
-                    }
-
                 }
-            }
+                if (animeId == null) {
+                    animeId = animes.getJSONObject(0).getString("id")
+                }
 
-            EpisodeStreams(
-                subServers = subServers,
-                dubServers = dubServers,
-                animeId = animeId,
-                episodeId = episodeId
-            )
+                // 2. GET EPISODES
+                val epUrl = "$API_BASE/anime/$animeId/episodes"
+
+                val epRequest = Request.Builder()
+                    .url(epUrl)
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    )
+                    .build()
+                val epResponse = client.newCall(epRequest).execute()
+
+                if (!epResponse.isSuccessful) {
+                    return@retry null
+                }
+
+                val epData = JSONObject(epResponse.body.string())
+                val episodes = epData.getJSONObject("data").getJSONArray("episodes")
+
+                var episodeId: String? = null
+                for (i in 0 until episodes.length()) {
+                    val ep = episodes.getJSONObject(i)
+                    val epNum = ep.get("number").toString()
+                    if (epNum == episodeNumber.toString()) {
+                        episodeId = ep.getString("episodeId")
+                        break
+                    }
+                }
+                if (episodeId == null) {
+                    return@retry null
+                }
+
+                // 3. GET SERVERS - single call returns both sub and dub
+                val subServers = mutableListOf<ServerInfo>()
+                val dubServers = mutableListOf<ServerInfo>()
+
+                // Fetch servers (no category param - returns both)
+                val serversUrl = "$API_BASE/episode/servers?animeEpisodeId=$episodeId"
+
+                val serversRequest = Request.Builder()
+                    .url(serversUrl)
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    )
+                    .build()
+                val serversResponse = client.newCall(serversRequest).execute()
+
+                if (serversResponse.isSuccessful) {
+                    val serversData = JSONObject(serversResponse.body.string())
+
+                    if (serversData.getInt("status") == 200) {
+                        val dataObj = serversData.getJSONObject("data")
+
+                        // Parse sub servers - uses "serverName" field
+                        val subArray = dataObj.optJSONArray("sub")
+                        if (subArray != null) {
+                            for (i in 0 until subArray.length()) {
+                                val server = subArray.getJSONObject(i)
+                                val serverName = server.getString("serverName")
+                                subServers.add(
+                                    ServerInfo(
+                                        name = serverName,
+                                        url = "" // URL not provided in servers list
+                                    )
+                                )
+                            }
+                        }
+
+                        // Parse dub servers - uses "serverName" field
+                        val dubArray = dataObj.optJSONArray("dub")
+                        if (dubArray != null) {
+                            for (i in 0 until dubArray.length()) {
+                                val server = dubArray.getJSONObject(i)
+                                val serverName = server.getString("serverName")
+                                dubServers.add(
+                                    ServerInfo(
+                                        name = serverName,
+                                        url = ""
+                                    )
+                                )
+                            }
+                        }
+
+                    }
+                }
+
+                EpisodeStreams(
+                    subServers = subServers,
+                    dubServers = dubServers,
+                    animeId = animeId,
+                    episodeId = episodeId
+                )
+            }
         }
-    }
 
     // Get stream from specific server
     suspend fun getStreamFromServer(
@@ -236,7 +255,10 @@ object AniwatchService {
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
                 .build()
             val searchResponse = client.newCall(searchRequest).execute()
 
@@ -272,7 +294,10 @@ object AniwatchService {
 
             val epRequest = Request.Builder()
                 .url(epUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
                 .build()
             val epResponse = client.newCall(epRequest).execute()
 
@@ -300,7 +325,10 @@ object AniwatchService {
 
             val serversRequest = Request.Builder()
                 .url(serversUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
                 .build()
             val serversResponse = client.newCall(serversRequest).execute()
 
@@ -351,11 +379,15 @@ object AniwatchService {
             }
 
             // 4. GET SOURCES from the server
-            val sourceUrl = "$API_BASE/episode/sources?animeEpisodeId=$episodeId&server=$targetServerName&category=$category"
+            val sourceUrl =
+                "$API_BASE/episode/sources?animeEpisodeId=$episodeId&server=$targetServerName&category=$category"
 
             val sourceRequest = Request.Builder()
                 .url(sourceUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
                 .build()
             val sourceResponse = client.newCall(sourceRequest).execute()
 

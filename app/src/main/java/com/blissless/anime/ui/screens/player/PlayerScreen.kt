@@ -1,10 +1,12 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.player
 
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
+import android.util.TypedValue
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -105,6 +107,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -121,12 +124,12 @@ import com.blissless.anime.data.models.EpisodeTimestamps
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.Timestamp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-
-private const val PLAYER_TAG = "PlayerScreen"
+import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -248,7 +251,7 @@ fun PlayerScreen(
     var showSkipIndicator by remember { mutableStateOf(false) }
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
-    var skipResetJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var skipResetJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(showControls, hasError, showSkipIndicator) {
         if (showControls || hasError || showSkipIndicator) {
@@ -263,7 +266,7 @@ fun PlayerScreen(
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork
         val capabilities = connectivityManager.getNetworkCapabilities(network)
-        return capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        return capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }
 
     val animeSkipService = remember { AnimeSkipService(context) }
@@ -399,7 +402,7 @@ fun PlayerScreen(
                         isBuffering = isPlaying && reason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
                     }
 
-                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    override fun onPlayerError(error: PlaybackException) {
                         // Ignore errors during server change - new player will handle playback
                         if (isChangingServer) return
                         
@@ -552,7 +555,7 @@ fun PlayerScreen(
         sliderValue = newPosition.toFloat()
         
         // Display accumulated skip time
-        val totalSeconds = kotlin.math.abs(accumulatedSkipMs / 1000)
+        val totalSeconds = abs(accumulatedSkipMs / 1000)
         skipIndicatorText = if (accumulatedSkipMs > 0) "+${totalSeconds}s" else "-${totalSeconds}s"
         skipIsForward = accumulatedSkipMs >= 0
         showSkipIndicator = true
@@ -792,7 +795,7 @@ fun PlayerScreen(
                         )
                         subtitleView?.apply {
                             setStyle(style)
-                            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
+                            setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
                         }
                     }
                 },
@@ -1051,7 +1054,7 @@ fun PlayerScreen(
                                         if (subServers.isNotEmpty()) {
                                             Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                                             subServers.forEach { server ->
-                                                ServerMenuItem(
+                                                ServerSelectorButton(
                                                     serverName = server.name,
                                                     isSelected = server.name == currentServerName && currentCategory == "sub",
                                                     onClick = {
@@ -1065,7 +1068,7 @@ fun PlayerScreen(
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                                             dubServers.forEach { server ->
-                                                ServerMenuItem(
+                                                ServerSelectorButton(
                                                     serverName = server.name,
                                                     isSelected = server.name == currentServerName && currentCategory == "dub",
                                                     onClick = {
@@ -1100,7 +1103,7 @@ fun PlayerScreen(
                                             style = MaterialTheme.typography.labelSmall,
                                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                         )
-                                        QualityMenuItem(
+                                        QualitySelectorButton(
                                             qualityName = "Auto",
                                             isSelected = selectedQuality == "Auto",
                                             onClick = {
@@ -1111,7 +1114,7 @@ fun PlayerScreen(
                                             }
                                         )
                                         qualityOptions.forEach { quality ->
-                                            QualityMenuItem(
+                                            QualitySelectorButton(
                                                 qualityName = quality.quality,
                                                 isSelected = selectedQuality == quality.quality,
                                                 onClick = {
@@ -1547,50 +1550,3 @@ fun PlayerScreen(
     }
 }
 
-@Composable
-private fun SkipIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    backgroundColor: Color,
-    iconTint: Color,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.size(48.dp).background(backgroundColor, shape = MaterialTheme.shapes.small)
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(28.dp))
-        }
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-    }
-}
-
-@Composable
-private fun ServerMenuItem(serverName: String, isSelected: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                Text(serverName, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White)
-            }
-        },
-        onClick = onClick
-    )
-}
-
-@Composable
-private fun QualityMenuItem(qualityName: String, isSelected: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                Text(qualityName, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White)
-            }
-        },
-        onClick = onClick
-    )
-}

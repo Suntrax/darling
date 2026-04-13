@@ -1,12 +1,14 @@
-package com.blissless.anime.data
+package com.blissless.anime.api.jikan
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 data class JikanUserFavorites(
     val anime: List<JikanFavoriteAnime>,
@@ -68,7 +70,7 @@ class JikanService(private val context: Context) {
     
     suspend fun searchAnimeByTitle(title: String): Int? = withContext(Dispatchers.IO) {
         try {
-            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+            val encodedTitle = URLEncoder.encode(title, "UTF-8")
             val url = URL("$JIKAN_API_BASE/anime?q=$encodedTitle&limit=1&sfw=true")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
@@ -87,7 +89,7 @@ class JikanService(private val context: Context) {
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("JIKAN_SEARCH", "Error searching anime: ${e.message}")
+            Log.e("JIKAN_SEARCH", "Error searching anime: ${e.message}")
             null
         }
     }
@@ -108,44 +110,44 @@ class JikanService(private val context: Context) {
                 
                 val imageMatch = Regex("\"large_image_url\"\\s*:\\s*\"([^\"]+)\"").find(response)
                 val imageUrl = imageMatch?.groupValues?.get(1)
-                android.util.Log.d("JIKAN_DEBUG", "Fetched cover for $malId: $imageUrl")
+                Log.d("JIKAN_DEBUG", "Fetched cover for $malId: $imageUrl")
                 imageUrl
             } else {
-                android.util.Log.e("JIKAN_DEBUG", "Failed to fetch cover for $malId: $responseCode")
+                Log.e("JIKAN_DEBUG", "Failed to fetch cover for $malId: $responseCode")
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("JIKAN_DEBUG", "Error fetching cover for $malId: ${e.message}")
+            Log.e("JIKAN_DEBUG", "Error fetching cover for $malId: ${e.message}")
             null
         }
     }
     
     suspend fun getUserFavorites(username: String): JikanUserFavorites? = withContext(Dispatchers.IO) {
         try {
-            android.util.Log.d("JIKAN_DEBUG", "Fetching favorites for user: $username")
+            Log.d("JIKAN_DEBUG", "Fetching favorites for user: $username")
             val url = URL("$JIKAN_API_BASE/users/$username/favorites")
-            android.util.Log.d("JIKAN_DEBUG", "Favorites URL: $url")
+            Log.d("JIKAN_DEBUG", "Favorites URL: $url")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
             
             val responseCode = conn.responseCode
-            android.util.Log.d("JIKAN_DEBUG", "Favorites response code: $responseCode")
+            Log.d("JIKAN_DEBUG", "Favorites response code: $responseCode")
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 val response = reader.readText()
                 reader.close()
-                android.util.Log.d("JIKAN_DEBUG", "Favorites response length: ${response.length}")
+                Log.d("JIKAN_DEBUG", "Favorites response length: ${response.length}")
                 val result = parseUserFavorites(response)
-                android.util.Log.d("JIKAN_DEBUG", "Parsed favorites: ${result.anime.size} anime, ${result.manga.size} manga, ${result.characters.size} characters")
+                Log.d("JIKAN_DEBUG", "Parsed favorites: ${result.anime.size} anime, ${result.manga.size} manga, ${result.characters.size} characters")
                 result
             } else {
-                android.util.Log.e("JIKAN_DEBUG", "Failed to fetch favorites: $responseCode")
+                Log.e("JIKAN_DEBUG", "Failed to fetch favorites: $responseCode")
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("JIKAN_DEBUG", "Error fetching favorites: ${e.message}")
+            Log.e("JIKAN_DEBUG", "Error fetching favorites: ${e.message}")
             e.printStackTrace()
             null
         }
@@ -219,36 +221,36 @@ class JikanService(private val context: Context) {
     private fun parseHistoryDataEntries(content: String): List<Pair<JikanHistoryEntry, String>> {
         val entries = mutableListOf<Pair<JikanHistoryEntry, String>>()
         
-        android.util.Log.d("JIKAN_DEBUG", "parseHistoryDataEntries called, content length=${content.length}")
+        Log.d("JIKAN_DEBUG", "parseHistoryDataEntries called, content length=${content.length}")
         
         val entryRegex = Regex("\\{\"entry\":\\s*\\{")
         val entryStarts = entryRegex.findAll(content).toList()
-        android.util.Log.d("JIKAN_DEBUG", "Found ${entryStarts.size} entries")
+        Log.d("JIKAN_DEBUG", "Found ${entryStarts.size} entries")
         
         for (i in entryStarts.indices) {
             val start = entryStarts[i].range.first
             val end = if (i + 1 < entryStarts.size) entryStarts[i + 1].range.first else content.length
             
             val entryBlock = content.substring(start, end)
-            android.util.Log.d("JIKAN_DEBUG", "Entry block: ${entryBlock.take(200)}")
+            Log.d("JIKAN_DEBUG", "Entry block: ${entryBlock.take(200)}")
             
             val malIdMatch = Regex("\"mal_id\"\\s*:\\s*(\\d+)").find(entryBlock)
             val id = malIdMatch?.groupValues?.get(1)?.toIntOrNull() ?: continue
             
             val titleMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
             val title = titleMatch?.groupValues?.get(1) ?: "Unknown"
-            android.util.Log.d("JIKAN_DEBUG", "Title: $title")
+            Log.d("JIKAN_DEBUG", "Title: $title")
             
             val typeMatch = Regex("\"type\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
             val entryType = typeMatch?.groupValues?.get(1) ?: "anime"
-            android.util.Log.d("JIKAN_DEBUG", "Entry type: $entryType")
+            Log.d("JIKAN_DEBUG", "Entry type: $entryType")
             
             val imageMatch = Regex("\"image_url\"\\s*:\\s*\"([^\"]*)\"").find(entryBlock)
             val imageUrl = imageMatch?.groupValues?.get(1)?.takeIf { it.isNotEmpty() && it != "null" }
             
             val incrementMatch = Regex("\"increment\"\\s*:\\s*(\\d+)").find(entryBlock)
             val increment = incrementMatch?.groupValues?.get(1)
-            android.util.Log.d("JIKAN_DEBUG", "Increment: $increment")
+            Log.d("JIKAN_DEBUG", "Increment: $increment")
             
             val dateMatch = Regex("\"date\"\\s*:\\s*\"([^\"]+)\"").find(entryBlock)
             val date = dateMatch?.groupValues?.get(1)
@@ -268,7 +270,7 @@ class JikanService(private val context: Context) {
             )
             
             entries.add(Pair(entry, type))
-            android.util.Log.d("JIKAN_DEBUG", "Added entry: $title, type: $type, increment: $increment")
+            Log.d("JIKAN_DEBUG", "Added entry: $title, type: $type, increment: $increment")
         }
         
         return entries
@@ -276,34 +278,34 @@ class JikanService(private val context: Context) {
     
     suspend fun getUserHistory(username: String): JikanUserHistory? = withContext(Dispatchers.IO) {
         try {
-            android.util.Log.d("JIKAN_DEBUG", "Fetching history for user: $username")
+            Log.d("JIKAN_DEBUG", "Fetching history for user: $username")
             val url = URL("$JIKAN_API_BASE/users/$username/history")
-            android.util.Log.d("JIKAN_DEBUG", "History URL: $url")
+            Log.d("JIKAN_DEBUG", "History URL: $url")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
             
             val responseCode = conn.responseCode
-            android.util.Log.d("JIKAN_DEBUG", "History response code: $responseCode")
+            Log.d("JIKAN_DEBUG", "History response code: $responseCode")
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 val response = reader.readText()
                 reader.close()
-                android.util.Log.d("JIKAN_DEBUG", "History response length: ${response.length}")
-                android.util.Log.d("JIKAN_DEBUG", "History response sample (first 1000 chars): ${response.take(1000)}")
+                Log.d("JIKAN_DEBUG", "History response length: ${response.length}")
+                Log.d("JIKAN_DEBUG", "History response sample (first 1000 chars): ${response.take(1000)}")
                 val result = parseUserHistory(response)
-                android.util.Log.d("JIKAN_DEBUG", "Parsed history: ${result.anime.size} anime entries, ${result.manga.size} manga entries")
+                Log.d("JIKAN_DEBUG", "Parsed history: ${result.anime.size} anime entries, ${result.manga.size} manga entries")
                 result.anime.take(3).forEach { entry ->
-                    android.util.Log.d("JIKAN_DEBUG", "History entry: ${entry.title} - ${entry.increment} - ${entry.date}")
+                    Log.d("JIKAN_DEBUG", "History entry: ${entry.title} - ${entry.increment} - ${entry.date}")
                 }
                 result
             } else {
-                android.util.Log.e("JIKAN_DEBUG", "Failed to fetch history: $responseCode")
+                Log.e("JIKAN_DEBUG", "Failed to fetch history: $responseCode")
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("JIKAN_DEBUG", "Error fetching history: ${e.message}")
+            Log.e("JIKAN_DEBUG", "Error fetching history: ${e.message}")
             e.printStackTrace()
             null
         }
@@ -314,14 +316,14 @@ class JikanService(private val context: Context) {
         val mangaHistory = mutableListOf<JikanHistoryEntry>()
         
         try {
-            android.util.Log.d("JIKAN_DEBUG", "parseUserHistory: Checking for 'data' key...")
+            Log.d("JIKAN_DEBUG", "parseUserHistory: Checking for 'data' key...")
             if (jsonStr.contains("\"data\":")) {
-                android.util.Log.d("JIKAN_DEBUG", "Found 'data' key in response")
+                Log.d("JIKAN_DEBUG", "Found 'data' key in response")
                 val dataMatch = Regex("\"data\"\\s*:\\s*\\[(.*?)]\\s*\\}", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
                 dataMatch?.let { match ->
-                    android.util.Log.d("JIKAN_DEBUG", "Found data array format, content length: ${match.groupValues[1].length}")
+                    Log.d("JIKAN_DEBUG", "Found data array format, content length: ${match.groupValues[1].length}")
                     val entries = parseHistoryDataEntries(match.groupValues[1])
-                    android.util.Log.d("JIKAN_DEBUG", "Parsed ${entries.size} entries from data array")
+                    Log.d("JIKAN_DEBUG", "Parsed ${entries.size} entries from data array")
                     entries.forEach { entry ->
                         if (entry.second == "anime") {
                             animeHistory.add(entry.first)
@@ -333,9 +335,9 @@ class JikanService(private val context: Context) {
             } else {
                 val animeArrayMatch = Regex("\"anime\"\\s*:\\s*\\[(.*?)]\\s*,\"manga\"", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
                 animeArrayMatch?.let { match ->
-                    android.util.Log.d("JIKAN_DEBUG", "Found anime array, content length: ${match.groupValues[1].length}")
+                    Log.d("JIKAN_DEBUG", "Found anime array, content length: ${match.groupValues[1].length}")
                     animeHistory.addAll(parseHistoryEntries(match.groupValues[1], "anime"))
-                } ?: android.util.Log.d("JIKAN_DEBUG", "No anime array found in history response")
+                } ?: Log.d("JIKAN_DEBUG", "No anime array found in history response")
                 
                 val mangaArrayMatch = Regex("\"manga\"\\s*:\\s*\\[(.*?)]\\s*}\\s*$", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
                 mangaArrayMatch?.let { match ->
@@ -343,22 +345,22 @@ class JikanService(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("JIKAN_DEBUG", "Error parsing history: ${e.message}")
+            Log.e("JIKAN_DEBUG", "Error parsing history: ${e.message}")
             e.printStackTrace()
         }
         
-        android.util.Log.d("JIKAN_DEBUG", "Parsed history: ${animeHistory.size} anime, ${mangaHistory.size} manga")
+        Log.d("JIKAN_DEBUG", "Parsed history: ${animeHistory.size} anime, ${mangaHistory.size} manga")
         return JikanUserHistory(anime = animeHistory, manga = mangaHistory)
     }
     
     private fun parseHistoryEntries(content: String, type: String): List<JikanHistoryEntry> {
         val entries = mutableListOf<JikanHistoryEntry>()
         
-        android.util.Log.d("JIKAN_DEBUG", "parseHistoryEntries called for type=$type, content length=${content.length}")
+        Log.d("JIKAN_DEBUG", "parseHistoryEntries called for type=$type, content length=${content.length}")
         
         val entryRegex = Regex("\\{\"mal_id\":\\s*(\\d+)")
         val entriesFound = entryRegex.findAll(content).toList()
-        android.util.Log.d("JIKAN_DEBUG", "Found ${entriesFound.size} mal_id entries")
+        Log.d("JIKAN_DEBUG", "Found ${entriesFound.size} mal_id entries")
         
         for (match in entriesFound) {
             val start = match.range.first

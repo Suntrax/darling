@@ -1,4 +1,4 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.airing
 
 import android.annotation.SuppressLint
 import android.widget.Toast
@@ -10,6 +10,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,7 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.R
 import com.blissless.anime.data.models.AiringScheduleAnime
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
@@ -76,6 +80,8 @@ import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.components.StatusColors
 import com.blissless.anime.ui.components.StatusLabels
 import com.blissless.anime.ui.components.rememberCinematicAnimation
+import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -265,7 +271,7 @@ fun ScheduleScreen(
     // Auto-refresh every 5 minutes (respects cooldown internally, skip if preventing auto sync)
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(5 * 60000) // 5 minutes
+            delay(5 * 60000) // 5 minutes
             currentTime = System.currentTimeMillis() / 1000
             if (!preventAutoSync) {
                 viewModel.fetchAiringSchedule()
@@ -276,7 +282,7 @@ fun ScheduleScreen(
     // Update currentTime every second for accurate "now" display and day change detection
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(1000)
+            delay(1000)
             val newTime = System.currentTimeMillis() / 1000
             currentTime = newTime
 
@@ -450,7 +456,7 @@ fun ScheduleScreen(
 
     // Track visible day based on scroll position (only for All Upcoming mode)
     // Update instantly during scroll, with debounce for settling
-    val scrollJob = remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val scrollJob = remember { mutableStateOf<Job?>(null) }
     val isScrolling by remember {
         derivedStateOf { listStateAllUpcoming.isScrollInProgress }
     }
@@ -476,7 +482,7 @@ fun ScheduleScreen(
     // Reset programmatic scroll flag and unlock input (after animation completes)
     LaunchedEffect(isProgrammaticScroll) {
         if (isProgrammaticScroll) {
-            kotlinx.coroutines.delay(550) // Slightly longer than animation duration
+            delay(550) // Slightly longer than animation duration
             isProgrammaticScroll = false
             isInputLocked = false
         }
@@ -563,7 +569,7 @@ fun ScheduleScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
-                model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                model = R.mipmap.ic_launcher_round,
                 contentDescription = "App",
                 modifier = Modifier.size(32.dp).clip(CircleShape)
             )
@@ -734,7 +740,7 @@ fun ScheduleScreen(
                             labelColor = Color.Unspecified
                         ),
                         border = if (isToday && !isSelected) {
-                            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                         } else null
                     )
                 }
@@ -800,7 +806,7 @@ fun ScheduleScreen(
                             labelColor = Color.Unspecified
                         ),
                         border = if (isToday && !isSelected) {
-                            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                         } else null
                     )
                 }
@@ -895,7 +901,7 @@ fun ScheduleScreen(
         val isFavorite by remember(listVersion, favoriteIds, selectedAnime!!.id) {
             derivedStateOf { favoriteIds.contains(selectedAnime!!.id) }
         }
-        
+
         DetailedAnimeScreen(
             anime = selectedAnime!!.toDetailedAnimeData(),
             viewModel = viewModel,
@@ -973,10 +979,15 @@ fun ScheduleScreen(
                                     format = detailedData.format
                                 )
                             } else {
-                                Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    "Anime not found - ID: ${relation.id}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT)
+                                .show()
                         }
                     }
                 } catch (e: Exception) {
@@ -1241,14 +1252,36 @@ private fun TimelineAnimeItem(
             colors = CardDefaults.cardColors(
                 containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
             ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isOled) 0.dp else 8.dp,
+                pressedElevation = if (isOled) 0.dp else 16.dp
+            ),
             onClick = onClick
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = if (isOled) {
+                                listOf(Color(0xFF3A3A3A), Color(0xFF1A1A1A))
+                            } else {
+                                listOf(
+                                    Color(0xFF4A4A5A),
+                                    Color(0xFF2A2A3A)
+                                )
+                            },
+                            start = Offset(0f, 0f),
+                            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                        )
+                    )
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 AsyncImage(
                     model = anime.cover,
                     contentDescription = anime.title,
@@ -1350,6 +1383,7 @@ private fun TimelineAnimeItem(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
+            }
             }
         }
     }

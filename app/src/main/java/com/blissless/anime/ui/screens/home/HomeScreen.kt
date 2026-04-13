@@ -1,6 +1,7 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.home
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -45,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,23 +65,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.R
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.dialogs.OfflineFavoritesDialog
-import com.blissless.anime.dialogs.UserProfileScreen
-import com.blissless.anime.ui.components.EpisodeSelectionDialog
+import com.blissless.anime.ui.screens.profile.UserProfileScreen
+import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
+import com.blissless.anime.ui.components.HomeAnimeCardBounds
 import com.blissless.anime.ui.components.HomeAnimeHorizontalList
 import com.blissless.anime.ui.components.HomeStatusColors
 import com.blissless.anime.ui.components.LoadingSkeleton
-import com.blissless.anime.ui.components.RichEpisodeScreen
+import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
 import com.blissless.anime.ui.components.SearchOverlay
 import com.blissless.anime.ui.components.SectionHeader
+import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,10 +193,10 @@ fun HomeScreen(
         viewModel.setHideNavbar(showSearchOverlay)
     }
 
-    androidx.activity.compose.BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
+    BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+        PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true; viewModel.refreshHome() },
             modifier = Modifier.fillMaxSize()
@@ -315,7 +322,7 @@ fun HomeScreen(
                             ) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 AsyncImage(
-                                    model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                                    model = R.mipmap.ic_launcher_round,
                                     contentDescription = "App",
                                     modifier = Modifier.size(40.dp).clip(CircleShape)
                                 )
@@ -357,9 +364,9 @@ fun HomeScreen(
                         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))) {
                             Box(modifier = Modifier.fillMaxWidth().background(Brush.horizontalGradient(colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)))).padding(24.dp)) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    AsyncImage(model = com.blissless.anime.R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
+                                    AsyncImage(model = R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
                                     Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
-                                    Spacer(modifier = Modifier.height(8.dp)); Text("Your lists are empty. Sign in with AniList to sync your anime list and track your progress, or start exploring!", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                    Spacer(modifier = Modifier.height(8.dp)); Text("Your lists are empty. Sign in with AniList to sync your anime list and track your progress, or start exploring!", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
                                         AsyncImage(
@@ -383,7 +390,7 @@ fun HomeScreen(
                 if (isLoading && allListsEmpty) {
                     LoadingSkeleton(isOled)
                 } else {
-                    val onAnimeClick: (AnimeMedia, com.blissless.anime.ui.components.HomeAnimeCardBounds?) -> Unit = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true }
+                    val onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true }
                     val onPlayClick: (AnimeMedia, String) -> Unit = { anime, listType ->
                         if (listType == "CURRENT") {
                             val nextEp = anime.progress + 1
@@ -398,7 +405,7 @@ fun HomeScreen(
                         }
                     }
                     val onStatusClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showStatusDialog = true }
-                    val onInfoClick: (AnimeMedia, com.blissless.anime.ui.components.HomeAnimeCardBounds?) -> Unit = { anime, bounds ->
+                    val onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { anime, bounds ->
                         val cardBounds = bounds?.let {
                             MainViewModel.CardBounds(anime.id, anime.cover, it.bounds)
                         }
@@ -808,7 +815,7 @@ fun HomeScreen(
     LaunchedEffect(isLoading, isRefreshing) {
         if (isRefreshing) {
             // Use a timeout to ensure refreshing stops even if loading state gets stuck
-            kotlinx.coroutines.delay(15000)
+            delay(15000)
             isRefreshing = false
         }
         if (!isLoading && isRefreshing) {

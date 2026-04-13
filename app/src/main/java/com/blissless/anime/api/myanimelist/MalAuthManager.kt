@@ -1,4 +1,4 @@
-package com.blissless.anime.data
+package com.blissless.anime.api.myanimelist
 
 import android.content.Context
 import android.content.SharedPreferences

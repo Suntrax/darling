@@ -1,5 +1,8 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.details
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.Animatable
@@ -9,6 +12,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -119,11 +123,15 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.TagData
 import com.blissless.anime.ui.components.rememberCinematicAnimation
+import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
+import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -154,6 +162,7 @@ fun DetailedAnimeScreen(
     isLoggedIn: Boolean = false,
     isFavorite: Boolean = false,
     isLocalFavorite: Boolean = false,
+    simplifyEpisodeMenu: Boolean = false,
     onDismiss: () -> Unit,
     onSwipeToClose: () -> Unit = {},
     onPlayEpisode: (Int, String?) -> Unit = { _, _ -> },
@@ -184,6 +193,7 @@ fun DetailedAnimeScreen(
 
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var showEpisodeSelection by remember { mutableStateOf(false) }
 
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -271,7 +281,7 @@ fun DetailedAnimeScreen(
             isTransitioning = true
             // Reset cover animation when switching anime
             coverAnimationProgress.snapTo(0f)
-            kotlinx.coroutines.delay(150)
+            delay(150)
             isTransitioning = false
         }
         previousAnimeId = anime.id
@@ -390,6 +400,45 @@ fun DetailedAnimeScreen(
             dismissOnClickOutside = false
         )
     ) {
+        if (showEpisodeSelection) {
+            val animeMedia = AnimeMedia(
+                id = anime.id,
+                title = anime.title,
+                titleEnglish = anime.titleEnglish,
+                cover = anime.cover,
+                banner = anime.banner,
+                progress = 0,
+                totalEpisodes = anime.episodes,
+                latestEpisode = anime.latestEpisode,
+                status = anime.status ?: "",
+                averageScore = anime.averageScore,
+                genres = anime.genres,
+                listStatus = ""
+            )
+            if (simplifyEpisodeMenu) {
+                EpisodeSelectionDialog(
+                    anime = animeMedia,
+                    isOled = isOled,
+                    onDismiss = { showEpisodeSelection = false },
+                    onEpisodeSelect = { episode, _ ->
+                        showEpisodeSelection = false
+                        onPlayEpisode(episode, null)
+                    }
+                )
+            } else {
+                RichEpisodeScreen(
+                    anime = animeMedia,
+                    viewModel = viewModel,
+                    isOled = isOled,
+                    onDismiss = { showEpisodeSelection = false },
+                    onEpisodeSelect = { episode, _ ->
+                        showEpisodeSelection = false
+                        onPlayEpisode(episode, null)
+                    }
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -546,8 +595,8 @@ fun DetailedAnimeScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f).offset(y = 30.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anime Title", displayData.title))
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Anime Title", displayData.title))
                             }.padding(vertical = 4.dp)) {
                                 Text(
                                     text = displayData.title, style = MaterialTheme.typography.titleLarge,
@@ -559,8 +608,8 @@ fun DetailedAnimeScreen(
                             }
                             if (!displayData.titleEnglish.isNullOrEmpty() && displayData.titleEnglish != displayData.title) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anime Title", displayData.titleEnglish))
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Anime Title", displayData.titleEnglish))
                                 }.padding(vertical = 4.dp)) {
                                     Text(
                                         text = displayData.titleEnglish!!, style = MaterialTheme.typography.bodyMedium,
@@ -572,8 +621,8 @@ fun DetailedAnimeScreen(
                             }
                             if (!displayData.titleNative.isNullOrEmpty()) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anime Title", displayData.titleNative))
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Anime Title", displayData.titleNative))
                                 }.padding(vertical = 4.dp)) {
                                     Text(
                                         text = displayData.titleNative!!, style = MaterialTheme.typography.bodySmall,
@@ -611,7 +660,7 @@ fun DetailedAnimeScreen(
                                         "CANCELLED" -> Color(0xFFF44336).copy(alpha = 0.15f)
                                         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     },
-                                    border = androidx.compose.foundation.BorderStroke(1.5.dp, when (displayData.status) {
+                                    border = BorderStroke(1.5.dp, when (displayData.status) {
                                         "RELEASING" -> Color(0xFF4CAF50)
                                         "FINISHED" -> Color(0xFF2196F3)
                                         "NOT_YET_RELEASED" -> Color(0xFFFFC107)
@@ -670,7 +719,7 @@ fun DetailedAnimeScreen(
                             }
 
                             Button(
-                                onClick = { onPlayEpisode(1, null) }, modifier = Modifier.weight(1f),
+                                onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp),
                                 enabled = !notYetAired,
                                 colors = ButtonDefaults.buttonColors(
@@ -999,7 +1048,7 @@ fun DetailedAnimeScreen(
                                         Surface(
                                             shape = RoundedCornerShape(20.dp),
                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                                         ) {
                                             Text(
                                                 genre,
@@ -1048,7 +1097,7 @@ fun DetailedAnimeScreen(
                                         Surface(
                                             shape = RoundedCornerShape(20.dp),
                                             color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
                                             modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable {
                                                 selectedTagForDescription = tag
                                             }
@@ -1686,7 +1735,7 @@ private fun StatusChip(label: String, icon: ImageVector, color: Color, selected:
         selected = selected, onClick = onClick,
         label = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) { Icon(icon, null, Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)); Text(label, fontSize = 12.sp); Spacer(Modifier.width(3.dp)) } },
         colors = FilterChipDefaults.filterChipColors(selectedContainerColor = color.copy(alpha = 0.2f), selectedLabelColor = color),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) color else Color.Gray.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, if (selected) color else Color.Gray.copy(alpha = 0.3f))
     )
 }
 
@@ -1720,7 +1769,7 @@ private fun InfoGrid(items: List<Pair<String, String>>, isOled: Boolean) {
 }
 
 @Composable
-private fun InfoStat(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+private fun InfoStat(label: String, value: String, icon: ImageVector, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             shape = CircleShape,

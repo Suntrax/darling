@@ -1,4 +1,4 @@
-package com.blissless.anime.api
+package com.blissless.anime.stream.scrapers.zenime
 
 import com.blissless.anime.BuildConfig
 import kotlinx.coroutines.Dispatchers

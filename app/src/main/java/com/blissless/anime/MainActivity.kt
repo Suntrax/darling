@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import com.blissless.anime.api.myanimelist.LoginProvider
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.data.models.EpisodeStreams
@@ -74,16 +75,16 @@ import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.toDetailedAnimeData
-import com.blissless.anime.ui.screens.AllCastScreen
-import com.blissless.anime.ui.screens.AllStaffScreen
-import com.blissless.anime.ui.screens.CharacterScreen
-import com.blissless.anime.ui.screens.DetailedAnimeScreen
-import com.blissless.anime.ui.screens.ExploreScreen
-import com.blissless.anime.ui.screens.HomeScreen
-import com.blissless.anime.ui.screens.PlayerScreen
-import com.blissless.anime.ui.screens.ScheduleScreen
-import com.blissless.anime.ui.screens.SettingsScreen
-import com.blissless.anime.ui.screens.StaffScreen
+import com.blissless.anime.ui.screens.cast.AllCastScreen
+import com.blissless.anime.ui.screens.cast.AllStaffScreen
+import com.blissless.anime.ui.screens.character.CharacterScreen
+import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
+import com.blissless.anime.ui.screens.explore.ExploreScreen
+import com.blissless.anime.ui.screens.home.HomeScreen
+import com.blissless.anime.ui.screens.player.PlayerScreen
+import com.blissless.anime.ui.screens.airing.ScheduleScreen
+import com.blissless.anime.ui.screens.settings.SettingsScreen
+import com.blissless.anime.ui.screens.character.StaffScreen
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -127,7 +128,7 @@ class MainActivity : ComponentActivity() {
             val localAnimeStatus by mainViewModel.localAnimeStatus.collectAsState()
             
             LaunchedEffect(token, loginProvider) {
-                val isAnyLoggedIn = token != null || loginProvider != com.blissless.anime.data.LoginProvider.NONE
+                val isAnyLoggedIn = token != null || loginProvider != LoginProvider.NONE
                 if (isAnyLoggedIn && !isLoggedIn && localAnimeStatus.isNotEmpty()) {
                     showLocalSyncDialog = true
                 }
@@ -1153,7 +1154,7 @@ fun MainScreen(
                 viewModel.removeAnimeFromList(exploreDialog.anime.id)
             },
             onToggleFavorite = { _ ->
-                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                if (viewModel.loginProvider.value == LoginProvider.MAL) {
                     val animeMedia = AnimeMedia(
                         id = exploreDialog.anime.id,
                         title = exploreDialog.anime.title,
@@ -1635,7 +1636,7 @@ fun MainScreen(
                             showAnimeCardButtons = showAnimeCardButtons,
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
-                            favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                            favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleFavorite = { anime -> 
                                 val animeMedia = AnimeMedia(
                                     id = anime.id,
@@ -1654,7 +1655,7 @@ fun MainScreen(
                                     year = anime.year,
                                     malId = anime.malId
                                 )
-                                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                                if (viewModel.loginProvider.value == LoginProvider.MAL) {
                                     viewModel.toggleMalFavorite(animeMedia)
                                 } else {
                                     viewModel.toggleAniListFavorite(anime.id, animeMedia)
@@ -1690,10 +1691,10 @@ fun MainScreen(
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
-                            favoriteIds = if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                            favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onToggleFavorite = { anime -> 
-                                if (viewModel.loginProvider.value == com.blissless.anime.data.LoginProvider.MAL) {
+                                if (viewModel.loginProvider.value == LoginProvider.MAL) {
                                     viewModel.toggleMalFavorite(anime)
                                 } else {
                                     viewModel.toggleAniListFavorite(anime.id, anime)

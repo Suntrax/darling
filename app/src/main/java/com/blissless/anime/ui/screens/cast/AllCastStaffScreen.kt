@@ -1,5 +1,6 @@
-package com.blissless.anime.ui.screens
+package com.blissless.anime.ui.screens.cast
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +73,7 @@ fun AllCastScreen(
         try {
             characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()
         } catch (e: Exception) {
-            android.util.Log.e("ALL_CAST_DEBUG", "Error fetching characters: ${e.message}")
+            Log.e("ALL_CAST_DEBUG", "Error fetching characters: ${e.message}")
             characters = emptyList()
         }
         isLoading = false
@@ -226,7 +227,7 @@ fun AllStaffScreen(
         try {
             staff = viewModel.fetchAllStaff(animeId) ?: emptyList()
         } catch (e: Exception) {
-            android.util.Log.e("ALL_STAFF_DEBUG", "Error fetching staff: ${e.message}")
+            Log.e("ALL_STAFF_DEBUG", "Error fetching staff: ${e.message}")
             staff = emptyList()
         }
         isLoading = false

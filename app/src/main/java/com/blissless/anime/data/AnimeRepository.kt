@@ -1,7 +1,7 @@
 package com.blissless.anime.data
 
 import com.blissless.anime.BuildConfig
-import com.blissless.anime.api.AniwatchService
+import com.blissless.anime.stream.scrapers.aniwatch.AniwatchService
 import com.blissless.anime.data.models.AiringScheduleEntry
 import com.blissless.anime.data.models.AiringScheduleResponse
 import com.blissless.anime.data.models.AllCharactersResponse

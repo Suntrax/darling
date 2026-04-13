@@ -2,10 +2,32 @@ package com.blissless.anime.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val StatusCurrent = Color(0xFF2196F3)
+val StatusPlanning = Color(0xFF9C27B0)
+val StatusCompleted = Color(0xFF4CAF50)
+val StatusPaused = Color(0xFFFFC107)
+val StatusDropped = Color(0xFFF44336)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val StatusColors = mapOf(
+    "CURRENT" to StatusCurrent,
+    "PLANNING" to StatusPlanning,
+    "COMPLETED" to StatusCompleted,
+    "PAUSED" to StatusPaused,
+    "DROPPED" to StatusDropped
+)
+
+val StatusLabels = mapOf(
+    "CURRENT" to "Watching",
+    "PLANNING" to "Planning",
+    "COMPLETED" to "Completed",
+    "PAUSED" to "On Hold",
+    "DROPPED" to "Dropped"
+)
+
+fun getStatusColor(status: String?): Color {
+    return StatusColors[status] ?: Color.Gray
+}
+
+fun getStatusContainerColor(status: String?): Color {
+    return getStatusColor(status).copy(alpha = 0.2f)
+}
