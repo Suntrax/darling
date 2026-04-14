@@ -1,6 +1,14 @@
 package com.blissless.anime.ui.screens.explore
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,13 +22,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,19 +48,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.R
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import com.blissless.anime.ui.components.AnimeCardBounds
-import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.anime.ui.components.ExploreAnimeHorizontalList
 import com.blissless.anime.ui.components.LoadingPlaceholder
+import com.blissless.anime.ui.components.SearchOverlay
+import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
 import com.blissless.anime.ui.components.SectionTitle
 import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
@@ -80,9 +96,17 @@ fun ExploreScreen(
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
-    onViewAllStaff: (Int, String) -> Unit = { _, _ -> }
+    onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
+    localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap()
 ) {
     val context = LocalContext.current
+    var showSearchOverlay by remember { mutableStateOf(false) }
+    
+    BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
+    
+    LaunchedEffect(showSearchOverlay) {
+        viewModel.setHideNavbar(showSearchOverlay)
+    }
     val featuredAnime by viewModel.featuredAnime.collectAsState()
     val seasonalAnime by viewModel.seasonalAnime.collectAsState()
     val topSeries by viewModel.topSeries.collectAsState()
@@ -350,12 +374,8 @@ fun ExploreScreen(
 
     val onBookmarkClickStable = remember<(ExploreAnime) -> Unit> {
         { anime ->
-            val status = animeStatusMap[anime.id]
-            if (status != null) {
-                viewModel.removeAnimeFromList(anime.id)
-            } else {
-                viewModel.addExploreAnimeToList(anime, "PLANNING")
-            }
+            selectedAnime = anime
+            showStatusDialog = true
         }
     }
 
@@ -393,7 +413,6 @@ fun ExploreScreen(
         },
         modifier = Modifier.fillMaxSize()
     ) {
-        // Use Column + verticalScroll instead of LazyColumn for smoother scrolling
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -444,6 +463,7 @@ fun ExploreScreen(
                         showEpisodeSelection = true
                     },
                     onInfoClick = onFeaturedAnimeClickStable,
+                    onSearchClick = { showSearchOverlay = true },
                     animeStatusMap = animeStatusMap,
                     preferEnglishTitles = preferEnglishTitles,
                     isOled = isOled,
@@ -778,17 +798,71 @@ fun ExploreScreen(
         }
     }
 
-    // Stop refreshing when loading completes or after timeout
-    LaunchedEffect(isLoading, isRefreshing, isOffline) {
-        if (isRefreshing) {
-            // Use a much shorter timeout when offline to avoid long spinner
-            val timeout = if (isOffline) 2000L else 15000L
-            delay(timeout)
-            isRefreshing = false
-        }
-        if (!isLoading && isRefreshing) {
-            isRefreshing = false
-        }
+    AnimatedVisibility(
+        visible = showSearchOverlay,
+        enter = slideInVertically(
+            animationSpec = tween(
+                durationMillis = 300,
+                easing = FastOutSlowInEasing
+            ),
+            initialOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+        ) + fadeIn(
+            animationSpec = tween(
+                durationMillis = 300,
+                delayMillis = 0,
+                easing = FastOutSlowInEasing
+            )
+        ),
+        exit = slideOutVertically(
+            animationSpec = tween(
+                durationMillis = 250,
+                easing = FastOutSlowInEasing
+            ),
+            targetOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+        ) + fadeOut(
+            animationSpec = tween(
+                durationMillis = 250,
+                easing = FastOutSlowInEasing
+            )
+        )
+    ) {
+        SearchOverlay(
+            viewModel = viewModel,
+            isOled = isOled,
+            isLoggedIn = isLoggedIn,
+            preferEnglishTitles = preferEnglishTitles,
+            hideAdultContent = hideAdultContent,
+            currentlyWatching = currentlyWatching,
+            planningToWatch = planningToWatch,
+            completed = completed,
+            onHold = onHold,
+            dropped = dropped,
+            localAnimeStatus = localAnimeStatus,
+            favoriteIds = favoriteIds,
+            onToggleFavorite = { animeMedia ->
+                val exploreAnime = ExploreAnime(
+                    id = animeMedia.id,
+                    title = animeMedia.title,
+                    titleEnglish = animeMedia.titleEnglish,
+                    cover = animeMedia.cover,
+                    banner = animeMedia.banner,
+                    episodes = animeMedia.totalEpisodes,
+                    latestEpisode = animeMedia.latestEpisode,
+                    averageScore = animeMedia.averageScore,
+                    genres = animeMedia.genres,
+                    year = animeMedia.year,
+                    format = null,
+                    malId = animeMedia.malId
+                )
+                onToggleFavorite(exploreAnime)
+            },
+            onClose = { showSearchOverlay = false },
+            onPlayEpisode = onPlayEpisode,
+            onCharacterClick = onCharacterClick,
+            onStaffClick = onStaffClick,
+            onViewAllCast = onViewAllCast,
+            onViewAllStaff = onViewAllStaff
+        )
     }
 }
 

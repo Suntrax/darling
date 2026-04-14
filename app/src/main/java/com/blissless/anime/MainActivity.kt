@@ -1681,7 +1681,8 @@ fun MainScreen(
                             },
                             onViewAllStaff = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
-                            }
+                            },
+                            localAnimeStatus = localAnimeStatus
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,
@@ -1796,7 +1797,7 @@ fun MainScreen(
                                                 stiffness = Spring.StiffnessLow
                                             )
                                         )
-                                        .height(50.dp)
+                                        .height(56.dp)
                                         .pointerInput(Unit) {
                                             awaitPointerEventScope {
                                                 while (true) {

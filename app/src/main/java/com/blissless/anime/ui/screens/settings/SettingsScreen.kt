@@ -873,7 +873,7 @@ private fun PlayerSettingsPage(
     SettingsPageScaffold(
         title = "Player Settings",
         icon = Icons.Default.Subscriptions,
-        iconBackgroundColor = Color(0xFFE91E63),
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
         onBack = onBack,
         isOled = isOled
     ) {
@@ -979,7 +979,7 @@ private fun CacheSettingsPage(
     SettingsPageScaffold(
         title = "Cache Management",
         icon = Icons.Default.Memory,
-        iconBackgroundColor = Color(0xFF00BCD4),
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.secondary,
         onBack = onBack,
         isOled = isOled
     ) {

@@ -9,7 +9,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,13 +19,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Button
@@ -47,6 +49,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -56,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.blissless.anime.R
 import com.blissless.anime.data.models.ExploreAnime
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -68,6 +73,7 @@ fun FeaturedCarousel(
     onStatusClick: (ExploreAnime) -> Unit,
     onPlayClick: (ExploreAnime) -> Unit,
     onInfoClick: (ExploreAnime) -> Unit,
+    onSearchClick: () -> Unit = {},
     animeStatusMap: Map<Int, String> = emptyMap(),
     preferEnglishTitles: Boolean = true,
     isOled: Boolean = false,
@@ -179,9 +185,50 @@ fun FeaturedCarousel(
         }
 
         Box(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.BottomCenter),
-            contentAlignment = Alignment.BottomCenter
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
+            // Top header with app logo and search icon
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.6f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .align(Alignment.TopCenter)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = com.blissless.anime.R.mipmap.ic_launcher_round,
+                        contentDescription = "App",
+                        modifier = Modifier.size(32.dp).clip(CircleShape)
+                    )
+                    IconButton(onClick = onSearchClick) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.BottomCenter),
+                contentAlignment = Alignment.BottomCenter
+            ) {
             val currentAnime by remember {
                 derivedStateOf { animeList[pagerState.currentPage % actualCount] }
             }
@@ -315,6 +362,7 @@ fun FeaturedCarousel(
                     }
                 }
             }
+        }
         }
     }
 }

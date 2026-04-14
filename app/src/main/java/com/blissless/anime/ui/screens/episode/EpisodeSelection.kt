@@ -474,7 +474,7 @@ fun RichEpisodeScreen(
                                 Text(text = anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(text = "Progress: $currentProgress / ${if (total > 0) total else "??"}", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                if (released > 0) { Text(text = "$released episodes aired", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                                if (released > 0) { Text(text = if (released == 1) "$released episode aired" else "$released episodes aired", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
