@@ -405,20 +405,21 @@ fun ExploreScreen(
         }
     }
 
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = {
-            isRefreshing = true
-            viewModel.forceRefreshExplore()
-        },
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(bottom = 80.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                isRefreshing = true
+                viewModel.forceRefreshExplore()
+            },
+            modifier = Modifier.fillMaxSize()
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(bottom = 80.dp)
+            ) {
             // Error/Offline Banner
             if (apiError != null || isOffline) {
                 Surface(
@@ -796,37 +797,37 @@ fun ExploreScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
         }
-    }
+        }
 
-    AnimatedVisibility(
-        visible = showSearchOverlay,
-        enter = slideInVertically(
-            animationSpec = tween(
-                durationMillis = 300,
-                easing = FastOutSlowInEasing
+        AnimatedVisibility(
+            visible = showSearchOverlay,
+            enter = slideInVertically(
+                animationSpec = tween(
+                    durationMillis = 300,
+                    easing = FastOutSlowInEasing
+                ),
+                initialOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+            ) + fadeIn(
+                animationSpec = tween(
+                    durationMillis = 300,
+                    delayMillis = 0,
+                    easing = FastOutSlowInEasing
+                )
             ),
-            initialOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
-        ) + fadeIn(
-            animationSpec = tween(
-                durationMillis = 300,
-                delayMillis = 0,
-                easing = FastOutSlowInEasing
+            exit = slideOutVertically(
+                animationSpec = tween(
+                    durationMillis = 250,
+                    easing = FastOutSlowInEasing
+                ),
+                targetOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+            ) + fadeOut(
+                animationSpec = tween(
+                    durationMillis = 250,
+                    easing = FastOutSlowInEasing
+                )
             )
-        ),
-        exit = slideOutVertically(
-            animationSpec = tween(
-                durationMillis = 250,
-                easing = FastOutSlowInEasing
-            ),
-            targetOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
-        ) + fadeOut(
-            animationSpec = tween(
-                durationMillis = 250,
-                easing = FastOutSlowInEasing
-            )
-        )
-    ) {
-        SearchOverlay(
+        ) {
+            SearchOverlay(
             viewModel = viewModel,
             isOled = isOled,
             isLoggedIn = isLoggedIn,
@@ -863,6 +864,7 @@ fun ExploreScreen(
             onViewAllCast = onViewAllCast,
             onViewAllStaff = onViewAllStaff
         )
+        }
     }
 }
 
