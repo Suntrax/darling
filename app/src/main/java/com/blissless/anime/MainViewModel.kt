@@ -2249,6 +2249,8 @@ class MainViewModel : ViewModel() {
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
 
+    suspend fun fetchMiruroEpisodes(animeId: Int, latest: Int = Int.MAX_VALUE) = repository.fetchMiruroEpisodes(animeId, latest)
+
     fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId)
     
     fun addExploreAnimeToList(anime: ExploreAnime, status: String) {

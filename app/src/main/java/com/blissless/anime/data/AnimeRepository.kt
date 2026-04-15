@@ -1,6 +1,7 @@
 package com.blissless.anime.data
 
 import com.blissless.anime.BuildConfig
+import com.blissless.anime.api.miruro.MiruroService
 import com.blissless.anime.stream.scrapers.aniwatch.AniwatchService
 import com.blissless.anime.data.models.AiringScheduleEntry
 import com.blissless.anime.data.models.AiringScheduleResponse
@@ -1154,6 +1155,37 @@ class AnimeRepository(
     }
 
     // ============================================
+    // Miruro Operations (Episode Details)
+    // ============================================
+
+    private val miruroService = MiruroService()
+
+    suspend fun fetchMiruroEpisodes(
+        animeId: Int,
+        latestAiredEpisode: Int = Int.MAX_VALUE
+    ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
+        try {
+            val miruroEpisodes = miruroService.getAnimeEpisodes(animeId) ?: return@withContext emptyList()
+            
+            val episodes = miruroEpisodes.episodes.map { miruroEp ->
+                val hasAired = latestAiredEpisode == Int.MAX_VALUE || miruroEp.number <= latestAiredEpisode
+                
+                TmdbEpisode(
+                    episode = miruroEp.number,
+                    title = miruroEp.title ?: "Episode ${miruroEp.number}",
+                    description = if (hasAired) miruroEp.description ?: "" else "Not yet aired",
+                    image = miruroEp.image
+                )
+            }
+            
+            episodes
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // ============================================
     // TMDB Operations
     // ============================================
 
@@ -1375,6 +1407,9 @@ class AnimeRepository(
         val allEpisodes = mutableListOf<TmdbEpisode>()
         var absoluteIndex = 1
 
+        // First, collect all episodes from TMDB
+        val tmdbEpisodes = mutableListOf<Triple<Int, String?, String?>>() // (relativeNum, title, description)
+        
         for (season in allSeasonDetails) {
             for (episode in season.episodes) {
                 val isTarget = if (maxEpisodes > 0) {
@@ -1385,22 +1420,50 @@ class AnimeRepository(
 
                 if (isTarget) {
                     val relativeNum = absoluteIndex - episodeOffset
-                    val hasAired = latestAiredEpisode == Int.MAX_VALUE || relativeNum <= latestAiredEpisode
-
-                    val title = if (hasAired && episode.name != null && !episode.name.startsWith("Episode", ignoreCase = true)) {
+                    val title = if (episode.name != null && !episode.name.startsWith("Episode", ignoreCase = true)) {
                         episode.name
-                    } else "Episode $relativeNum"
-
-                    allEpisodes.add(TmdbEpisode(
-                        episode = relativeNum,
-                        title = title,
-                        description = if (hasAired) (episode.overview ?: "") else "",
-                        image = if (hasAired) episode.still_path?.let { "https://image.tmdb.org/t/p/w500$it" } else null
-                    ))
+                    } else null
+                    
+                    tmdbEpisodes.add(Triple(relativeNum, title, episode.overview))
                 }
                 absoluteIndex++
             }
         }
+        
+        // Calculate how many episodes TMDB returned
+        val tmdbEpisodeCount = tmdbEpisodes.size
+        val expectedEpisodeCount = if (maxEpisodes > 0) maxEpisodes else tmdbEpisodeCount
+        
+        // Add TMDB episodes with proper airing status
+        for ((relativeNum, title, description) in tmdbEpisodes) {
+            val hasAired = latestAiredEpisode == Int.MAX_VALUE || relativeNum <= latestAiredEpisode
+            
+            allEpisodes.add(TmdbEpisode(
+                episode = relativeNum,
+                title = title ?: "Episode $relativeNum",
+                description = if (hasAired) (description ?: "") else "",
+                image = null // TMDB episode images are not stored to keep memory low
+            ))
+        }
+        
+        // If TMDB doesn't have enough episodes, generate placeholders for long-running series
+        if (tmdbEpisodeCount < expectedEpisodeCount && maxEpisodes > 0) {
+            val startEpisode = tmdbEpisodeCount + 1
+            val endEpisode = expectedEpisodeCount
+            
+            for (epNum in startEpisode..endEpisode) {
+                val relativeNum = epNum
+                val hasAired = latestAiredEpisode == Int.MAX_VALUE || relativeNum <= latestAiredEpisode
+                
+                allEpisodes.add(TmdbEpisode(
+                    episode = relativeNum,
+                    title = "Episode $relativeNum",
+                    description = if (hasAired) "" else "Not yet aired",
+                    image = null
+                ))
+            }
+        }
+        
         return allEpisodes
     }
 
@@ -1413,6 +1476,17 @@ class AnimeRepository(
         tmdbResultsCount: Int = 1
     ): Pair<Int, Int> {
         
+        // Always fetch AniList episode count first - it's the most reliable for anime
+        val recursiveOffset = calculateRecursiveOffset(animeId)
+        val aniListMedia = fetchAnimeRelationsForOffset(animeId)
+        val totalEps = aniListMedia?.episodes ?: 0
+        
+        // If AniList has episode count, use it (more reliable for long-running anime like Detective Conan)
+        if (totalEps > 0) {
+            return Pair(recursiveOffset, totalEps)
+        }
+        
+        // Fallback to TMDB only if AniList doesn't have episode count
         // If TMDB name exactly matches the original title, skip Aniwatch fallback and use offset 0
         val normalizedOriginal = normalizeTitle(animeTitle)
         val normalizedTmdbName = normalizeTitle(tmdbName ?: "")
@@ -1425,22 +1499,13 @@ class AnimeRepository(
             return Pair(0, tvDetails.number_of_episodes ?: 0)
         }
 
-        // 1. Recursive AniList search (Most reliable for multi-season shows)
-        val recursiveOffset = calculateRecursiveOffset(animeId)
-        val aniListMedia = fetchAnimeRelationsForOffset(animeId)
-        val totalEps = aniListMedia?.episodes ?: 0
-
-        if (recursiveOffset > 0) {
-            return Pair(recursiveOffset, totalEps)
-        }
-
-        // 2. Title matching via Aniwatch first episode title
+        // Title matching via Aniwatch first episode title
         val (aniwatchOffset, hianimeCount) = fetchEpisodeOffsetFromAniwatch(animeTitle, allSeasonDetails)
         if (aniwatchOffset >= 0) {
-            return Pair(aniwatchOffset, if (totalEps > 0) totalEps else hianimeCount)
+            return Pair(aniwatchOffset, if (hianimeCount > 0) hianimeCount else (tvDetails.number_of_episodes ?: 0))
         }
 
-        return Pair(0, totalEps)
+        return Pair(0, tvDetails.number_of_episodes ?: 0)
     }
 
     private val visitedOffsetIds = mutableSetOf<Int>()

@@ -34,6 +34,7 @@ android {
         val anilistApiKey2 = localProperties.getProperty("CLIENT_ID_ANILIST2")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
         val malClientId = localProperties.getProperty("MAL_CLIENT_ID") ?: ""
+        val miruroApiBaseUrl = localProperties.getProperty("MIRURO_SCRAPER_BASE_URL") ?: ""
 
         buildConfigField("String", "ANIWATCH_API_BASE_URL", "\"$aniwatchApiBaseUrl\"")
         buildConfigField("String", "ZENIME_API_BASE_URL", "\"$zenimeApiBaseUrl\"")
@@ -44,6 +45,7 @@ android {
         buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
         val malClientSecret = localProperties.getProperty("MAL_CLIENT_SECRET") ?: ""
         buildConfigField("String", "MAL_CLIENT_SECRET", "\"$malClientSecret\"")
+        buildConfigField("String", "MIRURO_SCRAPER_BASE_URL", "\"$miruroApiBaseUrl\"")
     }
 
     // 1. ADD THIS: Configure your signing keys here
