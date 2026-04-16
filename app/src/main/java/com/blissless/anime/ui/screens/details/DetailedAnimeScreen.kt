@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
@@ -178,10 +180,12 @@ fun DetailedAnimeScreen(
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: () -> Unit = {},
     onViewAllStaff: () -> Unit = {},
+    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     initialCardBounds: MainViewModel.CardBounds? = null
 ) {
     val context = LocalContext.current
     var showFullDescription by remember { mutableStateOf(false) }
+    var showAllTags by remember { mutableStateOf(false) }
 
     var detailedData by remember { mutableStateOf<DetailedAnimeData?>(null) }
     var isLoadingDetails by remember { mutableStateOf(true) }
@@ -451,21 +455,36 @@ fun DetailedAnimeScreen(
                 .nestedScroll(nestedScrollConnection)
         ) {
             if (!displayData.banner.isNullOrEmpty() || displayData.cover.isNotEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().height(280.dp).clickable {
-                    fullscreenImageUrl = displayData.banner ?: displayData.cover
-                }) {
+                val bannerImage = displayData.banner ?: displayData.cover
+
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clickable { fullscreenImageUrl = bannerImage }
+                ) {
                     AsyncImage(
-                        model = displayData.banner ?: displayData.cover,
+                        model = bannerImage,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                this.alpha = 0.4f
+                            }
                     )
+
                     Box(
-                        modifier = Modifier.fillMaxSize().background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.2f),
+                                        Color.Black.copy(alpha = 0.85f)
+                                    )
+                                )
                             )
-                        )
                     )
                 }
             }
@@ -534,18 +553,20 @@ fun DetailedAnimeScreen(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    top = 200.dp + statusBarsPadding.calculateTopPadding(),
-                    bottom = 24.dp + navigationBarsPadding.calculateBottomPadding()
+                    top = 140.dp + statusBarsPadding.calculateTopPadding(),
+                    bottom = 32.dp + navigationBarsPadding.calculateBottomPadding()
                 )
             ) {
                 item {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.Top
                     ) {
                         Box {
-                            val cardWidth = 120.dp
-                            val cardHeight = 171.dp
+                            val cardWidth = 140.dp
+                            val cardHeight = 200.dp
                             val targetX = 0.dp
                             val targetY = 0.dp
 
@@ -579,8 +600,8 @@ fun DetailedAnimeScreen(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .clickable { fullscreenImageUrl = displayData.cover },
-                                    shape = RoundedCornerShape(12.dp),
-                                    shadowElevation = 12.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    shadowElevation = 16.dp,
                                     color = Color.Transparent
                                 ) {
                                     AsyncImage(
@@ -593,7 +614,7 @@ fun DetailedAnimeScreen(
                             }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f).offset(y = 30.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("Anime Title", displayData.title))
@@ -632,18 +653,18 @@ fun DetailedAnimeScreen(
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 displayData.averageScore?.let { score ->
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.background(Color(0xFFFFD700).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        modifier = Modifier.background(Color(0xFFFFD700).copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
                                     ) {
-                                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             String.format(Locale.US, "%.1f", score / 10.0),
@@ -652,21 +673,14 @@ fun DetailedAnimeScreen(
                                     }
                                 }
                                 Surface(
-                                    shape = RoundedCornerShape(6.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = when (displayData.status) {
-                                        "RELEASING" -> Color(0xFF4CAF50).copy(alpha = 0.15f)
-                                        "FINISHED" -> Color(0xFF2196F3).copy(alpha = 0.15f)
-                                        "NOT_YET_RELEASED" -> Color(0xFFFFC107).copy(alpha = 0.15f)
-                                        "CANCELLED" -> Color(0xFFF44336).copy(alpha = 0.15f)
+                                        "RELEASING" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                        "FINISHED" -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                                        "NOT_YET_RELEASED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
+                                        "CANCELLED" -> Color(0xFFF44336).copy(alpha = 0.2f)
                                         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                    },
-                                    border = BorderStroke(1.5.dp, when (displayData.status) {
-                                        "RELEASING" -> Color(0xFF4CAF50)
-                                        "FINISHED" -> Color(0xFF2196F3)
-                                        "NOT_YET_RELEASED" -> Color(0xFFFFC107)
-                                        "CANCELLED" -> Color(0xFFF44336)
-                                        else -> Color.Gray.copy(alpha = 0.5f)
-                                    })
+                                    }
                                 ) {
                                     Text(
                                         statusDisplay, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
@@ -677,59 +691,75 @@ fun DetailedAnimeScreen(
                                             "CANCELLED" -> Color(0xFFF44336)
                                             else -> if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                                         },
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
                                 }
                             }
-                            if (displayData.year != null || displayData.format != null) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    listOfNotNull(displayData.year?.toString(), formatDisplay).joinToString(" • "),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (displayData.year != null) {
+                                    Text(
+                                        displayData.year.toString(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (displayData.year != null && displayData.format != null) {
+                                    Text(
+                                        "•",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOled) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                                displayData.format?.let { format ->
+                                    Text(
+                                        formatDisplay,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
-                        )
+                            containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             val notYetAired = displayData.status == "NOT_YET_RELEASED"
                             val effectiveIsFavorite = if (isLoggedIn) isFavorite else effectiveLocalFavorite
-                            val effectiveOnToggleFavorite: () -> Unit = if (isLoggedIn) {
-                                { onToggleFavorite(displayData) }
-                            } else {
-                                { onToggleLocalFavorite(anime.id) }
-                            }
 
                             Button(
-                                onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
+                                onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f).height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 enabled = !notYetAired,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                )
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                             ) {
-                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Start Watching", fontWeight = FontWeight.Medium)
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Watch Now", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                             }
 
                             OutlinedButton(
@@ -747,12 +777,22 @@ fun DetailedAnimeScreen(
                                         )
                                     }
                                 },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFFF1744).copy(alpha = 0.15f), contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary)
+                                modifier = Modifier.height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
+                                    contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                ),
+                                border = BorderStroke(
+                                    1.5.dp,
+                                    if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                )
                             ) {
                                 Icon(
-                                    if (effectiveIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, null, Modifier.size(18.dp),
-                                    tint = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.primary
+                                    if (effectiveIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    null,
+                                    Modifier.size(22.dp),
+                                    tint = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -760,108 +800,101 @@ fun DetailedAnimeScreen(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF121212).copy(alpha = 0.9f) else Color(0xFF1A1A1A).copy(alpha = 0.85f)
-                        )
+                            containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(20.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.PlaylistAdd,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.PlaylistAdd,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     if (isLoggedIn) "Add to List" else "Local List",
-                                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
                                 )
                                 if (!isLoggedIn) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         "(Offline)",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
-                                val onUpdate: (String) -> Unit = if (isLoggedIn) {
-                                    { status -> onUpdateStatus(status) }
-                                } else { status ->
-                                    viewModel.setLocalAnimeStatus(
-                                        anime.id,
-                                        LocalAnimeEntry(
-                                            id = anime.id,
-                                            status = status,
-                                            progress = 0,
-                                            totalEpisodes = anime.episodes,
-                                            title = anime.title,
-                                            cover = anime.cover,
-                                            banner = anime.banner,
-                                            year = anime.year,
-                                            averageScore = anime.averageScore
-                                        )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
+                            val onUpdate: (String) -> Unit = if (isLoggedIn) {
+                                { status -> onUpdateStatus(status) }
+                            } else { status ->
+                                viewModel.setLocalAnimeStatus(
+                                    anime.id,
+                                    LocalAnimeEntry(
+                                        id = anime.id,
+                                        status = status,
+                                        progress = 0,
+                                        totalEpisodes = anime.episodes,
+                                        title = anime.title,
+                                        cover = anime.cover,
+                                        banner = anime.banner,
+                                        year = anime.year,
+                                        averageScore = anime.averageScore
                                     )
-                                }
-                                val onRemoveStatus: () -> Unit = if (isLoggedIn) {
-                                    { onRemove() }
-                                } else {
-                                    { viewModel.setLocalAnimeStatus(anime.id, null) }
-                                }
+                                )
+                            }
+                            val onRemoveStatus: () -> Unit = if (isLoggedIn) {
+                                { onRemove() }
+                            } else {
+                                { viewModel.setLocalAnimeStatus(anime.id, null) }
+                            }
 
-                                StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), statusToCheck == "CURRENT") {
-                                    if (statusToCheck == "CURRENT") {
-                                        onRemoveStatus()
-                                    } else {
-                                        onUpdate("CURRENT")
-                                    }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), statusToCheck == "CURRENT", modifier = Modifier.weight(1f)) {
+                                    if (statusToCheck == "CURRENT") { onRemoveStatus() } else { onUpdate("CURRENT") }
                                 }
-                                StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), statusToCheck == "PLANNING") {
-                                    if (statusToCheck == "PLANNING") {
-                                        onRemoveStatus()
-                                    } else {
-                                        onUpdate("PLANNING")
-                                    }
+                                StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), statusToCheck == "PLANNING", modifier = Modifier.weight(1f)) {
+                                    if (statusToCheck == "PLANNING") { onRemoveStatus() } else { onUpdate("PLANNING") }
                                 }
-                                StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), statusToCheck == "COMPLETED") {
-                                    if (statusToCheck == "COMPLETED") {
-                                        onRemoveStatus()
-                                    } else {
-                                        onUpdate("COMPLETED")
-                                    }
+                                StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), statusToCheck == "COMPLETED", modifier = Modifier.weight(1f)) {
+                                    if (statusToCheck == "COMPLETED") { onRemoveStatus() } else { onUpdate("COMPLETED") }
                                 }
-                                StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), statusToCheck == "PAUSED") {
-                                    if (statusToCheck == "PAUSED") {
-                                        onRemoveStatus()
-                                    } else {
-                                        onUpdate("PAUSED")
-                                    }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), statusToCheck == "PAUSED", modifier = Modifier.weight(1f)) {
+                                    if (statusToCheck == "PAUSED") { onRemoveStatus() } else { onUpdate("PAUSED") }
                                 }
-                                StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), statusToCheck == "DROPPED") {
-                                    if (statusToCheck == "DROPPED") {
-                                        onRemoveStatus()
-                                    } else {
-                                        onUpdate("DROPPED")
-                                    }
+                                StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), statusToCheck == "DROPPED", modifier = Modifier.weight(1f)) {
+                                    if (statusToCheck == "DROPPED") { onRemoveStatus() } else { onUpdate("DROPPED") }
                                 }
-                                StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false) {
-                                    if (statusToCheck != null) {
-                                        onRemoveStatus()
-                                    }
+                                StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false, modifier = Modifier.weight(1f)) {
+                                    if (statusToCheck != null) { onRemoveStatus() }
                                 }
                             }
                         }
@@ -877,15 +910,32 @@ fun DetailedAnimeScreen(
                             .padding(horizontal = 16.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                            containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        Icon(
+                                            Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                            }
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Main stats row
+                            // Main stats row - enhanced design
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -907,34 +957,40 @@ fun DetailedAnimeScreen(
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
-                            HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.08f) else Color.Gray.copy(alpha = 0.15f))
-                            Spacer(modifier = Modifier.height(16.dp))
 
-                            // Details grid
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                displayData.format?.let { formatDisplay }
-                                    .takeIf { displayData.format != null }?.let {
-                                        InfoRow("Format", formatDisplay, isOled)
+                            // Clean grid of info items
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                // Row 1: Format | Season | Status
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    displayData.format?.let { 
+                                        InfoPill("Format", it, modifier = Modifier.weight(1f)) 
                                     }
-                                if (displayData.season != null && displayData.year != null) {
-                                    InfoRow("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", isOled)
+                                    if (displayData.season != null && displayData.year != null) {
+                                        InfoPill("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", modifier = Modifier.weight(1f))
+                                    }
+                                    if (displayData.status != null) {
+                                        InfoPill("Status", statusDisplay, modifier = Modifier.weight(1f))
+                                    }
                                 }
-                                if (displayData.status != null) {
-                                    InfoRow("Status", statusDisplay, isOled)
+                                // Row 2: Source | Studio
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    displayData.source?.let { 
+                                        InfoPill("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, modifier = Modifier.weight(1f)) 
+                                    }
+                                    if (displayData.studios.isNotEmpty()) {
+                                        val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
+                                        if (studio.isNotEmpty()) InfoPill("Studio", studio, modifier = Modifier.weight(1f))
+                                    }
                                 }
-                                displayData.source?.let {
-                                    InfoRow("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, isOled)
-                                }
-                                if (displayData.studios.isNotEmpty()) {
-                                    val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
-                                    if (studio.isNotEmpty()) InfoRow("Studio", studio, isOled)
-                                }
-                                displayData.startDate?.let {
-                                    InfoRow("Started", formatDate(it), isOled)
-                                }
-                                if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
-                                    displayData.endDate?.let {
-                                        InfoRow("Ended", formatDate(it), isOled)
+                                // Row 3: Dates
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    displayData.startDate?.let { 
+                                        InfoPill("Started", formatDate(it), modifier = Modifier.weight(1f)) 
+                                    }
+                                    if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
+                                        displayData.endDate?.let { 
+                                            InfoPill("Ended", formatDate(it), modifier = Modifier.weight(1f)) 
+                                        }
                                     }
                                 }
                             }
@@ -956,18 +1012,26 @@ fun DetailedAnimeScreen(
                                 },
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.PlayCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.Default.PlayCircle,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Trailer", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                 }
@@ -1024,18 +1088,26 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Category,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.Default.Category,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Genres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                 }
@@ -1073,27 +1145,39 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.Label,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.Label,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.secondary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Tags", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
+                                val nonSpoilerTags = displayData.tags.filter { !it.isMediaSpoiler }
+                                val displayedTags = if (showAllTags) nonSpoilerTags else nonSpoilerTags.take(2)
+                                val remainingCount = nonSpoilerTags.size - 2
+
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    displayData.tags.filter { !it.isMediaSpoiler }.take(15).forEach { tag ->
+                                    displayedTags.forEach { tag ->
                                         Surface(
                                             shape = RoundedCornerShape(20.dp),
                                             color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
@@ -1109,6 +1193,26 @@ fun DetailedAnimeScreen(
                                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                                             )
                                         }
+                                    }
+                                    if (remainingCount > 0 && !showAllTags) {
+                                        Text(
+                                            "+$remainingCount more",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
+                                            modifier = Modifier.align(Alignment.CenterVertically)
+                                        )
+                                    }
+                                }
+                                if (remainingCount > 0) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    TextButton(
+                                        onClick = { showAllTags = !showAllTags },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            if (showAllTags) "Show Less" else "Show More",
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
                                     }
                                 }
                             }
@@ -1126,18 +1230,26 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0D0D0D).copy(alpha = 0.95f) else Color(0xFF181818).copy(alpha = 0.9f)
+                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Description,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.Default.Description,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Synopsis", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                 }
@@ -1146,7 +1258,7 @@ fun DetailedAnimeScreen(
                                     .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
                                 Text(cleanDescription, style = MaterialTheme.typography.bodyMedium,
                                     color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = if (showFullDescription) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis,
+                                    maxLines = if (showFullDescription) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
                                     lineHeight = 22.sp)
                                 if (cleanDescription.length > 250) {
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -1168,6 +1280,7 @@ fun DetailedAnimeScreen(
                 val filteredRelations = displayData.relations.filter { relation ->
                     relation.format != "MANGA" && relation.format != "NOVEL" && relation.format != "ONE_SHOT"
                 }
+                android.util.Log.d("DEBUG", ">>> Relations section: count=${filteredRelations.size}, isNotEmpty=${filteredRelations.isNotEmpty()}")
 
                 if (filteredRelations.isNotEmpty()) {
                     item {
@@ -1182,16 +1295,34 @@ fun DetailedAnimeScreen(
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Link,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.Default.Link,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Relations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    if (filteredRelations.isNotEmpty()) {
+                                        android.util.Log.d("DEBUG", ">>> View All Relations clicked for animeId=${displayData.id}, title=${displayData.title}")
+                                        TextButton(onClick = { 
+                                            android.util.Log.d("DETAILED_ANIME", "View All Relations clicked for animeId=${displayData.id}, title=${displayData.title}")
+                                            onViewAllRelations(displayData.id, displayData.title ?: "") 
+                                        }) {
+                                            Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -1374,13 +1505,21 @@ fun DetailedAnimeScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                    Icon(
-                                        Icons.Default.Group,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.Default.Group,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Cast", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
@@ -1516,13 +1655,21 @@ fun DetailedAnimeScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                    Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text("Staff", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                         color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
@@ -1730,12 +1877,24 @@ fun DetailedAnimeScreen(
 }
 
 @Composable
-private fun StatusChip(label: String, icon: ImageVector, color: Color, selected: Boolean, onClick: () -> Unit) {
+private fun StatusChip(label: String, icon: ImageVector, color: Color, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     FilterChip(
         selected = selected, onClick = onClick,
-        label = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) { Icon(icon, null, Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)); Text(label, fontSize = 12.sp); Spacer(Modifier.width(3.dp)) } },
+        label = { 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) { 
+                Icon(icon, null, Modifier.size(14.dp)); 
+                Spacer(Modifier.width(3.dp)); 
+                Text(label, fontSize = 12.sp); 
+                Spacer(Modifier.width(3.dp)) 
+            } 
+        },
         colors = FilterChipDefaults.filterChipColors(selectedContainerColor = color.copy(alpha = 0.2f), selectedLabelColor = color),
-        border = BorderStroke(1.dp, if (selected) color else Color.Gray.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, if (selected) color else Color.Gray.copy(alpha = 0.3f)),
+        modifier = modifier
     )
 }
 
@@ -1787,12 +1946,37 @@ private fun InfoStat(label: String, value: String, icon: ImageVector, color: Col
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, isOled: Boolean) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+private fun InfoRow(label: String, value: String, isOled: Boolean, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodySmall,
             color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium,
             color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun InfoPill(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.padding(end = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 

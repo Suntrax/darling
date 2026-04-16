@@ -85,6 +85,7 @@ import com.blissless.anime.ui.screens.player.PlayerScreen
 import com.blissless.anime.ui.screens.airing.ScheduleScreen
 import com.blissless.anime.ui.screens.settings.SettingsScreen
 import com.blissless.anime.ui.screens.character.StaffScreen
+import com.blissless.anime.ui.screens.relations.AllRelationsScreen
 import com.blissless.anime.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1289,6 +1290,15 @@ fun MainScreen(
                     previousFirstAnime = exploreDialog.firstAnime,
                     previousIsFirstOpen = exploreDialog.isFirstOpen
                 )
+            },
+            onViewAllRelations = { _, _ ->
+                overlayState = OverlayState.AllRelationsDialog(
+                    animeId = exploreDialog.anime.id, 
+                    animeTitle = exploreDialog.anime.title,
+                    previousAnime = exploreDialog.anime,
+                    previousFirstAnime = exploreDialog.firstAnime,
+                    previousIsFirstOpen = exploreDialog.isFirstOpen
+                )
             }
         )
     }
@@ -1470,6 +1480,53 @@ fun MainScreen(
                     previousFirstAnime = allStaffDialog.previousFirstAnime,
                     previousIsFirstOpen = allStaffDialog.previousIsFirstOpen
                 )
+            },
+            onAnimeClick = { animeId ->
+                scope.launch {
+                    val detailedData = viewModel.fetchDetailedAnimeData(animeId)
+                    if (detailedData != null) {
+                        val newAnime = ExploreAnime(
+                            id = detailedData.id,
+                            title = detailedData.title,
+                            titleEnglish = detailedData.titleEnglish,
+                            cover = detailedData.cover,
+                            banner = detailedData.banner,
+                            episodes = detailedData.episodes,
+                            latestEpisode = detailedData.latestEpisode,
+                            averageScore = detailedData.averageScore,
+                            genres = detailedData.genres,
+                            year = detailedData.year,
+                            format = detailedData.format
+                        )
+                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                    } else {
+                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+
+    // All Relations Screen
+    val allRelationsDialog = overlayState as? OverlayState.AllRelationsDialog
+    if (allRelationsDialog != null) {
+        android.util.Log.d("MAIN_DEBUG", "Showing AllRelationsScreen for animeId=${allRelationsDialog.animeId}")
+        AllRelationsScreen(
+            animeId = allRelationsDialog.animeId,
+            animeTitle = allRelationsDialog.animeTitle,
+            viewModel = viewModel,
+            isOled = isOled,
+            onDismiss = { 
+                val previousAnime = allRelationsDialog.previousAnime
+                if (previousAnime != null) {
+                    overlayState = OverlayState.ExploreAnimeDialog(
+                        anime = previousAnime,
+                        firstAnime = allRelationsDialog.previousFirstAnime,
+                        isFirstOpen = allRelationsDialog.previousIsFirstOpen
+                    )
+                } else {
+                    overlayState = OverlayState.None
+                }
             },
             onAnimeClick = { animeId ->
                 scope.launch {
@@ -1682,6 +1739,9 @@ fun MainScreen(
                             onViewAllStaff = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             },
+                            onViewAllRelations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                            },
                             localAnimeStatus = localAnimeStatus
                         )
                         2 -> HomeScreen(
@@ -1716,6 +1776,9 @@ fun MainScreen(
                             },
                             onViewAllStaff = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllRelations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             playbackPositions = playbackPositions
                         )

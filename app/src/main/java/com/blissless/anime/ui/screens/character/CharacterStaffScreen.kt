@@ -7,17 +7,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -67,6 +72,9 @@ fun CharacterScreen(
     var character by remember { mutableStateOf<CharacterData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
+    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+
     LaunchedEffect(characterId) {
         isLoading = true
         character = viewModel.fetchCharacter(characterId)
@@ -78,7 +86,8 @@ fun CharacterScreen(
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
-            dismissOnClickOutside = false
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
         )
     ) {
         Box(
@@ -89,13 +98,13 @@ fun CharacterScreen(
             character?.let { char ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp + navigationBarsPadding.calculateBottomPadding())
                 ) {
                     item {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(300.dp)
+                                .height(300.dp + statusBarsPadding.calculateTopPadding())
                         ) {
                             AsyncImage(
                                 model = char.image?.large,
@@ -118,9 +127,9 @@ fun CharacterScreen(
                             IconButton(
                                 onClick = onDismiss,
                                 modifier = Modifier
-                                    .padding(top = 16.dp, start = 16.dp)
+                                    .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp, start = 16.dp)
                                     .size(40.dp)
-                                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                                     .zIndex(10f)
                             ) {
                                 Icon(
@@ -277,6 +286,9 @@ fun StaffScreen(
     var staff by remember { mutableStateOf<StaffData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
+    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+
     LaunchedEffect(staffId) {
         isLoading = true
         staff = viewModel.fetchStaff(staffId)
@@ -288,7 +300,8 @@ fun StaffScreen(
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
-            dismissOnClickOutside = false
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
         )
     ) {
         Box(
@@ -299,13 +312,13 @@ fun StaffScreen(
             staff?.let { staffData ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp + navigationBarsPadding.calculateBottomPadding())
                 ) {
                     item {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(300.dp)
+                                .height(300.dp + statusBarsPadding.calculateTopPadding())
                         ) {
                             AsyncImage(
                                 model = staffData.image?.large,
@@ -328,9 +341,9 @@ fun StaffScreen(
                             IconButton(
                                 onClick = onDismiss,
                                 modifier = Modifier
-                                    .padding(top = 16.dp, start = 16.dp)
+                                    .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp, start = 16.dp)
                                     .size(40.dp)
-                                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                                     .zIndex(10f)
                             ) {
                                 Icon(

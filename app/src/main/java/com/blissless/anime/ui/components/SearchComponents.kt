@@ -116,7 +116,8 @@ fun SearchOverlay(
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
-    onViewAllStaff: (Int, String) -> Unit = { _, _ -> }
+    onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRelations: (Int, String) -> Unit = { _, _ -> }
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
@@ -511,7 +512,8 @@ fun SearchOverlay(
             onCharacterClick = onCharacterClick,
             onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllRelations = { animeId, title -> onViewAllRelations(animeId, title) }
         )
     }
 

@@ -42,4 +42,12 @@ sealed class OverlayState {
         val previousFirstAnime: ExploreAnime? = null,
         val previousIsFirstOpen: Boolean = false
     ) : OverlayState()
+
+    data class AllRelationsDialog(
+        val animeId: Int,
+        val animeTitle: String,
+        val previousAnime: ExploreAnime? = null,
+        val previousFirstAnime: ExploreAnime? = null,
+        val previousIsFirstOpen: Boolean = false
+    ) : OverlayState()
 }

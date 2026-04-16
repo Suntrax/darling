@@ -111,6 +111,7 @@ fun HomeScreen(
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap()
 ) {    
@@ -625,7 +626,8 @@ fun HomeScreen(
                 onCharacterClick = onCharacterClick,
                 onStaffClick = onStaffClick,
                 onViewAllCast = onViewAllCast,
-                onViewAllStaff = onViewAllStaff
+                onViewAllStaff = onViewAllStaff,
+                onViewAllRelations = onViewAllRelations
             )
         }
     }

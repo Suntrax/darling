@@ -97,6 +97,7 @@ fun ExploreScreen(
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap()
 ) {
     val context = LocalContext.current
@@ -862,7 +863,8 @@ fun ExploreScreen(
             onCharacterClick = onCharacterClick,
             onStaffClick = onStaffClick,
             onViewAllCast = onViewAllCast,
-            onViewAllStaff = onViewAllStaff
+            onViewAllStaff = onViewAllStaff,
+            onViewAllRelations = onViewAllRelations
         )
         }
     }
