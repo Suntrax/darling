@@ -283,7 +283,11 @@ fun ExploreScreen(
             onCharacterClick = onCharacterClick,
             onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllRelations = { animeId, title ->
+                android.util.Log.d("DEBUG", ">>> ExploreScreen DetailedAnimeScreen onViewAllRelations: animeId=$animeId")
+                onViewAllRelations(animeId, title)
+            }
         )
     }
 
@@ -864,7 +868,10 @@ fun ExploreScreen(
             onStaffClick = onStaffClick,
             onViewAllCast = onViewAllCast,
             onViewAllStaff = onViewAllStaff,
-            onViewAllRelations = onViewAllRelations
+            onViewAllRelations = { animeId, title ->
+                android.util.Log.d("DEBUG", ">>> ExploreScreen SearchOverlay onViewAllRelations: animeId=$animeId")
+                onViewAllRelations(animeId, title)
+            }
         )
         }
     }

@@ -513,7 +513,10 @@ fun SearchOverlay(
             onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllRelations = { animeId, title -> onViewAllRelations(animeId, title) }
+            onViewAllRelations = { animeId, title -> 
+                android.util.Log.d("DEBUG", ">>> SearchComponents onViewAllRelations: animeId=$animeId")
+                onViewAllRelations(animeId, title) 
+            }
         )
     }
 

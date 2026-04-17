@@ -67,6 +67,7 @@ fun AllRelationsScreen(
     onDismiss: () -> Unit,
     onAnimeClick: (Int) -> Unit
 ) {
+    android.util.Log.d("ALL_RELATIONS", ">>> AllRelationsScreen started for animeId=$animeId, title=$animeTitle")
     var relations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 

@@ -702,19 +702,27 @@ class MainViewModel : ViewModel() {
         }
 
         viewModelScope.launch {
-            if (hasToken || _loginProvider.value != LoginProvider.NONE) {
-                loadHomeDataWithCache()
-                // Load AniList favorites from storage AFTER home data is loaded (so lists are available)
-                if (hasToken) {
-                    loadAniListFavoritesFromStorage()
+            // Run home data, explore data, and airing schedule in PARALLEL for faster startup
+            val homeDeferred = async {
+                if (hasToken || _loginProvider.value != LoginProvider.NONE) {
+                    loadHomeDataWithCache()
+                    if (hasToken) {
+                        loadAniListFavoritesFromStorage()
+                    }
+                } else {
+                    prefetchOfflineWatchingStreams()
                 }
-            } else {
-                prefetchOfflineWatchingStreams()
             }
-            loadExploreDataWithCache()
-            fetchAiringSchedule()
             
-            // Fetch AniList favorites from API in background after initial load
+            val exploreDeferred = async { loadExploreDataWithCache() }
+            val scheduleDeferred = async { fetchAiringSchedule() }
+            
+            // Wait for all to complete (they run in parallel)
+            homeDeferred.await()
+            exploreDeferred.await()
+            scheduleDeferred.await()
+            
+            // Fetch AniList favorites in background after initial load completes
             if (hasToken) {
                 fetchAniListFavorites()
             }

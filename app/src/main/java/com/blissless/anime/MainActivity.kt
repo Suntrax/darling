@@ -1291,14 +1291,17 @@ fun MainScreen(
                     previousIsFirstOpen = exploreDialog.isFirstOpen
                 )
             },
-            onViewAllRelations = { _, _ ->
+            onViewAllRelations = { animeId, title ->
+                android.util.Log.d("DEBUG", ">>> MainActivity onViewAllRelations lambda triggered: animeId=$animeId, title=$title")
+                android.util.Log.d("ALL_RELATIONS", ">>> onViewAllRelations called with animeId=$animeId, title=$title")
                 overlayState = OverlayState.AllRelationsDialog(
-                    animeId = exploreDialog.anime.id, 
-                    animeTitle = exploreDialog.anime.title,
+                    animeId = animeId, 
+                    animeTitle = title,
                     previousAnime = exploreDialog.anime,
                     previousFirstAnime = exploreDialog.firstAnime,
                     previousIsFirstOpen = exploreDialog.isFirstOpen
                 )
+                android.util.Log.d("DEBUG", ">>> overlayState is now: $overlayState")
             }
         )
     }
@@ -1511,6 +1514,7 @@ fun MainScreen(
     val allRelationsDialog = overlayState as? OverlayState.AllRelationsDialog
     if (allRelationsDialog != null) {
         android.util.Log.d("MAIN_DEBUG", "Showing AllRelationsScreen for animeId=${allRelationsDialog.animeId}")
+        android.util.Log.d("MAIN_DEBUG", ">>> About to call AllRelationsScreen")
         AllRelationsScreen(
             animeId = allRelationsDialog.animeId,
             animeTitle = allRelationsDialog.animeTitle,
@@ -1683,6 +1687,9 @@ fun MainScreen(
                             },
                             onViewAllStaff = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                            },
+                            onViewAllRelations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             }
                         )
                         1 -> ExploreScreen(
@@ -1740,6 +1747,7 @@ fun MainScreen(
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             },
                             onViewAllRelations = { animeId, animeTitle ->
+                                android.util.Log.d("DEBUG", ">>> MainActivity ExploreScreen onViewAllRelations: animeId=$animeId")
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             },
                             localAnimeStatus = localAnimeStatus
@@ -1778,6 +1786,7 @@ fun MainScreen(
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onViewAllRelations = { animeId, animeTitle ->
+                                android.util.Log.d("DEBUG", ">>> MainActivity HomeScreen onViewAllRelations: animeId=$animeId")
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             playbackPositions = playbackPositions

@@ -788,7 +788,11 @@ fun HomeScreen(
             onCharacterClick = onCharacterClick,
             onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) }
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
+            onViewAllRelations = { animeId, title ->
+                android.util.Log.d("DEBUG", ">>> HomeScreen DetailedAnimeScreen onViewAllRelations: animeId=$animeId")
+                onViewAllRelations(animeId, title)
+            }
         )
     }
 
