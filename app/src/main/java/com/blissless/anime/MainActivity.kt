@@ -1876,13 +1876,7 @@ fun MainScreen(
                                                     val event = awaitPointerEvent()
                                                     if (event.changes.any { it.pressed }) {
                                                         scope.launch {
-                                                            val currentPage = pagerState.currentPage
-                                                            val isAdjacent = (index - currentPage).absoluteValue <= 1
-                                                            if (isAdjacent) {
-                                                                pagerState.animateScrollToPage(index)
-                                                            } else {
-                                                                pagerState.scrollToPage(index)
-                                                            }
+                                                            pagerState.scrollToPage(index)
                                                         }
                                                     }
                                                 }

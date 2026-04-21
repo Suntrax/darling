@@ -62,6 +62,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -739,43 +741,29 @@ private fun FavoriteItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = anime.images.jpg?.imageUrl,
-                contentDescription = anime.title,
-                modifier = Modifier
-                    .width(70.dp)
-                    .height(95.dp)
-                    .clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
+        Box(modifier = Modifier.fillMaxWidth().background(
+            brush = Brush.linearGradient(
+                colors = if (isOled) listOf(Color(0xFF3A3A3A), Color(0xFF1A1A1A))
+                else listOf(Color(0xFF4A4A5A), Color(0xFF2A2A3A)),
+                start = Offset(0f, 0f), end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
-                Text(
-                    displayTitle,
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+        )) {
+            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = anime.images.jpg?.imageUrl, contentDescription = anime.title,
+                    modifier = Modifier.width(70.dp).height(95.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop
                 )
-                anime.year?.let { year ->
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        year.toString(),
-                        color = Color.White.copy(alpha = 0.5f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
+                    Text(displayTitle, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    anime.year?.let { year ->
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(year.toString(), color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }
@@ -916,64 +904,33 @@ private fun HistoryItem(
     }
     
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        ),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = entry.images.jpg?.imageUrl,
-                contentDescription = entry.title,
-                modifier = Modifier
-                    .width(70.dp)
-                    .height(95.dp)
-                    .clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
+        Box(modifier = Modifier.fillMaxWidth().background(
+            brush = Brush.linearGradient(
+                colors = if (isOled) listOf(Color(0xFF3A3A3A), Color(0xFF1A1A1A))
+                else listOf(Color(0xFF4A4A5A), Color(0xFF2A2A3A)),
+                start = Offset(0f, 0f), end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                val displayTitle = if (preferEnglishTitles && !entry.titleEnglish.isNullOrEmpty()) entry.titleEnglish else entry.title
-                Text(
-                    displayTitle,
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+        )) {
+            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = entry.images.jpg?.imageUrl, contentDescription = entry.title,
+                    modifier = Modifier.width(70.dp).height(95.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        statusIcon,
-                        contentDescription = null,
-                        tint = statusColor,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        "$statusLabel $progress",
-                        color = statusColor,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                entry.date?.let { date ->
-                    Text(
-                        date,
-                        color = Color.White.copy(alpha = 0.5f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    val displayTitle = if (preferEnglishTitles && !entry.titleEnglish.isNullOrEmpty()) entry.titleEnglish else entry.title
+                    Text(displayTitle, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(statusIcon, contentDescription = null, tint = statusColor, modifier = Modifier.size(16.dp))
+                        Text("$statusLabel $progress", color = statusColor, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    entry.date?.let { date -> Text(date, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall) }
                 }
             }
         }
