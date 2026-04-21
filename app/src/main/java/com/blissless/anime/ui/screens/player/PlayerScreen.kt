@@ -252,6 +252,7 @@ fun PlayerScreen(
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
     var skipResetJob by remember { mutableStateOf<Job?>(null) }
+    var hideControlsJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(showControls, hasError, showSkipIndicator) {
         if (showControls || hasError || showSkipIndicator) {
@@ -530,15 +531,14 @@ fun PlayerScreen(
         }
     }
 
-    fun seekBy(milliseconds: Long, isForward: Boolean) {
+fun seekBy(milliseconds: Long, isForward: Boolean) {
         isManuallySeeking = true
-        // Keep controls visible during seeking
-        showControls = true
-        controlsVisible = true
-        
-        // Cancel any existing reset job
-        skipResetJob?.cancel()
-        
+         
+        // Show skip indicator (separate from player UI)
+        skipIndicatorText = if (milliseconds > 0) "+${abs(milliseconds / 1000)}s" else "-${abs(milliseconds / 1000)}s"
+        skipIsForward = milliseconds >= 0
+        showSkipIndicator = true
+         
         // Handle accumulated skips within 300ms window
         val now = System.currentTimeMillis()
         if (now - lastTapTime < 300) {
@@ -554,15 +554,14 @@ fun PlayerScreen(
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
         
-        // Display accumulated skip time
+        // Update text with accumulated skip time
         val totalSeconds = abs(accumulatedSkipMs / 1000)
         skipIndicatorText = if (accumulatedSkipMs > 0) "+${totalSeconds}s" else "-${totalSeconds}s"
-        skipIsForward = accumulatedSkipMs >= 0
-        showSkipIndicator = true
         
-        // Schedule reset after 1.5 seconds of no taps
+        // Schedule reset after 500ms of no taps
+        skipResetJob?.cancel()
         skipResetJob = scope.launch {
-            delay(1500)
+            delay(500)
             showSkipIndicator = false
             isManuallySeeking = false
             accumulatedSkipMs = 0L
@@ -689,10 +688,10 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu) {
-        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu) {
+    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, isManuallySeeking) {
+        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !isManuallySeeking) {
             delay(2000)
-            if (!isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu) {
+            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu && !isManuallySeeking) {
                 showControls = false
             }
         }
@@ -1426,7 +1425,13 @@ fun PlayerScreen(
                                     cornerRadius = CornerRadius(cornerRadius)
                                 )
 
-                                // Draw intro/credits overlay ON TOP using BlendMode.Multiply
+                                // Draw intro/credits markers with manual color blending
+                                // Colors calculated to match BlendMode.Multiply result:
+                                // - Watched portion: solid orange (multiply with white)
+                                // - Unwatched portion: darker orange (multiply with gray background)
+                                val watchedOrange = Color(0xFFFF9800)
+                                val unwatchedOrange = Color(0xFFA67C00)
+
                                 if (introStartRatio != null && introEndRatio != null) {
                                     val introStartX = introStartRatio * sliderWidth
                                     val introEndX = introEndRatio * sliderWidth
@@ -1434,29 +1439,57 @@ fun PlayerScreen(
                                     if (introWidth > 0) {
                                         val leftRadius = if (introStartX < 10f) cornerRadius else 2.dp.toPx()
                                         val rightRadius = if (introEndX > sliderWidth - 10f) cornerRadius else 2.dp.toPx()
-                                        drawRoundRect(
-                                            color = Color(0xFFFF9800),
-                                            topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
-                                            size = Size(
-                                                introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
-                                                trackHeight
-                                            ),
-                                            cornerRadius = CornerRadius(leftRadius, rightRadius),
-                                            blendMode = BlendMode.Multiply
-                                        )
+
+                                        // Draw watched part (before progress) with bright orange
+                                        if (introStartX < progressX && introEndX <= progressX) {
+                                            drawRoundRect(
+                                                color = watchedOrange,
+                                                topLeft = Offset(introStartX, trackTop),
+                                                size = Size(introWidth, trackHeight),
+                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                            )
+                                        }
+                                        // Draw unwatched part (after progress) with dark orange
+                                        else if (introStartX >= progressX) {
+                                            drawRoundRect(
+                                                color = unwatchedOrange,
+                                                topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
+                                                size = Size(
+                                                    introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
+                                                    trackHeight
+                                                ),
+                                                cornerRadius = CornerRadius(leftRadius, rightRadius)
+                                            )
+                                        }
+                                        // Draw both parts (spans across progress)
+                                        else if (introStartX < progressX && introEndX > progressX) {
+                                            val watchedWidth = progressX - introStartX
+                                            val unwatchedWidth = introEndX - progressX
+                                            drawRoundRect(
+                                                color = watchedOrange,
+                                                topLeft = Offset(introStartX, trackTop),
+                                                size = Size(watchedWidth, trackHeight),
+                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                            )
+                                            drawRoundRect(
+                                                color = unwatchedOrange,
+                                                topLeft = Offset(progressX, trackTop),
+                                                size = Size(unwatchedWidth, trackHeight),
+                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                            )
+                                        }
                                     }
                                 }
 
                                 if (creditsStartRatio != null) {
                                     val creditsStartX = creditsStartRatio * sliderWidth
-                                    val creditsWidth = sliderWidth - creditsStartX
-                                    if (creditsStartX < sliderWidth && creditsWidth > 0) {
+                                    if (creditsStartX < sliderWidth && creditsStartX > 0) {
+                                        val creditsColor = if (creditsStartX < progressX) watchedOrange else unwatchedOrange
                                         drawRoundRect(
-                                            color = Color(0xFFFF9800),
+                                            color = creditsColor,
                                             topLeft = Offset(creditsStartX, trackTop),
-                                            size = Size(creditsWidth.coerceAtLeast(0f), trackHeight),
-                                            cornerRadius = CornerRadius(2.dp.toPx(), cornerRadius),
-                                            blendMode = BlendMode.Multiply
+                                            size = Size((sliderWidth - creditsStartX).coerceAtLeast(0f), trackHeight),
+                                            cornerRadius = CornerRadius(cornerRadius, cornerRadius)
                                         )
                                     }
                                 }
