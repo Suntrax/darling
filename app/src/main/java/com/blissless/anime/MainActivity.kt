@@ -43,6 +43,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -56,6 +57,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.Job
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -510,6 +512,7 @@ fun MainScreen(
     var currentEpisode by remember { mutableIntStateOf(0) }
     var totalEpisodes by remember { mutableIntStateOf(0) }
     var isLoadingStream by remember { mutableStateOf(false) }
+    var loadingJob by remember { mutableStateOf<Job?>(null) }
     var streamError by remember { mutableStateOf<String?>(null) }
 
     var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
@@ -661,7 +664,7 @@ fun MainScreen(
         }
 
         isLoadingStream = true
-        scope.launch {
+        loadingJob = scope.launch {
             val latestAired = anime.latestEpisode ?: anime.totalEpisodes
 
             val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), episode, anime.id, latestAired)
@@ -810,7 +813,7 @@ fun MainScreen(
                     }
                 } else {
                     isLoadingStream = true
-                    scope.launch {
+                    loadingJob = scope.launch {
                         val latestAired = anime.latestEpisode ?: anime.totalEpisodes
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
@@ -924,7 +927,7 @@ fun MainScreen(
                     }
                 } else {
                     isLoadingStream = true
-                    scope.launch {
+                    loadingJob = scope.launch {
                         val latestAired = anime.latestEpisode ?: anime.totalEpisodes
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
@@ -1035,7 +1038,7 @@ fun MainScreen(
 
             isLoadingStream = true
             isManualServerChange = true
-            scope.launch {
+            loadingJob = scope.launch {
                 val result = viewModel.getStreamForServer(
                     getScrapingName(anime),
                     currentEpisode,
@@ -1817,6 +1820,16 @@ fun MainScreen(
                             CircularProgressIndicator()
                             Spacer(modifier = Modifier.height(16.dp))
                             Text("Loading stream...", color = Color.White)
+                            Spacer(modifier = Modifier.height(24.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    loadingJob?.cancel()
+                                    isLoadingStream = false
+                                    loadingJob = null
+                                }
+                            ) {
+                                Text("Cancel")
+                            }
                         }
                     }
                 }
@@ -1833,7 +1846,7 @@ fun MainScreen(
                         .navigationBarsPadding()
                         .offset(y = (-16).dp)
                 ) {
-                    if (!hideNavbar) {
+                    if (!hideNavbar && !isLoadingStream) {
                         Surface(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
