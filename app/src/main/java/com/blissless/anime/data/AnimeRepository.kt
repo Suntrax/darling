@@ -2,6 +2,7 @@ package com.blissless.anime.data
 
 import com.blissless.anime.BuildConfig
 import com.blissless.anime.api.miruro.MiruroService
+import com.blissless.anime.api.miruro.MiruroEpisodeInfo
 import com.blissless.anime.stream.scrapers.aniwatch.AniwatchService
 import com.blissless.anime.data.models.AiringScheduleEntry
 import com.blissless.anime.data.models.AiringScheduleResponse
@@ -1076,13 +1077,16 @@ class AnimeRepository(
     // Stream Operations
     // ============================================
 
+    typealias ServerAttemptCallback = (serverName: String, category: String, isFallback: Boolean, failed: Boolean) -> Unit
+
     suspend fun tryAllServersWithFallback(
         animeName: String,
         episodeNumber: Int,
         animeId: Int,
         latestAiredEpisode: Int = Int.MAX_VALUE,
         preferredCategory: String,
-        englishTitle: String? = null
+        englishTitle: String? = null,
+        onServerAttempt: (String, String, Boolean) -> Unit = { _, _, _ -> }
     ): StreamFetchResult = withContext(Dispatchers.IO) {
         val key = "${animeId}_$episodeNumber"
 
@@ -1102,11 +1106,26 @@ class AnimeRepository(
         val epInfo = AniwatchService.getEpisodeInfo(animeName, episodeNumber) ?: return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
         cacheManager.cacheEpisodeInfo(key, epInfo)
 
-        val preferredServers = if (preferredCategory == "dub") epInfo.dubServers else epInfo.subServers
-        val fallbackServers = if (preferredCategory == "dub") epInfo.subServers else epInfo.dubServers
+        val subServers = epInfo.subServers
+        val dubServers = epInfo.dubServers
+        val preferredServers = if (preferredCategory == "dub") dubServers else subServers
+        val fallbackServers = if (preferredCategory == "dub") subServers else dubServers
         val fallbackCategory = if (preferredCategory == "dub") "sub" else "dub"
 
-        for (server in preferredServers) {
+        android.util.Log.d("REPO_DEBUG", "=== REPO tryAllServersWithFallback ===")
+        android.util.Log.d("REPO_DEBUG", "preferredCategory=$preferredCategory")
+        android.util.Log.d("REPO_DEBUG", "subServers (${subServers.size}): ${subServers.joinToString { it.name }}")
+        android.util.Log.d("REPO_DEBUG", "dubServers (${dubServers.size}): ${dubServers.joinToString { it.name }}")
+        android.util.Log.d("REPO_DEBUG", "preferredServers (${preferredServers.size}): ${preferredServers.joinToString { it.name }}")
+        android.util.Log.d("REPO_DEBUG", "fallbackServers (${fallbackServers.size}): ${fallbackServers.joinToString { it.name }}")
+
+        // Try all preferred servers first, then all fallback servers
+        // sub selected: sub1 -> sub2 -> dub1 -> dub2
+        // dub selected: dub1 -> dub2 -> sub1 -> sub2
+        android.util.Log.d("REPO_DEBUG", "Trying preferredCategory=$preferredCategory first, then fallback")
+        for ((i, server) in preferredServers.withIndex()) {
+            android.util.Log.d("REPO_DEBUG", "Trying preferred server ${i+1}: ${server.name}")
+            onServerAttempt(server.name, preferredCategory, false)
             val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, preferredCategory)
             if (result != null) {
                 cacheManager.cacheStream(key, result)
@@ -1114,7 +1133,11 @@ class AnimeRepository(
             }
         }
 
-        for (server in fallbackServers) {
+        // Then try all fallback servers
+        android.util.Log.d("REPO_DEBUG", "All preferred servers failed, trying fallbackCategory=$fallbackCategory")
+        for ((i, server) in fallbackServers.withIndex()) {
+            android.util.Log.d("REPO_DEBUG", "Trying fallback server ${i+1}: ${server.name}")
+            onServerAttempt(server.name, fallbackCategory, true)
             val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, fallbackCategory)
             if (result != null) {
                 cacheManager.cacheStream(key, result)
@@ -1158,7 +1181,7 @@ class AnimeRepository(
     // Miruro Operations (Episode Details)
     // ============================================
 
-    private val miruroService = MiruroService()
+    private val miruroService = MiruroService
 
     suspend fun fetchMiruroEpisodes(
         animeId: Int,
@@ -1167,7 +1190,7 @@ class AnimeRepository(
         try {
             val miruroEpisodes = miruroService.getAnimeEpisodes(animeId) ?: return@withContext emptyList()
             
-            val episodes = miruroEpisodes.episodes.map { miruroEp ->
+            val episodes = miruroEpisodes.episodes.map { miruroEp: MiruroEpisodeInfo ->
                 val hasAired = latestAiredEpisode == Int.MAX_VALUE || miruroEp.number <= latestAiredEpisode
                 
                 TmdbEpisode(

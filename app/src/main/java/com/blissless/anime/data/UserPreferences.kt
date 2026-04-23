@@ -42,6 +42,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_ANILIST_FAVORITES = "anilist_favorites"
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
         private const val KEY_HIDE_ADULT_CONTENT = "hide_adult_content"
+        private const val KEY_STREAM_PROVIDER = "stream_provider"
         private const val KEY_STARTUP_SCREEN = "startup_screen"
         private const val KEY_BUFFER_AHEAD_SECONDS = "buffer_ahead_seconds"
         private const val KEY_BUFFER_SIZE_MB = "buffer_size_mb"
@@ -119,6 +120,10 @@ class UserPreferences(private val context: Context) {
     // Hide Adult Content
     private val _hideAdultContent = MutableStateFlow(false)
     val hideAdultContent: StateFlow<Boolean> = _hideAdultContent.asStateFlow()
+
+    // Stream Provider (1 = Miruro, 2 = Animekai)
+    private val _streamProvider = MutableStateFlow(1)
+    val streamProvider: StateFlow<Int> = _streamProvider.asStateFlow()
 
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
@@ -221,6 +226,7 @@ class UserPreferences(private val context: Context) {
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
+        _streamProvider.value = sharedPreferences.getInt(KEY_STREAM_PROVIDER, 1)
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
         _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 60)
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
@@ -355,6 +361,11 @@ class UserPreferences(private val context: Context) {
     fun setHideAdultContent(enabled: Boolean) {
         _hideAdultContent.value = enabled
         sharedPreferences.edit { putBoolean(KEY_HIDE_ADULT_CONTENT, enabled) }
+    }
+
+    fun setStreamProvider(provider: Int) {
+        _streamProvider.value = provider
+        sharedPreferences.edit { putInt(KEY_STREAM_PROVIDER, provider) }
     }
 
     fun setStartupScreen(screen: Int) {

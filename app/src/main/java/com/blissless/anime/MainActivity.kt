@@ -35,6 +35,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -465,9 +466,10 @@ fun MainScreen(
 
     LaunchedEffect(currentlyWatching) {
         if (currentlyWatching.isNotEmpty()) {
-            currentlyWatching.take(3).forEach { anime ->
-                viewModel.prefetchCurrentEpisodeStream(anime)
-            }
+            // Auto-prefetch disabled for now
+            // currentlyWatching.take(3).forEach { anime ->
+            //     viewModel.prefetchCurrentEpisodeStream(anime)
+            // }
         }
     }
 
@@ -514,6 +516,8 @@ fun MainScreen(
     var isLoadingStream by remember { mutableStateOf(false) }
     var loadingJob by remember { mutableStateOf<Job?>(null) }
     var streamError by remember { mutableStateOf<String?>(null) }
+    var currentServerAttempt by remember { mutableStateOf<String?>(null) }
+    var currentServerAttemptIsFallback by remember { mutableStateOf(false) }
 
     var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
     var currentEpisodeTitle by remember { mutableStateOf<String?>(null) }
@@ -664,15 +668,28 @@ fun MainScreen(
         }
 
         isLoadingStream = true
+        currentServerAttempt = null
+        currentServerAttemptIsFallback = false
         loadingJob = scope.launch {
             val latestAired = anime.latestEpisode ?: anime.totalEpisodes
 
             val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), episode, anime.id, latestAired)
             currentEpisodeInfo = epInfo
 
-            val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), episode, anime.id, latestAired)
+            val result = viewModel.tryAllServersWithFallback(
+                getScrapingName(anime),
+                episode,
+                anime.id,
+                latestAired,
+                preferredCategory = preferredCategory,
+                onServerAttempt = { serverName, category, isFallback ->
+                    currentServerAttempt = serverName
+                    currentServerAttemptIsFallback = isFallback
+                }
+            )
 
             if (result.stream != null) {
+                streamError = null
                 currentVideoUrl = result.stream.url
                 currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
                 currentSubtitleUrl = result.stream.subtitleUrl
@@ -705,7 +722,7 @@ fun MainScreen(
                     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                 }
             } else {
-                streamError = "Could not find stream for ${anime.title} episode $episode"
+                streamError = "Stream not found: Ep $episode"
             }
 
             isLoadingStream = false
@@ -813,13 +830,23 @@ fun MainScreen(
                     }
                 } else {
                     isLoadingStream = true
+                    currentServerAttempt = null
+                    currentServerAttemptIsFallback = false
                     loadingJob = scope.launch {
                         val latestAired = anime.latestEpisode ?: anime.totalEpisodes
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), prevEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
 
-                        val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), prevEp, anime.id, latestAired)
+                        val result = viewModel.tryAllServersWithFallback(
+                            getScrapingName(anime), prevEp, anime.id, latestAired,
+                            preferredCategory = preferredCategory,
+                            onServerAttempt = { serverName, category, isFallback ->
+                                currentServerAttempt = serverName
+                                currentServerAttemptIsFallback = isFallback
+                            }
+                        )
                         if (result.stream != null) {
+                            streamError = null
                             savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, prevEp)
                             currentVideoUrl = result.stream.url
                             currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
@@ -927,13 +954,23 @@ fun MainScreen(
                     }
                 } else {
                     isLoadingStream = true
+                    currentServerAttempt = null
+                    currentServerAttemptIsFallback = false
                     loadingJob = scope.launch {
                         val latestAired = anime.latestEpisode ?: anime.totalEpisodes
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
 
-                        val result = viewModel.tryAllServersWithFallback(getScrapingName(anime), nextEp, anime.id, latestAired)
+                        val result = viewModel.tryAllServersWithFallback(
+                            getScrapingName(anime), nextEp, anime.id, latestAired,
+                            preferredCategory = preferredCategory,
+                            onServerAttempt = { serverName, category, isFallback ->
+                                currentServerAttempt = serverName
+                                currentServerAttemptIsFallback = isFallback
+                            }
+                        )
                         if (result.stream != null) {
+                            streamError = null
                             savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
                             currentVideoUrl = result.stream.url
                             currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
@@ -997,7 +1034,8 @@ fun MainScreen(
 
             // Find the server in the list to verify it exists
             val servers = if (category == "sub") cachedEpInfo.subServers else cachedEpInfo.dubServers
-            val serverExists = servers.any { it.name == serverName }
+            val selectedServer = servers?.find { it.name == serverName }
+            val serverExists = selectedServer != null
 
             if (!serverExists) {
                 // Try the other category
@@ -1008,6 +1046,8 @@ fun MainScreen(
                     return@let
                 }
             }
+
+            val serverUrl = selectedServer?.url ?: servers?.find { it.name == serverName }?.url
 
             val cachedStream = viewModel.getCachedStreamImmediate(anime.id, currentEpisode, category)
 
@@ -1044,9 +1084,11 @@ fun MainScreen(
                     currentEpisode,
                     serverName,
                     category,
-                    anime.id
+                    anime.id,
+                    serverUrl
                 )
                 if (result != null) {
+                    streamError = null
                     currentVideoUrl = result.url
                     currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
                     currentSubtitleUrl = result.subtitleUrl
@@ -1820,6 +1862,14 @@ fun MainScreen(
                             CircularProgressIndicator()
                             Spacer(modifier = Modifier.height(16.dp))
                             Text("Loading stream...", color = Color.White)
+                            if (currentServerAttempt != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (currentServerAttemptIsFallback) "Trying $currentServerAttempt (fallback)..." else "Trying $currentServerAttempt...",
+                                    color = Color.Yellow,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                             Spacer(modifier = Modifier.height(24.dp))
                             OutlinedButton(
                                 onClick = {
@@ -1960,27 +2010,43 @@ fun MainScreen(
                     }
                 }
 
-                streamError?.let { error ->
+streamError?.let { error ->
                     LaunchedEffect(error) {
-                        delay(5000)
+                        delay(3500)
                         streamError = null
                     }
 
                     AlertDialog(
                         onDismissRequest = { streamError = null },
-                        title = { 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Stream Error", modifier = Modifier.weight(1f))
-                                IconButton(onClick = { streamError = null }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Close")
-                                }
-                            }
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(28.dp)
+                            )
                         },
-                        text = { Text(error) },
-                        confirmButton = { TextButton(onClick = { streamError = null }) { Text("OK") } }
+                        title = { 
+                            Text(
+                                text = "Stream Error",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        text = { 
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 3,
+                                modifier = Modifier.width(250.dp)
+                            )
+                        },
+                        confirmButton = { 
+                            TextButton(onClick = { streamError = null }) {
+                                Text("OK", fontWeight = FontWeight.Bold)
+                            }
+},
+                        dismissButton = null
                     )
                 }
             }

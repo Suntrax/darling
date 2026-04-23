@@ -1050,8 +1050,15 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         onDismissRequest = { showServerMenu = false },
                                         modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                     ) {
+                                        Text(
+                                            text = "${currentServerName.uppercase()} (${currentCategory.uppercase()})",
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
                                         if (subServers.isNotEmpty()) {
-                                            Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                            Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
                                             subServers.forEach { server ->
                                                 ServerSelectorButton(
                                                     serverName = server.name,
@@ -1065,7 +1072,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         }
                                         if (dubServers.isNotEmpty()) {
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                            Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
                                             dubServers.forEach { server ->
                                                 ServerSelectorButton(
                                                     serverName = server.name,
@@ -1076,53 +1083,6 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                                     }
                                                 )
                                             }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Quality selector
-                            Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                                if (qualityOptions.isNotEmpty() && onQualityChange != null) {
-                                    IconButton(
-                                        onClick = { showQualityMenu = true },
-                                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                                    ) {
-                                        Icon(Icons.Default.Hd, "Quality", tint = Color.White)
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showQualityMenu,
-                                        onDismissRequest = { showQualityMenu = false },
-                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(140.dp)
-                                    ) {
-                                        Text(
-                                            "QUALITY",
-                                            color = Color.Gray,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
-                                        QualitySelectorButton(
-                                            qualityName = "Auto",
-                                            isSelected = selectedQuality == "Auto",
-                                            onClick = {
-                                                if (selectedQuality != "Auto") {
-                                                    handleQualityChange(videoUrl, "Auto")
-                                                }
-                                                showQualityMenu = false
-                                            }
-                                        )
-                                        qualityOptions.forEach { quality ->
-                                            QualitySelectorButton(
-                                                qualityName = quality.quality,
-                                                isSelected = selectedQuality == quality.quality,
-                                                onClick = {
-                                                    if (selectedQuality != quality.quality) {
-                                                        handleQualityChange(quality.url, quality.quality)
-                                                    }
-                                                    showQualityMenu = false
-                                                }
-                                            )
                                         }
                                     }
                                 }

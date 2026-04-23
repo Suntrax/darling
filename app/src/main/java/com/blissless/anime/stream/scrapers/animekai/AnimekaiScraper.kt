@@ -820,21 +820,36 @@ object AnimekaiScraper {
     suspend fun getStreamWithFallback(
         animeName: String,
         episodeNumber: Int,
-        preferredCategory: String = "sub"
-    ): AnimekaiStreamResult? = withContext(Dispatchers.IO) {
+        preferredCategory: String = "sub",
+        onServerAttempt: (String, Boolean) -> Unit = { _, _ -> }
+): AnimekaiStreamResult? = withContext(Dispatchers.IO) {
 
         val episodeInfo = getEpisodeInfo(animeName, episodeNumber)
         if (episodeInfo == null) {
+            android.util.Log.d("ANIMEKAI_DEBUG", "No episode info found, returning null")
             return@withContext null
         }
 
-        val preferredServers = if (preferredCategory == "dub") episodeInfo.dubServers else episodeInfo.subServers
-        val fallbackServers = if (preferredCategory == "dub") episodeInfo.subServers else episodeInfo.dubServers
+        val subServers = episodeInfo.subServers
+        val dubServers = episodeInfo.dubServers
+        val preferredServers = if (preferredCategory == "dub") dubServers else subServers
+        val fallbackServers = if (preferredCategory == "dub") subServers else dubServers
         val fallbackCategory = if (preferredCategory == "dub") "sub" else "dub"
 
+        android.util.Log.d("ANIMEKAI_DEBUG", "=== ANIMEKAI getStreamWithFallback ===")
+        android.util.Log.d("ANIMEKAI_DEBUG", "preferredCategory=$preferredCategory")
+        android.util.Log.d("ANIMEKAI_DEBUG", "subServers (${subServers.size}): ${subServers.joinToString { it.name }}")
+        android.util.Log.d("ANIMEKAI_DEBUG", "dubServers (${dubServers.size}): ${dubServers.joinToString { it.name }}")
+        android.util.Log.d("ANIMEKAI_DEBUG", "preferredServers (${preferredServers.size}): ${preferredServers.joinToString { it.name }}")
+        android.util.Log.d("ANIMEKAI_DEBUG", "fallbackServers (${fallbackServers.size}): ${fallbackServers.joinToString { it.name }}")
 
-        // Try ALL preferred servers
-        for ((index, server) in preferredServers.withIndex()) {
+// Try all preferred servers first, then all fallback servers
+        // sub selected: sub1 -> sub2 -> dub1 -> dub2
+        // dub selected: dub1 -> dub2 -> sub1 -> sub2
+        android.util.Log.d("ANIMEKAI_DEBUG", "Trying preferredCategory=$preferredCategory first, then fallback")
+        for ((i, server) in preferredServers.withIndex()) {
+            android.util.Log.d("ANIMEKAI_DEBUG", "Trying preferred server ${i+1}: ${server.name}")
+            onServerAttempt(server.name, false)
 
             val result = resolveStreamWithTimestamps(server.url, server.name)
             if (result != null && result.url != null) {
@@ -852,8 +867,11 @@ object AnimekaiScraper {
             }
         }
 
-        // Try ALL fallback servers
-        for ((index, server) in fallbackServers.withIndex()) {
+        // Then try all fallback servers
+        android.util.Log.d("ANIMEKAI_DEBUG", "All preferred servers failed, trying fallbackCategory=$fallbackCategory")
+        for ((i, server) in fallbackServers.withIndex()) {
+            android.util.Log.d("ANIMEKAI_DEBUG", "Trying fallback server ${i+1}: ${server.name}")
+            onServerAttempt(server.name, true)
 
             val result = resolveStreamWithTimestamps(server.url, server.name)
             if (result != null && result.url != null) {
@@ -868,7 +886,7 @@ object AnimekaiScraper {
                     outroStart = result.outroStart,
                     outroEnd = result.outroEnd
                 )
-            }
+}
         }
 
         null
