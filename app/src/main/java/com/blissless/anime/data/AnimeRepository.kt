@@ -63,6 +63,9 @@ class AnimeRepository(
     companion object {
         private const val TAG = "AnimeRepository"
         private val CLIENT_IDS = listOf(BuildConfig.CLIENT_ID_ANILIST, BuildConfig.CLIENT_ID_ANILIST2)
+
+        // Use all available providers (validated by HTTP check in MiruroService)
+        val PRIORITY_PROVIDERS = emptyList<String>()
     }
 
     private val json = Json {
@@ -1108,40 +1111,71 @@ class AnimeRepository(
 
         val subServers = epInfo.subServers
         val dubServers = epInfo.dubServers
-        val preferredServers = if (preferredCategory == "dub") dubServers else subServers
-        val fallbackServers = if (preferredCategory == "dub") subServers else dubServers
+
+        // Filter to only priority providers (arc, zoro, kiwi) and sort by priority order
+        val prioritySubServers = subServers
+            .filter { PRIORITY_PROVIDERS.contains(it.name) }
+            .sortedBy { server -> PRIORITY_PROVIDERS.indexOf(server.name).let { if (it >= 0) it else Int.MAX_VALUE } }
+
+        val priorityDubServers = dubServers
+            .filter { PRIORITY_PROVIDERS.contains(it.name) }
+            .sortedBy { server -> PRIORITY_PROVIDERS.indexOf(server.name).let { if (it >= 0) it else Int.MAX_VALUE } }
+
+        // Also get fallback servers (non-priority) for backup
+        val fallbackSubServers = subServers.filter { !PRIORITY_PROVIDERS.contains(it.name) }
+        val fallbackDubServers = dubServers.filter { !PRIORITY_PROVIDERS.contains(it.name) }
+
+        val preferredServers = if (preferredCategory == "dub") priorityDubServers else prioritySubServers
+        val fallbackServers = if (preferredCategory == "dub") prioritySubServers else priorityDubServers
         val fallbackCategory = if (preferredCategory == "dub") "sub" else "dub"
 
-        android.util.Log.d("REPO_DEBUG", "=== REPO tryAllServersWithFallback ===")
+        android.util.Log.d("REPO_DEBUG", "=== REPO tryAllServersWithFallback (Priority: arc, zoro, kiwi) ===")
         android.util.Log.d("REPO_DEBUG", "preferredCategory=$preferredCategory")
-        android.util.Log.d("REPO_DEBUG", "subServers (${subServers.size}): ${subServers.joinToString { it.name }}")
-        android.util.Log.d("REPO_DEBUG", "dubServers (${dubServers.size}): ${dubServers.joinToString { it.name }}")
-        android.util.Log.d("REPO_DEBUG", "preferredServers (${preferredServers.size}): ${preferredServers.joinToString { it.name }}")
-        android.util.Log.d("REPO_DEBUG", "fallbackServers (${fallbackServers.size}): ${fallbackServers.joinToString { it.name }}")
+        android.util.Log.d("REPO_DEBUG", "prioritySubServers (${prioritySubServers.size}): ${prioritySubServers.joinToString { it.name }}")
+        android.util.Log.d("REPO_DEBUG", "priorityDubServers (${priorityDubServers.size}): ${priorityDubServers.joinToString { it.name }}")
 
-        // Try all preferred servers first, then all fallback servers
-        // sub selected: sub1 -> sub2 -> dub1 -> dub2
-        // dub selected: dub1 -> dub2 -> sub1 -> sub2
-        android.util.Log.d("REPO_DEBUG", "Trying preferredCategory=$preferredCategory first, then fallback")
-        for ((i, server) in preferredServers.withIndex()) {
-            android.util.Log.d("REPO_DEBUG", "Trying preferred server ${i+1}: ${server.name}")
-            onServerAttempt(server.name, preferredCategory, false)
-            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, preferredCategory)
+        // Try priority providers first (arc, zoro, kiwi in order)
+        for ((i, server) in prioritySubServers.withIndex()) {
+            android.util.Log.d("REPO_DEBUG", "Trying priority sub server ${i+1}: ${server.name}")
+            onServerAttempt(server.name, "sub", false)
+            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, "sub")
             if (result != null) {
                 cacheManager.cacheStream(key, result)
-                return@withContext StreamFetchResult(result, false, preferredCategory, preferredCategory)
+                return@withContext StreamFetchResult(result, false, preferredCategory, "sub")
             }
         }
 
-        // Then try all fallback servers
-        android.util.Log.d("REPO_DEBUG", "All preferred servers failed, trying fallbackCategory=$fallbackCategory")
+        // Try priority dub servers
+        for ((i, server) in priorityDubServers.withIndex()) {
+            android.util.Log.d("REPO_DEBUG", "Trying priority dub server ${i+1}: ${server.name}")
+            onServerAttempt(server.name, "dub", false)
+            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, "dub")
+            if (result != null) {
+                cacheManager.cacheStream(key, result)
+                return@withContext StreamFetchResult(result, preferredCategory == "dub", preferredCategory, "dub")
+            }
+        }
+
+        // Then try fallback category with priority providers
         for ((i, server) in fallbackServers.withIndex()) {
-            android.util.Log.d("REPO_DEBUG", "Trying fallback server ${i+1}: ${server.name}")
+            android.util.Log.d("REPO_DEBUG", "Trying fallback category server ${i+1}: ${server.name}")
             onServerAttempt(server.name, fallbackCategory, true)
             val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, fallbackCategory)
             if (result != null) {
                 cacheManager.cacheStream(key, result)
                 return@withContext StreamFetchResult(result, true, preferredCategory, fallbackCategory)
+            }
+        }
+
+        // Try non-priority (fallback) providers as last resort
+        val allFallbackServers = if (preferredCategory == "dub") fallbackDubServers else fallbackSubServers
+        for ((i, server) in allFallbackServers.withIndex()) {
+            android.util.Log.d("REPO_DEBUG", "Trying fallback provider ${i+1}: ${server.name}")
+            onServerAttempt(server.name, preferredCategory, true)
+            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, preferredCategory)
+            if (result != null) {
+                cacheManager.cacheStream(key, result)
+                return@withContext StreamFetchResult(result, true, preferredCategory, preferredCategory)
             }
         }
 

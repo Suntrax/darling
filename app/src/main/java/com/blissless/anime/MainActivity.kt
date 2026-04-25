@@ -38,7 +38,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -75,6 +77,7 @@ import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.toDetailedAnimeData
@@ -87,6 +90,7 @@ import com.blissless.anime.ui.screens.home.HomeScreen
 import com.blissless.anime.ui.screens.player.PlayerScreen
 import com.blissless.anime.ui.screens.airing.ScheduleScreen
 import com.blissless.anime.ui.screens.settings.SettingsScreen
+import com.blissless.anime.ui.screens.status.StatusListScreen
 import com.blissless.anime.ui.screens.character.StaffScreen
 import com.blissless.anime.ui.screens.relations.AllRelationsScreen
 import com.blissless.anime.ui.theme.AppTheme
@@ -530,6 +534,7 @@ fun MainScreen(
     var actualCategory by remember { mutableStateOf("sub") }
     var isManualServerChange by remember { mutableStateOf(false) }
     var isChangingEpisode by remember { mutableStateOf(false) }
+    var episodeTrigger by remember { mutableIntStateOf(0) }
 
     // Quality state
     var currentQualityOptions by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
@@ -557,6 +562,16 @@ fun MainScreen(
     var animekaiOutroStart by remember { mutableStateOf<Int?>(null) }
     var animekaiOutroEnd by remember { mutableStateOf<Int?>(null) }
 
+    var showStatusListScreen by remember { mutableStateOf(false) }
+    var statusListTitle by remember { mutableStateOf("") }
+    var statusListType by remember { mutableStateOf("") }
+    var statusListIcon by remember { mutableStateOf<ImageVector?>(null) }
+    var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
+
+    var selectedAnimeState by remember { mutableStateOf<AnimeMedia?>(null) }
+    var showDetailedAnimeScreen by remember { mutableStateOf(false) }
+    var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
+
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
@@ -564,6 +579,16 @@ fun MainScreen(
         completed.forEach { map[it.id] = "COMPLETED" }
         onHold.forEach { map[it.id] = "PAUSED" }
         dropped.forEach { map[it.id] = "DROPPED" }
+        map
+    }
+
+    val animeProgressMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        val map = mutableMapOf<Int, Int>()
+        currentlyWatching.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        planningToWatch.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        completed.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        onHold.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        dropped.forEach { if (it.progress > 0) map[it.id] = it.progress }
         map
     }
 
@@ -690,6 +715,7 @@ fun MainScreen(
 
             if (result.stream != null) {
                 streamError = null
+                android.util.Log.d("STREAM_URL", ">>> PREV EP URL: ${result.stream.url}")
                 currentVideoUrl = result.stream.url
                 currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
                 currentSubtitleUrl = result.stream.subtitleUrl
@@ -912,7 +938,10 @@ fun MainScreen(
 
                 if (cachedStream != null) {
                     savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
+                    android.util.Log.d("NEXT_DEBUG", ">>> CACHE HIT - STREAM M3U8 URL: ${cachedStream.url}")
                     currentVideoUrl = cachedStream.url
+                    episodeTrigger++
+                    android.util.Log.d("NEXT_DEBUG", ">>> episodeTrigger incremented to: $episodeTrigger")
                     currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
                     currentSubtitleUrl = cachedStream.subtitleUrl
                     currentEpisode = nextEp
@@ -958,57 +987,78 @@ fun MainScreen(
                     currentServerAttemptIsFallback = false
                     loadingJob = scope.launch {
                         val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                        
+                        // Get episode info from cache or fetch it
                         val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
                         currentEpisodeInfo = epInfo
-
-                        val result = viewModel.tryAllServersWithFallback(
-                            getScrapingName(anime), nextEp, anime.id, latestAired,
-                            preferredCategory = preferredCategory,
-                            onServerAttempt = { serverName, category, isFallback ->
-                                currentServerAttempt = serverName
-                                currentServerAttemptIsFallback = isFallback
-                            }
-                        )
-                        if (result.stream != null) {
-                            streamError = null
-                            savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
-                            currentVideoUrl = result.stream.url
-                            currentReferer = result.stream.headers?.get("Referer") ?: "https://megacloud.tv/"
-                            currentSubtitleUrl = result.stream.subtitleUrl
-                            currentEpisode = nextEp
-                            currentServerName = result.stream.serverName
-                            currentCategory = result.actualCategory
-                            currentServerIndex = 0
-
-                            isFallbackStream = result.isFallback
-                            requestedCategory = result.requestedCategory
-                            actualCategory = result.actualCategory
-
-                            currentQualityOptions = result.stream.qualities
-                            currentQuality = "Auto"
-
-                            animekaiIntroStart = result.stream.introStart
-                            animekaiIntroEnd = result.stream.introEnd
-                            animekaiOutroStart = result.stream.outroStart
-                            animekaiOutroEnd = result.stream.outroEnd
-
-                            viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
-                            currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
-                            isChangingEpisode = false
-
-                            if (result.isFallback) {
-                                val message = if (result.requestedCategory == "dub") {
-                                    "Dub not available, playing sub"
-                                } else {
-                                    "Sub not available, playing dub"
+                        
+                        if (epInfo != null) {
+                            val servers = if (preferredCategory == "sub") epInfo.subServers else epInfo.dubServers
+                            
+                            // Try each server in order
+                            var foundStream: AniwatchStreamResult? = null
+                            for (server in servers) {
+                                val watchPath = server.url
+                                val providerName = server.name
+                                android.util.Log.d("NEXT_DEBUG", ">>> Trying watchPath: $watchPath")
+                                
+                                val miruroResult = com.blissless.anime.api.miruro.MiruroService.getStreamFromPath(watchPath, preferredCategory, providerName)
+                                if (miruroResult != null) {
+                                    foundStream = AniwatchStreamResult(
+                                        url = miruroResult.url,
+                                        headers = miruroResult.headers,
+                                        serverName = providerName,
+                                        category = preferredCategory,
+                                        qualities = miruroResult.qualities,
+                                        introStart = miruroResult.introStart,
+                                        introEnd = miruroResult.introEnd,
+                                        outroStart = miruroResult.outroStart,
+                                        outroEnd = miruroResult.outroEnd,
+                                        subtitleUrl = miruroResult.subtitleUrl
+                                    )
+                                    break
                                 }
-                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                            
+                            if (foundStream != null) {
+                                streamError = null
+                                savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
+                                android.util.Log.d("NEXT_DEBUG", ">>> STREAM M3U8 URL: ${foundStream.url}")
+                                currentVideoUrl = foundStream.url
+                                episodeTrigger++
+                                currentReferer = foundStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                                currentSubtitleUrl = foundStream.subtitleUrl
+                                currentEpisode = nextEp
+                                currentServerName = foundStream.serverName
+                                currentCategory = preferredCategory
+                                currentServerIndex = 0
+
+                                isFallbackStream = false
+                                requestedCategory = preferredCategory
+                                actualCategory = preferredCategory
+
+                                currentQualityOptions = foundStream.qualities
+                                currentQuality = "Auto"
+
+                                animekaiIntroStart = foundStream.introStart
+                                animekaiIntroEnd = foundStream.introEnd
+                                animekaiOutroStart = foundStream.outroStart
+                                animekaiOutroEnd = foundStream.outroEnd
+
+                                currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
+                                isChangingEpisode = false
+                                isLoadingStream = false
+                            } else {
+                                android.util.Log.d("NEXT_DEBUG", ">>> NO STREAM FOUND for ep=$nextEp")
+                                streamError = "Could not find stream for episode $nextEp"
+                                isChangingEpisode = false
+                                isLoadingStream = false
                             }
                         } else {
-                            streamError = "Could not find stream for episode $nextEp"
+                            streamError = "Could not get episode info for $nextEp"
                             isChangingEpisode = false
+                            isLoadingStream = false
                         }
-                        isLoadingStream = false
                     }
                 }
             }
@@ -1049,33 +1099,6 @@ fun MainScreen(
 
             val serverUrl = selectedServer?.url ?: servers?.find { it.name == serverName }?.url
 
-            val cachedStream = viewModel.getCachedStreamImmediate(anime.id, currentEpisode, category)
-
-            if (cachedStream != null && cachedStream.serverName == serverName) {
-                currentVideoUrl = cachedStream.url
-                currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
-                currentSubtitleUrl = cachedStream.subtitleUrl
-                currentServerName = cachedStream.serverName
-                currentCategory = cachedStream.category
-                requestedCategory = category
-                actualCategory = cachedStream.category
-                isFallbackStream = cachedStream.category != category
-
-                currentQualityOptions = cachedStream.qualities.map {
-                    QualityOption(quality = it.quality, url = it.url, width = it.width)
-                }
-                currentQuality = "Auto"
-
-                // Extract Animekai timestamps from CachedStream (PRIMARY)
-                animekaiIntroStart = cachedStream.introStart
-                animekaiIntroEnd = cachedStream.introEnd
-                animekaiOutroStart = cachedStream.outroStart
-                animekaiOutroEnd = cachedStream.outroEnd
-
-                currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
-                return@let
-            }
-
             isLoadingStream = true
             isManualServerChange = true
             loadingJob = scope.launch {
@@ -1094,6 +1117,14 @@ fun MainScreen(
                     currentSubtitleUrl = result.subtitleUrl
                     currentServerName = result.serverName
                     currentCategory = result.category
+                    
+                    // Re-fetch saved position for new provider (handles seek position)
+                    // For kiwi provider, always start from beginning (position 0) as seek doesn't work
+                    savedPlaybackPosition = if (serverName == "kiwi") {
+                        0L
+                    } else {
+                        viewModel.getPlaybackPosition(anime.id, currentEpisode)
+                    }
 
                     currentQualityOptions = result.qualities
                     currentQuality = "Auto"
@@ -1104,6 +1135,7 @@ fun MainScreen(
                     animekaiOutroStart = result.outroStart
                     animekaiOutroEnd = result.outroEnd
 
+                    // Update server index to reflect actual server used
                     val servers = if (category == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
                     currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
 
@@ -1111,6 +1143,7 @@ fun MainScreen(
                     actualCategory = result.category
                     isFallbackStream = result.category != category
                 } else {
+                    currentServerIndex = 0
                     Toast.makeText(context, "Failed to load $serverName", Toast.LENGTH_SHORT).show()
                 }
                 isLoadingStream = false
@@ -1146,6 +1179,40 @@ fun MainScreen(
         }
     }
 
+    fun autoTryNextServer() {
+        val servers = if (currentCategory == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
+        
+        if (servers == null || servers.size <= 1) {
+            onPlaybackError()
+            return
+        }
+        
+        // Try each server in sequence until one works or we've tried all
+        var triedIndex = currentServerIndex
+        var foundWorking = false
+        
+        for (i in 1..servers.size) {
+            triedIndex = (triedIndex + 1) % servers.size
+            val nextServer = servers[triedIndex]
+            
+            android.util.Log.d("AUTO_SERVER", ">>> Trying server: ${nextServer.name} (index $triedIndex)")
+            
+            // Update current server index immediately
+            currentServerIndex = triedIndex
+            
+            // Try this server
+            changeServer(nextServer.name, currentCategory)
+            
+            // If this is the last server, don't try more
+            if (triedIndex == currentServerIndex && i == servers.size - 1) {
+                break
+            }
+            
+            // Return early - changeServer will handle loading and we'll try next on error
+            return
+        }
+    }
+
     val exploreDialog = overlayState as? OverlayState.ExploreAnimeDialog
     if (exploreDialog != null) {
         val isAnimeFavorite = aniListFavoriteIds.contains(exploreDialog.anime.id)
@@ -1154,6 +1221,7 @@ fun MainScreen(
             viewModel = viewModel,
             isOled = isOled,
             currentStatus = animeStatusMap[exploreDialog.anime.id],
+            currentProgress = animeProgressMap[exploreDialog.anime.id],
             isFavorite = isAnimeFavorite,
             initialCardBounds = viewModel.exploreAnimeCardBounds.value,
             onDismiss = {
@@ -1348,6 +1416,133 @@ fun MainScreen(
                 )
                 android.util.Log.d("DEBUG", ">>> overlayState is now: $overlayState")
             }
+        )
+    }
+
+    // DetailedAnimeScreen for StatusListScreen
+    if (selectedAnimeState != null && showDetailedAnimeScreen) {
+        val currentStatusForAnime = animeStatusMap[selectedAnimeState!!.id]
+        val currentProgressForAnime = animeProgressMap[selectedAnimeState!!.id]
+        val isAnimeFavorite = aniListFavoriteIds.contains(selectedAnimeState!!.id)
+        DetailedAnimeScreen(
+            anime = selectedAnimeState!!.toDetailedAnimeData(),
+            viewModel = viewModel,
+            isOled = isOled,
+            currentStatus = currentStatusForAnime,
+            currentProgress = currentProgressForAnime,
+            isFavorite = isAnimeFavorite,
+            initialCardBounds = currentCardBounds,
+            onDismiss = { showDetailedAnimeScreen = false },
+            onSwipeToClose = { showDetailedAnimeScreen = false },
+            onPlayEpisode = { episode, _ ->
+                onPlayEpisode(selectedAnimeState!!, episode, null)
+                showDetailedAnimeScreen = false
+            },
+            onUpdateStatus = { status ->
+                if (status != null) {
+                    viewModel.addExploreAnimeToList(
+                        ExploreAnime(
+                            id = selectedAnimeState!!.id,
+                            title = selectedAnimeState!!.title,
+                            titleEnglish = selectedAnimeState!!.titleEnglish,
+                            cover = selectedAnimeState!!.cover,
+                            banner = selectedAnimeState!!.banner,
+                            episodes = selectedAnimeState!!.totalEpisodes,
+                            latestEpisode = selectedAnimeState!!.latestEpisode,
+                            averageScore = selectedAnimeState!!.averageScore,
+                            genres = selectedAnimeState!!.genres,
+                            year = selectedAnimeState!!.year,
+                            format = selectedAnimeState!!.format
+                        ),
+                        status
+                    )
+                }
+            },
+            onRemove = {
+                viewModel.removeAnimeFromList(selectedAnimeState!!.id)
+                showDetailedAnimeScreen = false
+            },
+            onToggleFavorite = { _ ->
+                viewModel.toggleAniListFavorite(selectedAnimeState!!.id, selectedAnimeState!!)
+            },
+            onLoginClick = { viewModel.loginWithAniList() },
+            onRelationClick = { relation ->
+                try {
+                    scope.launch {
+                        try {
+                            delay(100)
+                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedData != null) {
+                                currentCardBounds = null
+                                selectedAnimeState = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = 0,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                            } else {
+                                Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onCharacterClick = { characterId ->
+                overlayState = OverlayState.CharacterDialog(
+                    characterId = characterId, 
+                    animeId = selectedAnimeState!!.id, 
+                    previousAnime = null,
+                    previousFirstAnime = null,
+                    previousIsFirstOpen = false
+                )
+            },
+            onStaffClick = { staffId ->
+                overlayState = OverlayState.StaffDialog(
+                    staffId = staffId, 
+                    animeId = selectedAnimeState!!.id,
+                    previousAnime = null,
+                    previousFirstAnime = null,
+                    previousIsFirstOpen = false
+                )
+            },
+            onViewAllCast = { overlayState = OverlayState.AllCastDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title, previousAnime = null, previousFirstAnime = null, previousIsFirstOpen = false) },
+            onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title, previousAnime = null, previousFirstAnime = null, previousIsFirstOpen = false) },
+            onViewAllRelations = { animeId, title -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title, previousAnime = null, previousFirstAnime = null, previousIsFirstOpen = false) },
+            isLoggedIn = isLoggedIn,
+            isLocalFavorite = localFavoriteIds.contains(selectedAnimeState!!.id),
+            onToggleLocalFavorite = { id -> viewModel.toggleLocalFavorite(id, selectedAnimeState!!.title, selectedAnimeState!!.cover, selectedAnimeState!!.banner, selectedAnimeState!!.year, selectedAnimeState!!.averageScore) },
+            onUpdateLocalStatus = { status ->
+                val currentEntry = localAnimeStatus[selectedAnimeState!!.id]
+                if (status != null) {
+                    viewModel.setLocalAnimeStatus(
+                        selectedAnimeState!!.id,
+                        LocalAnimeEntry(
+                            id = selectedAnimeState!!.id,
+                            status = status,
+                            progress = currentEntry?.progress ?: 0,
+                            totalEpisodes = selectedAnimeState!!.totalEpisodes
+                        )
+                    )
+                } else {
+                    viewModel.setLocalAnimeStatus(selectedAnimeState!!.id, null)
+                }
+            },
+            onRemoveLocalStatus = { viewModel.setLocalAnimeStatus(selectedAnimeState!!.id, null) }
         )
     }
 
@@ -1653,13 +1848,16 @@ fun MainScreen(
                 onServerChange = { server, category -> changeServer(server, category) },
                 onQualityChange = { qualityUrl, qualityName -> changeQuality(qualityUrl, qualityName) },
                 onPlaybackError = { onPlaybackError() },
+                onTryNextServer = { onPlaybackError() },
+                onUpdateServerIndex = { index -> currentServerIndex = index },
+                onAutoTryNextServer = { autoTryNextServer() },
                 onInvalidateStreamCache = { invalidateCurrentStreamCache() },
-                autoSkipOpening = autoSkipOpening,
-                autoSkipEnding = autoSkipEnding,
-                autoPlayNextEpisode = autoPlayNextEpisode,
                 onPrefetchAdjacent = {
                     viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, released)
                 },
+                autoSkipOpening = autoSkipOpening,
+                autoSkipEnding = autoSkipEnding,
+                autoPlayNextEpisode = autoPlayNextEpisode,
                 disableMaterialColors = disableMaterialColors,
                 showBufferIndicator = showBufferIndicator,
                 bufferAheadSeconds = bufferAheadSeconds,
@@ -1667,7 +1865,8 @@ fun MainScreen(
                 onBackClick = { 
                     showPlayer = false
                     currentVideoUrl = null
-                }
+                },
+                episodeTrigger = episodeTrigger
             )
         }
 
@@ -1882,6 +2081,49 @@ fun MainScreen(
                             }
                         }
                     }
+                }
+
+                if (showStatusListScreen) {
+                    StatusListScreen(
+                        title = statusListTitle,
+                        icon = statusListIcon ?: Icons.Default.PlayArrow,
+                        animeList = statusListAnime,
+                        listType = statusListType,
+                        isOled = isOled,
+                        showStatusColors = showStatusColors,
+                        preferEnglishTitles = preferEnglishTitles,
+                        isLoggedIn = isLoggedIn,
+                        disableMaterialColors = disableMaterialColors,
+                        onAnimeClick = { anime, bounds ->
+                            viewModel.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
+                            selectedAnimeState = anime
+                            showDetailedAnimeScreen = true
+                        },
+                        onPlayClick = { anime ->
+                            val nextEp = anime.progress + 1
+                            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                            if (anime.latestEpisode != null && nextEp > released) {
+                                Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onPlayEpisode(anime, nextEp, null)
+                            }
+                        },
+                        onInfoClick = { anime, bounds ->
+                            viewModel.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
+                            selectedAnimeState = anime
+                            showDetailedAnimeScreen = true
+                        },
+                        onStatusClick = { anime ->
+                            viewModel.setExploreAnimeCardBounds(anime.id, anime.cover, null)
+                            selectedAnimeState = anime
+                            showDetailedAnimeScreen = true
+                        },
+                        onBackClick = { showStatusListScreen = false },
+                        onDismiss = {
+                            viewModel.setHideNavbar(false)
+                            showStatusListScreen = false
+                        }
+                    )
                 }
 
                 val isOledTheme = isOled

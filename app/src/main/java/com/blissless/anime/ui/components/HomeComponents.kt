@@ -181,31 +181,42 @@ fun SectionHeader(
     icon: ImageVector,
     count: Int,
     isOled: Boolean,
-    iconTint: Color = MaterialTheme.colorScheme.primary
+    iconTint: Color = MaterialTheme.colorScheme.primary,
+    onClick: () -> Unit = {}
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
     ) {
-        Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
+            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "$count",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
             )
+            Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+            ) {
+                Text(
+                    "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }
@@ -233,16 +244,16 @@ fun HomeAnimeHorizontalList(
     val density = LocalDensity.current
     val cameraDistancePx = with(density) { 12.dp.toPx() }
     val translationYOffset = with(density) { (-40).dp.toPx() }
-    
+
     val isScrolling by remember {
         derivedStateOf { listState.isScrollInProgress }
     }
-    
+
     val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible, true)
     val staggerDelay = listIndex * 50f
     val effectiveProgress = ((cinematicProgress * 1000f - staggerDelay) / 1000f).coerceIn(0f, 1f)
     val easedProgress = easeOutCubic(effectiveProgress)
-    
+
     Box(modifier = Modifier.fillMaxWidth()) {
         LazyRow(
             state = listState,
@@ -253,7 +264,7 @@ fun HomeAnimeHorizontalList(
                 val layoutInfo = listState.layoutInfo
                 val visibleItems = layoutInfo.visibleItemsInfo
                 val itemInfo = visibleItems.find { it.index == index }
-                
+
                 val centerOffset = if (itemInfo != null) {
                     val itemCenter = itemInfo.offset + itemInfo.size / 2
                     val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
@@ -261,7 +272,7 @@ fun HomeAnimeHorizontalList(
                 } else {
                     0f
                 }
-                
+
                 val animatedOffset by animateFloatAsState(
                     targetValue = if (isScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
                     animationSpec = if (isScrolling) {
@@ -277,20 +288,20 @@ fun HomeAnimeHorizontalList(
                     },
                     label = "centerOffset"
                 )
-                
+
                 val baseScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
                 val baseAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
                 val translationXVal = animatedOffset * -20f
                 val rotationYVal = (animatedOffset * 15f).coerceIn(-15f, 15f)
-                
+
                 val introScale = 0.3f + easedProgress * 0.7f
                 val introAlpha = easedProgress
                 val introTranslationY = translationYOffset * (1f - easedProgress)
-                
+
                 val finalScale = baseScale * introScale
                 val finalAlpha = baseAlpha * introAlpha
                 val finalTranslationY = introTranslationY
-                
+
                 Box(
                     modifier = Modifier
                         .graphicsLayer {
@@ -358,7 +369,7 @@ fun HomeAnimeCard(
     val context = LocalContext.current
     var cardBounds by remember { mutableStateOf<android.graphics.RectF?>(null) }
     val statusColor = HomeStatusColors.getColor(listType)
-    
+
     // Progress bar color: bright white for monochrome, bright user-defined primary for material colors
     val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
 

@@ -86,6 +86,7 @@ import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
 import com.blissless.anime.ui.components.SearchOverlay
 import com.blissless.anime.ui.components.SectionHeader
 import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
+import com.blissless.anime.ui.screens.status.StatusListScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -114,7 +115,7 @@ fun HomeScreen(
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap()
-) {    
+) {
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
     val completed by viewModel.completed.collectAsState()
@@ -142,10 +143,17 @@ fun HomeScreen(
     var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
-    
+
+    // Status list screen state
+    var showStatusListScreen by remember { mutableStateOf(false) }
+    var statusListTitle by remember { mutableStateOf("") }
+    var statusListIcon by remember { mutableStateOf(Icons.Default.PlayArrow) }
+    var statusListType by remember { mutableStateOf("") }
+    var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
+
     // Track first anime for back navigation
     var firstAnime by remember { mutableStateOf<AnimeMedia?>(null) }
-    
+
     // Card bounds for shared element transition
     var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
 
@@ -167,7 +175,7 @@ fun HomeScreen(
 
     // Force recomposition when lists change by tracking a version counter
     var listVersion by remember { mutableIntStateOf(0) }
-    
+
     // Update listVersion when lists change to trigger recomposition
     LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         listVersion++
@@ -179,7 +187,7 @@ fun HomeScreen(
 
     val authToken by viewModel.authToken.collectAsState()
     val actuallyLoggedIn = authToken != null
-    
+
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
 
@@ -194,7 +202,12 @@ fun HomeScreen(
         viewModel.setHideNavbar(showSearchOverlay)
     }
 
+    LaunchedEffect(showStatusListScreen) {
+        viewModel.setHideNavbar(showStatusListScreen)
+    }
+
     BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
+    BackHandler(enabled = showStatusListScreen) { showStatusListScreen = false }
 
     Box(modifier = Modifier.fillMaxSize()) {
         PullToRefreshBox(
@@ -232,7 +245,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                
+
                 if (isLoggedIn) {
                     // Header - profile area in rounded card, search button separate
                     Row(
@@ -254,20 +267,20 @@ fun HomeScreen(
                                 modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (isLoggedIn && userAvatar != null) { 
+                                if (isLoggedIn && userAvatar != null) {
                                     Spacer(modifier = Modifier.width(4.dp))
                                     AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(), 
-                                        contentDescription = "User Avatar", 
-                                        contentScale = ContentScale.Crop, 
+                                        model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(),
+                                        contentDescription = "User Avatar",
+                                        contentScale = ContentScale.Crop,
                                         modifier = Modifier.size(40.dp).clip(CircleShape)
-                                    ); 
-                                    Spacer(modifier = Modifier.width(8.dp)) 
+                                    );
+                                    Spacer(modifier = Modifier.width(8.dp))
                                 }
-                                else if (isLoggedIn) { 
+                                else if (isLoggedIn) {
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(40.dp)); 
-                                    Spacer(modifier = Modifier.width(8.dp)) 
+                                    Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(40.dp));
+                                    Spacer(modifier = Modifier.width(8.dp))
                                 }
 
                                 Column {
@@ -278,7 +291,7 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        if (isLoggedIn) { 
+                        if (isLoggedIn) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Card(
                                 modifier = Modifier.height(IntrinsicSize.Min),
@@ -369,7 +382,7 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.height(16.dp)); Text("Welcome to Darling", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                                     Spacer(modifier = Modifier.height(8.dp)); Text("Your lists are empty. Sign in with AniList to sync your anime list and track your progress, or start exploring!", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                                     Spacer(modifier = Modifier.height(20.dp))
-                                    Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { 
+                                    Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
                                         AsyncImage(
                                             model = ImageRequest.Builder(LocalContext.current)
                                                 .data("https://anilist.co/img/icons/favicon-32x32.png")
@@ -379,7 +392,7 @@ fun HomeScreen(
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) 
+                                        Text("Login with AniList", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(modifier = Modifier.height(12.dp)); Text("Don't have an account? Sign up for free at anilist.co", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -416,7 +429,7 @@ fun HomeScreen(
                         if (firstAnime == null) firstAnime = anime
                         showDetailedAnimeScreen = true
                     }
-                    
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -429,7 +442,14 @@ fun HomeScreen(
                                 icon = Icons.Default.PlayArrow,
                                 count = effectiveCurrentlyWatching.size,
                                 isOled = isOled,
-                                iconTint = HomeStatusColors.getColor("CURRENT")
+                                iconTint = HomeStatusColors.getColor("CURRENT"),
+                                onClick = {
+                                    statusListTitle = "Currently Watching"
+                                    statusListIcon = Icons.Default.PlayArrow
+                                    statusListType = "CURRENT"
+                                    statusListAnime = effectiveCurrentlyWatching
+                                    showStatusListScreen = true
+                                }
                             )
                             HomeAnimeHorizontalList(
                                 animeList = effectiveCurrentlyWatching,
@@ -457,7 +477,14 @@ fun HomeScreen(
                                 icon = Icons.Default.Bookmark,
                                 count = effectivePlanningToWatch.size,
                                 isOled = isOled,
-                                iconTint = HomeStatusColors.getColor("PLANNING")
+                                iconTint = HomeStatusColors.getColor("PLANNING"),
+                                onClick = {
+                                    statusListTitle = "Planning to Watch"
+                                    statusListIcon = Icons.Default.Bookmark
+                                    statusListType = "PLANNING"
+                                    statusListAnime = effectivePlanningToWatch
+                                    showStatusListScreen = true
+                                }
                             )
                             HomeAnimeHorizontalList(
                                 animeList = effectivePlanningToWatch,
@@ -485,7 +512,14 @@ fun HomeScreen(
                                 icon = Icons.Default.Check,
                                 count = effectiveCompleted.size,
                                 isOled = isOled,
-                                iconTint = HomeStatusColors.getColor("COMPLETED")
+                                iconTint = HomeStatusColors.getColor("COMPLETED"),
+                                onClick = {
+                                    statusListTitle = "Completed"
+                                    statusListIcon = Icons.Default.Check
+                                    statusListType = "COMPLETED"
+                                    statusListAnime = effectiveCompleted
+                                    showStatusListScreen = true
+                                }
                             )
                             HomeAnimeHorizontalList(
                                 animeList = effectiveCompleted,
@@ -513,7 +547,14 @@ fun HomeScreen(
                                 icon = Icons.Default.Pause,
                                 count = effectiveOnHold.size,
                                 isOled = isOled,
-                                iconTint = HomeStatusColors.getColor("PAUSED")
+                                iconTint = HomeStatusColors.getColor("PAUSED"),
+                                onClick = {
+                                    statusListTitle = "On Hold"
+                                    statusListIcon = Icons.Default.Pause
+                                    statusListType = "PAUSED"
+                                    statusListAnime = effectiveOnHold
+                                    showStatusListScreen = true
+                                }
                             )
                             HomeAnimeHorizontalList(
                                 animeList = effectiveOnHold,
@@ -541,7 +582,14 @@ fun HomeScreen(
                                 icon = Icons.Default.Delete,
                                 count = effectiveDropped.size,
                                 isOled = isOled,
-                                iconTint = HomeStatusColors.getColor("DROPPED")
+                                iconTint = HomeStatusColors.getColor("DROPPED"),
+                                onClick = {
+                                    statusListTitle = "Dropped"
+                                    statusListIcon = Icons.Default.Delete
+                                    statusListType = "DROPPED"
+                                    statusListAnime = effectiveDropped
+                                    showStatusListScreen = true
+                                }
                             )
                             HomeAnimeHorizontalList(
                                 animeList = effectiveDropped,
@@ -579,6 +627,76 @@ fun HomeScreen(
             }
         }
 
+        // Status List Screen overlay (slides up from bottom like search)
+        AnimatedVisibility(
+            visible = showStatusListScreen,
+            enter = slideInVertically(
+                animationSpec = tween(
+                    durationMillis = 300,
+                    easing = FastOutSlowInEasing
+                ),
+                initialOffsetY = { fullHeight -> (fullHeight * 0.15f).toInt() }
+            ) + fadeIn(
+                animationSpec = tween(
+                    durationMillis = 300,
+                    easing = FastOutSlowInEasing
+                )
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(
+                    durationMillis = 250,
+                    easing = FastOutSlowInEasing
+                ),
+                targetOffsetY = { fullHeight -> (fullHeight * 0.15f).toInt() }
+            ) + fadeOut(
+                animationSpec = tween(
+                    durationMillis = 250,
+                    easing = FastOutSlowInEasing
+                )
+            )
+        ) {
+            StatusListScreen(
+                title = statusListTitle,
+                icon = statusListIcon,
+                animeList = statusListAnime,
+                listType = statusListType,
+                isOled = isOled,
+                showStatusColors = showStatusColors,
+                preferEnglishTitles = preferEnglishTitles,
+                isLoggedIn = isLoggedIn,
+                disableMaterialColors = disableMaterialColors,
+                onAnimeClick = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true },
+                onPlayClick = { anime ->
+                    val lt = statusListType
+                    if (lt == "CURRENT") {
+                        val nextEp = anime.progress + 1
+                        val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                        if (anime.latestEpisode != null && nextEp > released) {
+                            Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                        } else {
+                            onPlayEpisode(anime, nextEp, null)
+                        }
+                    } else {
+                        onPlayEpisode(anime, 1, null)
+                    }
+                },
+                onStatusClick = { anime -> selectedAnime = anime; showStatusDialog = true },
+                onInfoClick = { anime, bounds ->
+                    val cardBounds = bounds?.let {
+                        MainViewModel.CardBounds(anime.id, anime.cover, it.bounds)
+                    }
+                    currentCardBounds = cardBounds
+                    viewModel.clearExploreAnimeCardBounds()
+                    selectedAnime = anime
+                    if (firstAnime == null) firstAnime = anime
+                    showDetailedAnimeScreen = true
+                },
+                onBackClick = { showStatusListScreen = false },
+                onDismiss = { showStatusListScreen = false }
+            )
+        }
+
+        // Search overlay
         AnimatedVisibility(
             visible = showSearchOverlay,
             enter = slideInVertically(
@@ -687,7 +805,7 @@ fun HomeScreen(
     val viewModelCardBounds by viewModel.exploreAnimeCardBounds.collectAsState()
     val viewModelHomeCardBounds by viewModel.homeAnimeCardBounds.collectAsState()
     val effectiveCardBounds = viewModelHomeCardBounds ?: viewModelCardBounds
-    
+
     LaunchedEffect(effectiveCardBounds) {
         if (effectiveCardBounds != null && currentCardBounds == null && showDetailedAnimeScreen) {
             currentCardBounds = effectiveCardBounds
@@ -699,11 +817,15 @@ fun HomeScreen(
         val currentStatus by remember(listVersion, selectedAnime!!.id) {
             derivedStateOf { selectedAnime?.listStatus }
         }
+        val currentProgress by remember(listVersion, selectedAnime!!.id) {
+            derivedStateOf { selectedAnime?.progress }
+        }
         DetailedAnimeScreen(
             anime = detailedAnimeData,
             viewModel = viewModel,
             isOled = isOled,
             currentStatus = currentStatus,
+            currentProgress = currentProgress,
             isLoggedIn = isLoggedIn,
             isFavorite = favoriteIds.contains(selectedAnime!!.id),
             initialCardBounds = currentCardBounds,

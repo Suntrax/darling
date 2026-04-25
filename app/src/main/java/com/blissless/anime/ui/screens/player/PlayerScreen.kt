@@ -177,10 +177,14 @@ fun PlayerScreen(
     onServerChange: ((serverName: String, category: String) -> Unit)? = null,
     onQualityChange: ((qualityUrl: String, qualityName: String) -> Unit)? = null,
     onPlaybackError: (() -> Unit)? = null,
-    onPrefetchAdjacent: (() -> Unit)? = null,
+    onTryNextServer: (() -> Unit)? = null,
+    onUpdateServerIndex: ((Int) -> Unit)? = null,
+    onAutoTryNextServer: (() -> Unit)? = null,
     onInvalidateStreamCache: (() -> Unit)? = null,
+    onPrefetchAdjacent: (() -> Unit)? = null,
     onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null },
-    onBackClick: (() -> Unit)? = null
+    onBackClick: (() -> Unit)? = null,
+    episodeTrigger: Int = 0
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -357,7 +361,7 @@ fun PlayerScreen(
         }
     }
 
-    val exoPlayer = remember(context, bufferAheadSeconds, referer) {
+    val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl) {
         val bufferAheadMs = bufferAheadSeconds * 1000
         // Use a higher max buffer to ensure more content is cached for offline viewing
         val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000) // At least 3 minutes, or buffer ahead + 1 minute
@@ -739,13 +743,20 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         hasPlaybackStarted = false
         hasError = false
         playbackError = null
+        
+        // Save current position BEFORE stopping
+        onSavePosition?.invoke(exoPlayer.currentPosition)
+        onPositionSaved?.invoke(exoPlayer.currentPosition)
+        
+        // Stop and clear the current playback to prevent audio overlap
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        
         // Small delay before triggering server change to ensure error popup disappears
         scope.launch {
             delay(50)
             serverChangeTrigger++
         }
-        onSavePosition?.invoke(exoPlayer.currentPosition)
-        onPositionSaved?.invoke(exoPlayer.currentPosition)
         onServerChange?.invoke(serverName, category)
     }
 

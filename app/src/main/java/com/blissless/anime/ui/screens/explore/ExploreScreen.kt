@@ -150,6 +150,16 @@ fun ExploreScreen(
         }
     }
 
+    val animeProgressMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
+        buildMap {
+            currentlyWatching.forEach { if (it.progress > 0) put(it.id, it.progress) }
+            planningToWatch.forEach { if (it.progress > 0) put(it.id, it.progress) }
+            completed.forEach { if (it.progress > 0) put(it.id, it.progress) }
+            onHold.forEach { if (it.progress > 0) put(it.id, it.progress) }
+            dropped.forEach { if (it.progress > 0) put(it.id, it.progress) }
+        }
+    }
+
     // Derive currentStatus from lists dynamically to ensure immediate UI updates
     val currentStatusForAnime: (Int) -> String? = { animeId ->
         animeStatusMap[animeId]
@@ -191,12 +201,16 @@ fun ExploreScreen(
         val animeStatus by remember(listVersion, anime.id) {
             derivedStateOf { animeStatusMap[anime.id] }
         }
+        val animeProgress by remember(listVersion, anime.id) {
+            derivedStateOf { animeProgressMap[anime.id] }
+        }
 
         DetailedAnimeScreen(
             anime = anime.toDetailedAnimeData(),
             viewModel = viewModel,
             isOled = isOled,
             currentStatus = animeStatus,
+            currentProgress = animeProgress,
             isFavorite = isAnimeFavorite,
             initialCardBounds = currentCardBounds,
             onDismiss = {

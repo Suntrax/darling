@@ -133,6 +133,7 @@ import com.blissless.anime.data.models.TagData
 import com.blissless.anime.ui.components.rememberCinematicAnimation
 import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
+import com.blissless.anime.dialogs.HomeAnimeStatusDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -160,6 +161,7 @@ fun DetailedAnimeScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     currentStatus: String? = null,
+    currentProgress: Int? = null,
     localStatus: String? = null,
     isLoggedIn: Boolean = false,
     isFavorite: Boolean = false,
@@ -198,15 +200,21 @@ fun DetailedAnimeScreen(
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     var showEpisodeSelection by remember { mutableStateOf(false) }
+    var showStatusDialog by remember { mutableStateOf(false) }
 
     val localFavorites by viewModel.localFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val effectiveLocalFavorite = if (isLoggedIn) isLocalFavorite else localFavorites.containsKey(anime.id)
     val effectiveLocalStatus = if (isLoggedIn) null else localAnimeStatus[anime.id]?.status
+    val effectiveLocalProgress = if (isLoggedIn) null else localAnimeStatus[anime.id]?.progress
 
     val effectiveStatus = if (isLoggedIn) currentStatus else (effectiveLocalStatus ?: localStatus)
     val effectiveOnUpdateStatus = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
     val effectiveOnRemove = if (isLoggedIn) onRemove else onRemoveLocalStatus
+
+    val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
+    val statusProgress = if (isLoggedIn) currentProgress else effectiveLocalProgress
+    val totalEps = anime.episodes
 
     val slideOffset = remember { Animatable(1000f) }
     val dismissSlideOffset = remember { Animatable(0f) }
@@ -844,57 +852,83 @@ fun DetailedAnimeScreen(
                             }
                             Spacer(modifier = Modifier.height(16.dp))
                             val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
-                            val onUpdate: (String) -> Unit = if (isLoggedIn) {
-                                { status -> onUpdateStatus(status) }
-                            } else { status ->
-                                viewModel.setLocalAnimeStatus(
-                                    anime.id,
-                                    LocalAnimeEntry(
-                                        id = anime.id,
-                                        status = status,
-                                        progress = 0,
-                                        totalEpisodes = anime.episodes,
-                                        title = anime.title,
-                                        cover = anime.cover,
-                                        banner = anime.banner,
-                                        year = anime.year,
-                                        averageScore = anime.averageScore
-                                    )
-                                )
-                            }
-                            val onRemoveStatus: () -> Unit = if (isLoggedIn) {
-                                { onRemove() }
-                            } else {
-                                { viewModel.setLocalAnimeStatus(anime.id, null) }
-                            }
+                            val statusProgress = if (isLoggedIn) null else effectiveLocalProgress
+                            val totalEps = anime.episodes.takeIf { it > 0 } ?: anime.episodes
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                StatusChip("Watching", Icons.Default.PlayArrow, Color(0xFF2196F3), statusToCheck == "CURRENT", modifier = Modifier.weight(1f)) {
-                                    if (statusToCheck == "CURRENT") { onRemoveStatus() } else { onUpdate("CURRENT") }
+                            if (statusToCheck != null) {
+                                val statusColor = when (statusToCheck) {
+                                    "CURRENT" -> Color(0xFF2196F3)
+                                    "PLANNING" -> Color(0xFF9C27B0)
+                                    "COMPLETED" -> Color(0xFF4CAF50)
+                                    "PAUSED" -> Color(0xFFFFC107)
+                                    "DROPPED" -> Color(0xFFF44336)
+                                    else -> MaterialTheme.colorScheme.primary
                                 }
-                                StatusChip("Planning", Icons.Default.Schedule, Color(0xFF9C27B0), statusToCheck == "PLANNING", modifier = Modifier.weight(1f)) {
-                                    if (statusToCheck == "PLANNING") { onRemoveStatus() } else { onUpdate("PLANNING") }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = statusColor.copy(alpha = 0.2f)
+                                        ) {
+                                            Text(
+                                                text = when (statusToCheck) {
+                                                    "CURRENT" -> "Watching"
+                                                    "PLANNING" -> "Planning"
+                                                    "COMPLETED" -> "Completed"
+                                                    "PAUSED" -> "On Hold"
+                                                    "DROPPED" -> "Dropped"
+                                                    else -> statusToCheck
+                                                },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = statusColor,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                        if (totalEps > 0) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = if (statusProgress != null) "$statusProgress" else "0",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = " / $totalEps",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Light,
+                                                    color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Button(
+                                        onClick = { showStatusDialog = true },
+                                        modifier = Modifier.height(44.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Change", fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
-                                StatusChip("Completed", Icons.Default.Check, Color(0xFF4CAF50), statusToCheck == "COMPLETED", modifier = Modifier.weight(1f)) {
-                                    if (statusToCheck == "COMPLETED") { onRemoveStatus() } else { onUpdate("COMPLETED") }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                StatusChip("On Hold", Icons.Default.Pause, Color(0xFFFFC107), statusToCheck == "PAUSED", modifier = Modifier.weight(1f)) {
-                                    if (statusToCheck == "PAUSED") { onRemoveStatus() } else { onUpdate("PAUSED") }
-                                }
-                                StatusChip("Dropped", Icons.Default.Close, Color(0xFFF44336), statusToCheck == "DROPPED", modifier = Modifier.weight(1f)) {
-                                    if (statusToCheck == "DROPPED") { onRemoveStatus() } else { onUpdate("DROPPED") }
-                                }
-                                StatusChip("Remove", Icons.Default.Delete, Color(0xFFF44336), false, modifier = Modifier.weight(1f)) {
-                                    if (statusToCheck != null) { onRemoveStatus() }
+                            } else {
+                                Button(
+                                    onClick = { showStatusDialog = true },
+                                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Add to List", fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -1873,6 +1907,51 @@ fun DetailedAnimeScreen(
                 )
             }
         }
+    }
+
+    if (showStatusDialog) {
+        val animeMedia = AnimeMedia(
+            id = anime.id,
+            title = anime.title ?: "",
+            titleEnglish = anime.titleEnglish,
+            cover = anime.cover,
+            banner = anime.banner,
+            progress = statusProgress ?: 0,
+            totalEpisodes = totalEps,
+            latestEpisode = anime.episodes,
+            listStatus = statusToCheck ?: "",
+            averageScore = anime.averageScore,
+            year = anime.year
+        )
+        HomeAnimeStatusDialog(
+            anime = animeMedia,
+            isOled = isOled,
+            onDismiss = { showStatusDialog = false },
+            onRemove = {
+                effectiveOnRemove()
+                showStatusDialog = false
+            },
+            onUpdate = { status: String, progress: Int? ->
+                effectiveOnUpdateStatus(status)
+                if (!isLoggedIn && progress != null) {
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = status,
+                            progress = progress,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title ?: "",
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore
+                        )
+                    )
+                }
+                showStatusDialog = false
+            }
+        )
     }
 }
 

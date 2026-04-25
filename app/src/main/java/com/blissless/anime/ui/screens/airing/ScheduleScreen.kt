@@ -217,6 +217,21 @@ fun ScheduleScreen(
         }
         map
     }
+
+    val animeProgressMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
+        val map = mutableMapOf<Int, Int>()
+        currentlyWatching.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        planningToWatch.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        completed.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        onHold.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        dropped.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        localAnimeStatus.forEach { (id, entry) ->
+            if (entry.progress > 0 && !map.containsKey(id)) {
+                map[id] = entry.progress
+            }
+        }
+        map
+    }
     
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     
@@ -899,6 +914,9 @@ fun ScheduleScreen(
         val currentStatus by remember(listVersion, selectedAnime!!.id) {
             derivedStateOf { animeStatusMap[selectedAnime!!.id] }
         }
+        val currentProgress by remember(listVersion, selectedAnime!!.id) {
+            derivedStateOf { animeProgressMap[selectedAnime!!.id] }
+        }
         val isFavorite by remember(listVersion, favoriteIds, selectedAnime!!.id) {
             derivedStateOf { favoriteIds.contains(selectedAnime!!.id) }
         }
@@ -908,6 +926,7 @@ fun ScheduleScreen(
             viewModel = viewModel,
             isOled = isOled,
             currentStatus = currentStatus,
+            currentProgress = currentProgress,
             isFavorite = isFavorite,
             isLoggedIn = isLoggedIn,
             onToggleFavorite = { _ -> viewModel.toggleAniListFavorite(selectedAnime!!.id) },

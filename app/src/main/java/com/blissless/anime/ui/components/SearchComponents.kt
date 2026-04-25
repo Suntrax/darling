@@ -162,6 +162,21 @@ fun SearchOverlay(
         }
         map
     }
+
+    val savedAnimeProgressMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
+        val map = mutableMapOf<Int, Int>()
+        currentlyWatching.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        planningToWatch.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        completed.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        onHold.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        dropped.forEach { if (it.progress > 0) map[it.id] = it.progress }
+        localAnimeStatus.forEach { (id, entry) ->
+            if (entry.progress > 0 && !map.containsKey(id)) {
+                map[id] = entry.progress
+            }
+        }
+        map
+    }
     
     // Force recomposition when lists change by tracking a version counter
     var listVersion by remember { mutableIntStateOf(0) }
@@ -416,6 +431,9 @@ fun SearchOverlay(
         val currentStatus by remember(listVersion, selectedAnime!!.id) {
             derivedStateOf { savedAnimeMap[selectedAnime!!.id] }
         }
+        val currentProgress by remember(listVersion, selectedAnime!!.id) {
+            derivedStateOf { savedAnimeProgressMap[selectedAnime!!.id] }
+        }
         val isAnimeFavorite by remember(listVersion, favoriteIds, selectedAnime!!.id) {
             derivedStateOf { favoriteIds.contains(selectedAnime!!.id) }
         }
@@ -426,6 +444,7 @@ fun SearchOverlay(
             isOled = isOled,
             isLoggedIn = isLoggedIn,
             currentStatus = currentStatus,
+            currentProgress = currentProgress,
             isFavorite = isAnimeFavorite,
             onDismiss = {
                 if (firstAnime != null && selectedAnime!!.id != firstAnime!!.id) {

@@ -62,7 +62,7 @@ object MiruroService {
 
     fun getBaseUrl(): String = miruroBaseUrl
 
-    private val providersCache = mutableMapOf<Int, List<MiruroProviderInfo>>()
+    private val providersCache = mutableMapOf<String, List<MiruroProviderInfo>>()
     private val episodesCache = mutableMapOf<Int, MiruroAnimeEpisodes?>()
 
 suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext(Dispatchers.IO) {
@@ -146,7 +146,7 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
             }
 
             Log.d("MiruroService", ">>> API ENDPOINT: $watchPath")
-            Log.d("MiruroService", ">>> GET STREAM")
+            Log.d("MiruroService", ">>> GET STREAM category=$category provider=$providerName")
 
             val url = URL(watchPath)
             Log.d("MiruroService", "Fetching stream: $url")
@@ -158,15 +158,16 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
             connection.setRequestProperty("Accept", "application/json")
 
             val responseCode = connection.responseCode
+            Log.d("MiruroService", ">>> HTTP RESPONSE: $responseCode")
             if (responseCode != HttpURLConnection.HTTP_OK) {
-                Log.e("MiruroService", "Failed: HTTP $responseCode")
+                Log.e("MiruroService", ">>> HTTP FAILED: $responseCode")
                 return@withContext null
             }
 
             val response = connection.inputStream.bufferedReader().readText()
             connection.disconnect()
-            
-            Log.d("MiruroService", ">>> RESPONSE: ${response.take(200)}")
+
+            Log.d("MiruroService", ">>> RESPONSE LEN: ${response.length}")
 
             parseStreamResponse(response, category, providerName)
         } catch (e: Exception) {
@@ -175,38 +176,57 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
         }
     }
 
-    private fun parseStreamResponse(response: String, category: String, providerName: String? = null): MiruroStreamResult? {
+private fun parseStreamResponse(response: String, category: String, providerName: String? = null): MiruroStreamResult? {
         return try {
             // Check for error responses before parsing
             if (response.contains("\"detail\"") && (response.contains("Pipe request failed") || response.contains("Not Found") || response.contains("error"))) {
-                Log.w("MiruroService", "Provider returned error: ${response.take(100)}")
+                Log.w("MiruroService", ">>> ERROR RESPONSE: ${response.take(150)}")
                 return null
             }
-            
-            Log.d("MiruroService", "Response: ${response.take(300)}")
+
+            Log.d("MiruroService", ">>> PARSING STREAM response (${response.length} chars)")
             val parsed = json.decodeFromString<MiruroStreamApiResponse>(response)
-            
+
             // Check both "streams" and "ssub" fields
             val streams = parsed.streams ?: parsed.ssub?.streams ?: emptyList()
-            val hlsStream = streams.find { it.type == "hls" }
-            val embedStream = streams.find { it.type == "embed" }
-            
-            val streamUrl = hlsStream?.url ?: embedStream?.url
-            if (streamUrl.isNullOrBlank()) return null
+            Log.d("MiruroService", ">>> STREAMS COUNT: ${streams.size}")
 
-            val referer = hlsStream?.referer ?: embedStream?.referer ?: ""
+            // Find all HLS streams and sort by quality (best first)
+            val hlsStreams = streams.filter { it.type == "hls" && !it.url.isNullOrBlank() }
+                .sortedByDescending { stream ->
+                    // Parse quality number from quality string like "800p", "534p"
+                    stream.quality?.replace("p", "")?.toIntOrNull() ?: 0
+                }
+
+            if (hlsStreams.isEmpty()) {
+                Log.w("MiruroService", ">>> NO HLS/M3U8 URL found")
+                return null
+            }
+
+            // Get the best quality HLS stream
+            val bestHls = hlsStreams.first()
+            val streamUrl = bestHls.url
+            val quality = bestHls.quality ?: "Auto"
+
+            Log.d("MiruroService", ">>> HLS OPTIONS: ${hlsStreams.map { "${it.quality}: ${it.url?.take(40)}" }}")
+            Log.d("MiruroService", ">>> BEST: $quality url=${streamUrl?.take(80)}")
+
+            val referer = bestHls.referer ?: ""
             val headers = if (referer.isNotBlank()) mapOf("Referer" to referer) else emptyMap()
 
             // Get default English subtitle from either streams or ssub
             val allSubtitles = parsed.subtitles ?: parsed.ssub?.subtitles
             val subtitleUrl = allSubtitles?.find { it.default == true || it.label?.contains("English", ignoreCase = true) == true }?.file
 
+            Log.d("MiruroService", ">>> PARSED: provider=$providerName, cat=$category, quality=$quality")
+            Log.d("MiruroService", ">>> REFERRER: $referer")
+
             MiruroStreamResult(
                 url = streamUrl,
                 headers = headers,
                 serverName = providerName ?: "animekai",
                 category = category,
-                qualities = listOf(QualityOption(quality = "Auto", url = streamUrl, width = 0)),
+                qualities = listOf(QualityOption(quality = quality, url = streamUrl, width = quality.replace("p", "").toIntOrNull() ?: 0)),
                 introStart = parsed.intro?.start,
                 introEnd = parsed.intro?.end,
                 outroStart = parsed.outro?.start,
@@ -221,15 +241,18 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
         }
     }
 
-    suspend fun getProvidersForEpisode(anilistId: Int, episode: Int): List<MiruroProviderInfo> = withContext(Dispatchers.IO) {
+    private const val PROVIDER_CHECK_TIMEOUT_MS = 10000
+
+    suspend fun getProvidersForEpisode(anilistId: Int, episode: Int, preferredCategory: String = "sub"): List<MiruroProviderInfo> = withContext(Dispatchers.IO) {
         try {
             if (miruroBaseUrl.isBlank()) return@withContext emptyList()
 
-            providersCache[anilistId]?.let { return@withContext it }
+            val cacheKey = "${anilistId}_$episode"
+            providersCache[cacheKey]?.let { return@withContext it }
 
             val url = URL("$miruroBaseUrl/episodes/$anilistId")
             Log.d("MiruroService", ">>> API ENDPOINT: $url")
-            Log.d("MiruroService", ">>> GET PROVIDERS FOR EPISODE $episode")
+            Log.d("MiruroService", ">>> GET PROVIDERS FOR EPISODE $episode (validating streams)")
 
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
@@ -245,10 +268,8 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
             val response = connection.inputStream.bufferedReader().readText()
             connection.disconnect()
 
-            val providers = parseProvidersResponse(response, episode, anilistId)
-            if (providers.isNotEmpty()) {
-                providersCache[anilistId] = providers
-            }
+            // Don't cache - always re-validate providers
+            val providers = parseAndValidateProviders(response, episode, anilistId, preferredCategory)
             providers
         } catch (e: Exception) {
             Log.e("MiruroService", "Providers error: ${e.message}")
@@ -256,51 +277,85 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
         }
     }
 
-    private fun parseProvidersResponse(response: String, episode: Int, anilistId: Int): List<MiruroProviderInfo> {
-        return try {
+    private suspend fun parseAndValidateProviders(
+        response: String,
+        episode: Int,
+        anilistId: Int,
+        preferredCategory: String
+    ): List<MiruroProviderInfo> = withContext(Dispatchers.IO) {
+        try {
             val parsed = json.decodeFromString<MiruroApiResponse>(response)
             val result = mutableListOf<MiruroProviderInfo>()
 
             val providers = parsed.providers
-            if (providers == null) return emptyList()
+            if (providers == null) return@withContext emptyList()
 
+            // Include all providers from the API response
             val providerList = listOf(
                 "arc" to providers.arc,
                 "jet" to providers.jet,
                 "kiwi" to providers.kiwi,
                 "zoro" to providers.zoro,
                 "hop" to providers.hop,
-                "dune" to providers.dune
+                "dune" to providers.dune,
+                "crunchyroll" to providers.crunchyroll
             )
 
-            providerList.forEach { (name, data) ->
-                data?.episodes?.let { eps ->
-                    val subList = findEpisodeInSections(eps.sub, eps.sections, episode, "sub")
-                    val dubList = findEpisodeInSections(eps.dub, eps.sections, episode, "dub")
-                    
-                    subList?.let { ep ->
-                        Log.d("MiruroService", ">>> FOUND EP $episode for ${name}_sub: id=${ep.id}, number=${ep.number}")
-                        result.add(MiruroProviderInfo(
-                            name = name,
-                            category = "sub",
-                            watchPath = "$miruroBaseUrl/${ep.id}"
-                        ))
+            // Validate each provider's stream URL with HTTP check
+            for ((name, data) in providerList) {
+                if (data?.episodes == null) continue
+
+                val hasSub = data.episodes?.sub?.isNotEmpty() == true
+                val hasDub = data.episodes?.dub?.isNotEmpty() == true
+                if (!hasSub && !hasDub) continue
+
+                val eps = data.episodes
+                val subEp = findEpisodeInSections(eps.sub, eps.sections, episode, "sub")
+                val dubEp = findEpisodeInSections(eps.dub, eps.sections, episode, "dub")
+
+                // Validate and add sub
+                subEp?.let { ep ->
+                    val watchPath = "$miruroBaseUrl/${ep.id}"
+                    if (validateHttp200(watchPath)) {
+                        Log.d("MiruroService", ">>> ADD sub: $name ep${ep.number}")
+                        result.add(MiruroProviderInfo(name = name, category = "sub", watchPath = watchPath))
+                    } else {
+                        Log.w("MiruroService", ">>> SKIP $name sub: HTTP error")
                     }
-                    dubList?.let { ep ->
-                        Log.d("MiruroService", ">>> FOUND EP $episode for ${name}_dub: id=${ep.id}, number=${ep.number}")
-                        result.add(MiruroProviderInfo(
-                            name = name,
-                            category = "dub",
-                            watchPath = "$miruroBaseUrl/${ep.id}"
-                        ))
+                }
+
+                // Validate and add dub
+                dubEp?.let { ep ->
+                    val watchPath = "$miruroBaseUrl/${ep.id}"
+                    if (validateHttp200(watchPath)) {
+                        Log.d("MiruroService", ">>> ADD dub: $name ep${ep.number}")
+                        result.add(MiruroProviderInfo(name = name, category = "dub", watchPath = watchPath))
+                    } else {
+                        Log.w("MiruroService", ">>> SKIP $name dub: HTTP error")
                     }
                 }
             }
 
+            Log.d("MiruroService", ">>> PROVIDERS: ${result.map { "${it.name}_${it.category}" }}")
             result
         } catch (e: Exception) {
-            Log.e("MiruroService", "Parse providers error: ${e.message}")
+            Log.e("MiruroService", "Parse error: ${e.message}")
             emptyList()
+        }
+    }
+
+    private fun validateHttp200(watchPath: String): Boolean {
+        return try {
+            val url = URL(watchPath)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            val code = connection.responseCode
+            connection.disconnect()
+            code == HttpURLConnection.HTTP_OK
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -311,21 +366,18 @@ suspend fun getAnimeEpisodes(anilistId: Int): MiruroAnimeEpisodes? = withContext
         searchCategory: String
     ): MiruroEpisodeItem? {
         if (episodes.isEmpty()) return null
-        
-        // If no sections, just find directly by episode number (matches 1-based)
+
         if (sections.isNullOrEmpty()) {
             return episodes.find { it.number.toInt() == targetEpisode }
         }
-        
-        // Find which section contains the target episode
+
         for (section in sections) {
             if (targetEpisode >= section.start && targetEpisode <= section.end) {
                 val indexInSection = targetEpisode - section.start
                 return episodes.getOrNull(indexInSection)
             }
         }
-        
-        // Fallback: try direct match
+
         return episodes.find { it.number.toInt() == targetEpisode }
     }
 }
@@ -440,5 +492,6 @@ data class MiruroSubtitle(
 data class MiruroStreamData(
     val url: String = "",
     val type: String = "hls",
-    val referer: String = ""
+    val referer: String = "",
+    val quality: String? = null
 )

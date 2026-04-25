@@ -257,6 +257,10 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         coerceInputValues = true
     }
 
+    // Stream cache with timestamps for TTL (30 minutes)
+    private val _streamCacheTimestamps = MutableStateFlow<Map<String, Long>>(emptyMap())
+    private val streamCacheTtlMs = 30 * 60 * 1000L // 30 minutes
+
     private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
 
@@ -501,11 +505,25 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     fun getCachedStreamImmediate(animeId: Int, episode: Int, category: String): AniwatchStreamResult? {
         val key = "${animeId}_${episode}_$category"
-        return _prefetchedStreams.value[key]
+        val stream = _prefetchedStreams.value[key]
+        val timestamp = _streamCacheTimestamps.value[key]
+        
+        // Check if cache is still valid (within TTL)
+        if (stream != null && timestamp != null) {
+            val age = System.currentTimeMillis() - timestamp
+            if (age < streamCacheTtlMs) {
+                return stream
+            }
+            // Cache expired - remove it
+            invalidateStreamCache(animeId, episode, category)
+        }
+        return null
     }
 
     fun cacheStream(key: String, stream: AniwatchStreamResult?) {
         _prefetchedStreams.value = _prefetchedStreams.value + (key to stream)
+        // Store timestamp for TTL tracking
+        _streamCacheTimestamps.value = _streamCacheTimestamps.value + (key to System.currentTimeMillis())
         saveStreamCache()
     }
 

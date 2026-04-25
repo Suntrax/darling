@@ -132,17 +132,18 @@ fun UserProfileScreen(
         }
     }
 
+    // Lines 135-155 (the only changed section)
     val favorites: List<JikanFavoriteAnime> = when (loginProvider) {
         LoginProvider.ANILIST -> {
             aniListFavorites.map { aniListFavorite ->
+                val coverUrl = aniListFavorite.coverImage?.extraLarge
+                    ?: ""
                 JikanFavoriteAnime(
                     malId = 0,
                     title = aniListFavorite.title.romaji ?: aniListFavorite.title.english ?: "",
                     titleEnglish = aniListFavorite.title.english,
                     images = JikanImages(
-                        jpg = JikanImageUrls(
-                            aniListFavorite.coverImage?.extraLarge ?: ""
-                        )
+                        jpg = JikanImageUrls(coverUrl)
                     ),
                     year = aniListFavorite.seasonYear
                 )
