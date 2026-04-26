@@ -548,8 +548,13 @@ fun HomeAnimeCard(
                 }
             }
         }
-        // Title
-        val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
+        // Title - use English if preferred and available, otherwise use romaji title
+        val displayTitle = when {
+            preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
+            !anime.title.isNullOrEmpty() -> anime.title
+            !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
+            else -> "Unknown"
+        }
         Box(modifier = Modifier.width(130.dp).height(36.dp)) {
             Text(text = displayTitle, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
         }

@@ -441,7 +441,12 @@ fun ExploreAnimeCard(
             }
         }
 
-        val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
+        val displayTitle = when {
+            preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
+            !anime.title.isNullOrEmpty() -> anime.title
+            !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
+            else -> "Unknown"
+        }
     
     Text(
             text = displayTitle,

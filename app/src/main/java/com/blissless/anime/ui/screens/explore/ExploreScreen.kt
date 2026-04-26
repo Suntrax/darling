@@ -660,6 +660,7 @@ fun ExploreScreen(
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
                 },
+                preferEnglishTitles = preferEnglishTitles,
                 listIndex = 3,
                 screenKey = "explore",
                 isVisible = isVisible,
@@ -697,6 +698,7 @@ fun ExploreScreen(
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
                 },
+                preferEnglishTitles = preferEnglishTitles,
                 listIndex = 4,
                 screenKey = "explore",
                 isVisible = isVisible,
@@ -734,6 +736,7 @@ fun ExploreScreen(
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
                 },
+                preferEnglishTitles = preferEnglishTitles,
                 listIndex = 5,
                 screenKey = "explore",
                 isVisible = isVisible,
@@ -771,6 +774,7 @@ fun ExploreScreen(
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
                 },
+                preferEnglishTitles = preferEnglishTitles,
                 listIndex = 6,
                 screenKey = "explore",
                 isVisible = isVisible,
@@ -808,6 +812,7 @@ fun ExploreScreen(
                 onRemoveFromLocalStatus = { anime ->
                     viewModel.setLocalAnimeStatus(anime.id, null)
                 },
+                preferEnglishTitles = preferEnglishTitles,
                 listIndex = 7,
                 screenKey = "explore",
                 isVisible = isVisible,
@@ -906,6 +911,7 @@ private fun GenreSection(
     localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap(),
     onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
     onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
+    preferEnglishTitles: Boolean = true,
     listIndex: Int = 0,
     screenKey: String = "explore",
     isVisible: Boolean = true,
@@ -921,6 +927,7 @@ private fun GenreSection(
                 animeStatusMap = animeStatusMap,
                 showStatusColors = showStatusColors,
                 showAnimeCardButtons = showAnimeCardButtons,
+                preferEnglishTitles = preferEnglishTitles,
                 onAnimeClick = onAnimeClick,
                 onBookmarkClick = onBookmarkClick,
                 isLoggedIn = isLoggedIn,

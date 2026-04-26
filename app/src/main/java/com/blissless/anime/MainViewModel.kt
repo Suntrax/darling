@@ -298,7 +298,7 @@ class MainViewModel : ViewModel() {
                 AnimeMedia(
                     id = malId,
                     title = entry.node.title,
-                    titleEnglish = entry.node.title,
+                    titleEnglish = entry.node.alternative_titles?.en ?: entry.node.title,
                     cover = entry.node.main_picture?.large ?: entry.node.main_picture?.medium ?: "",
                     progress = progress,
                     totalEpisodes = entry.node.num_episodes,
@@ -346,7 +346,7 @@ class MainViewModel : ViewModel() {
                 val userFavorite = UserFavoriteAnime(
                     id = anime.id,
                     title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
-                    coverImage = MediaCoverImage(large = anime.cover, medium = anime.cover),
+                    coverImage = MediaCoverImage(extraLarge = anime.cover),
                     episodes = anime.totalEpisodes,
                     averageScore = anime.averageScore,
                     genres = anime.genres,
@@ -1781,12 +1781,22 @@ class MainViewModel : ViewModel() {
         return null
     }
 
-    suspend fun fetchDetailedAnimeData(animeId: Int): DetailedAnimeData? {
-        android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId")
-        android.util.Log.d("ANILIST_DEBUG", "Not in cache, fetching from AniList API...")
-        val media = repository.fetchDetailedAnime(animeId)
+    suspend fun fetchDetailedAnimeData(animeId: Int, malId: Int? = null): DetailedAnimeData? {
+        android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId, malId=$malId")
+        var media = repository.fetchDetailedAnime(animeId)
+        
+        // If not found and have MAL ID, try finding by MAL ID
+        if (media == null && malId != null && malId > 0) {
+            android.util.Log.d("ANILIST_DEBUG", "Not found by animeId=$animeId, trying malId=$malId")
+            val foundMedia = repository.findAnimeByMalId(malId)
+            if (foundMedia != null) {
+                android.util.Log.d("ANILIST_DEBUG", "Found anime via MAL ID: anilistId=${foundMedia.id}")
+                media = repository.fetchDetailedAnime(foundMedia.id)
+            }
+        }
+        
         if (media == null) {
-            android.util.Log.e("ANILIST_DEBUG", "AniList API returned null for animeId=$animeId")
+            android.util.Log.e("ANILIST_DEBUG", "AniList API returned null for animeId=$animeId (malId=$malId)")
             return null
         }
         android.util.Log.d("ANILIST_DEBUG", "AniList API returned: id=${media.id}, idMal=${media.idMal}, title=${media.title?.romaji}, isAdult=${media.isAdult}, hasCharacters=${media.characters != null}, hasStaff=${media.staff != null}")
@@ -1933,7 +1943,7 @@ class MainViewModel : ViewModel() {
                 UserFavoriteAnime(
                     id = cached.id,
                     title = MediaTitle(romaji = cached.title, english = cached.titleEnglish),
-                    coverImage = MediaCoverImage(large = cached.cover, medium = cached.cover),
+                    coverImage = MediaCoverImage(extraLarge = cached.cover),
                     episodes = cached.episodes,
                     averageScore = cached.averageScore,
                     genres = cached.genres,
@@ -1949,7 +1959,7 @@ class MainViewModel : ViewModel() {
                     UserFavoriteAnime(
                         id = anime.id,
                         title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
-                        coverImage = MediaCoverImage(large = anime.cover, medium = anime.cover),
+                        coverImage = MediaCoverImage(extraLarge = anime.cover),
                         episodes = anime.totalEpisodes,
                         averageScore = anime.averageScore,
                         genres = anime.genres,
@@ -1975,27 +1985,35 @@ class MainViewModel : ViewModel() {
     }
     fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null): Boolean {
         android.util.Log.d("AniListFavorite", "toggleAniListFavorite called: mediaId=$mediaId, anime=${anime?.title}, loginProvider=${_loginProvider.value}")
+        android.util.Log.d("AniListFavorite", "  Current favorites count: ${_aniListFavorites.value.size}, contains id: ${_aniListFavorites.value.any { it.id == mediaId }}")
 
         if (_loginProvider.value == LoginProvider.MAL) {
             // Toggle MAL favorite using the ID-based method
             toggleMalFavoriteById(mediaId)
         } else {
             // Toggle AniList favorite - local-first with persistence
-            val isFavorite = userPreferences.isAniListFavorite(mediaId)
+            // Check both in-memory list AND persisted storage to determine current state
+            val isFavoriteInMemory = _aniListFavorites.value.any { it.id == mediaId }
+            val isFavoriteInStorage = userPreferences.isAniListFavorite(mediaId)
+            val isFavorite = isFavoriteInMemory || isFavoriteInStorage
             val willBeAdded = !isFavorite
+
+            android.util.Log.d("AniListFavorite", "  isFavoriteInMemory=$isFavoriteInMemory, isFavoriteInStorage=$isFavoriteInStorage, isFavorite=$isFavorite, willBeAdded=$willBeAdded")
 
             // Update persisted storage
             userPreferences.toggleAniListFavorite(mediaId)
 
             // Update UI list
             if (isFavorite) {
+                android.util.Log.d("AniListFavorite", "  Removing from UI list, was favorite")
                 _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
             } else {
+                android.util.Log.d("AniListFavorite", "  Adding to UI list, was not favorite")
                 if (anime != null) {
                     val userFavorite = UserFavoriteAnime(
                         id = anime.id,
                         title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
-                        coverImage = MediaCoverImage(large = anime.cover, medium = anime.cover),
+                        coverImage = MediaCoverImage(extraLarge = anime.cover),
                         episodes = anime.totalEpisodes,
                         averageScore = anime.averageScore,
                         genres = anime.genres,
@@ -2007,7 +2025,7 @@ class MainViewModel : ViewModel() {
                     val placeholder = UserFavoriteAnime(
                         id = mediaId,
                         title = MediaTitle(romaji = cachedAnime?.title ?: "Loading...", english = cachedAnime?.titleEnglish),
-                        coverImage = MediaCoverImage(large = cachedAnime?.cover ?: "", medium = cachedAnime?.cover ?: ""),
+                        coverImage = MediaCoverImage(extraLarge = cachedAnime?.cover ?: ""),
                         episodes = cachedAnime?.episodes,
                         averageScore = cachedAnime?.averageScore,
                         genres = cachedAnime?.genres ?: emptyList(),

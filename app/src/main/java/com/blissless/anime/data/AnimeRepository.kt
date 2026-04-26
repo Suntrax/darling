@@ -817,7 +817,7 @@ class AnimeRepository(
         android.util.Log.d("REPO_DEBUG", "Executing fetchDetailedAnime for id=$animeId")
         
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
-            android.util.Log.d("REPO_DEBUG", "Raw response length: ${response.length}")
+            android.util.Log.d("REPO_DEBUG", "Raw response length: ${response.length}, preview: ${response.take(200)}")
             try {
                 val data = json.decodeFromString<DetailedAnimeResponse>(response)
                 android.util.Log.d("REPO_DEBUG", "Parsed detailed anime: id=${data.data.Media?.id}, title=${data.data.Media?.title?.romaji}")

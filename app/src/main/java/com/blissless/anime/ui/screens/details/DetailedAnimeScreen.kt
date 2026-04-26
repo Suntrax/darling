@@ -171,6 +171,7 @@ fun DetailedAnimeScreen(
     onSwipeToClose: () -> Unit = {},
     onPlayEpisode: (Int, String?) -> Unit = { _, _ -> },
     onUpdateStatus: (String?) -> Unit = {},
+    onUpdateProgress: (Int) -> Unit = {},
     onRemove: () -> Unit = {},
     onToggleFavorite: (DetailedAnimeData) -> Unit = {},
     onToggleLocalFavorite: (Int) -> Unit = {},
@@ -203,17 +204,45 @@ fun DetailedAnimeScreen(
     var showStatusDialog by remember { mutableStateOf(false) }
 
     val localFavorites by viewModel.localFavorites.collectAsState()
+    val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
-    val effectiveLocalFavorite = if (isLoggedIn) isLocalFavorite else localFavorites.containsKey(anime.id)
+    val localFavExists = localFavorites.containsKey(anime.id)
+    val aniListIsFavorite = aniListFavorites.any { it.id == anime.id }
+    val effectiveIsFavorite = when {
+        isLoggedIn -> isFavorite || aniListIsFavorite
+        else -> localFavExists
+    }
     val effectiveLocalStatus = if (isLoggedIn) null else localAnimeStatus[anime.id]?.status
     val effectiveLocalProgress = if (isLoggedIn) null else localAnimeStatus[anime.id]?.progress
 
+    var displayProgress by remember { mutableIntStateOf(currentProgress ?: effectiveLocalProgress ?: 0) }
+    LaunchedEffect(currentProgress, effectiveLocalProgress) {
+        displayProgress = currentProgress ?: effectiveLocalProgress ?: 0
+    }
+
     val effectiveStatus = if (isLoggedIn) currentStatus else (effectiveLocalStatus ?: localStatus)
     val effectiveOnUpdateStatus = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
+    val effectiveOnUpdateProgress = if (isLoggedIn) onUpdateProgress else { progress ->
+        viewModel.setLocalAnimeStatus(
+            anime.id,
+            localAnimeStatus[anime.id]?.copy(progress = progress)
+                ?: LocalAnimeEntry(
+                    id = anime.id,
+                    status = effectiveLocalStatus ?: "CURRENT",
+                    progress = progress,
+                    totalEpisodes = anime.episodes,
+                    title = anime.title ?: "",
+                    cover = anime.cover,
+                    banner = anime.banner,
+                    year = anime.year,
+                    averageScore = anime.averageScore
+                )
+        )
+    }
     val effectiveOnRemove = if (isLoggedIn) onRemove else onRemoveLocalStatus
 
     val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
-    val statusProgress = if (isLoggedIn) currentProgress else effectiveLocalProgress
+    val statusProgress = displayProgress
     val totalEps = anime.episodes
 
     val slideOffset = remember { Animatable(1000f) }
@@ -291,17 +320,24 @@ fun DetailedAnimeScreen(
 
         if (previousAnimeId != 0 && previousAnimeId != anime.id) {
             isTransitioning = true
-            // Reset cover animation when switching anime
             coverAnimationProgress.snapTo(0f)
             delay(150)
             isTransitioning = false
         }
         previousAnimeId = anime.id
 
+        // Try to fetch detailed data
         try {
-            detailedData = viewModel.fetchDetailedAnimeData(anime.id)
+            detailedData = viewModel.fetchDetailedAnimeData(anime.id, anime.malId)
+            // If fetch returns null (not found or error), keep using original anime data
+            if (detailedData == null) {
+                android.util.Log.d("AniListFavorite", "DetailedScreen: fetch failed, using original data for id=${anime.id}")
+                detailedData = anime
+            }
             relations = detailedData?.relations ?: anime.relations
         } catch (e: Exception) {
+            android.util.Log.e("AniListFavorite", "DetailedScreen: fetch error: ${e.message}")
+            detailedData = anime
         } finally {
             isLoadingDetails = false
         }
@@ -753,7 +789,6 @@ fun DetailedAnimeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             val notYetAired = displayData.status == "NOT_YET_RELEASED"
-                            val effectiveIsFavorite = if (isLoggedIn) isFavorite else effectiveLocalFavorite
 
                             Button(
                                 onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f).height(52.dp),
@@ -773,7 +808,18 @@ fun DetailedAnimeScreen(
                             OutlinedButton(
                                 onClick = {
                                     if (isLoggedIn) {
-                                        onToggleFavorite(displayData)
+                                        val animeMedia = AnimeMedia(
+                                            id = anime.id,
+                                            title = anime.title,
+                                            titleEnglish = anime.titleEnglish,
+                                            cover = anime.cover,
+                                            banner = anime.banner,
+                                            totalEpisodes = anime.episodes,
+                                            averageScore = anime.averageScore,
+                                            genres = anime.genres,
+                                            year = anime.year
+                                        )
+                                        viewModel.toggleAniListFavorite(anime.id, animeMedia)
                                     } else {
                                         viewModel.toggleOfflineFavorite(
                                             anime.id,
@@ -851,8 +897,6 @@ fun DetailedAnimeScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(16.dp))
-                            val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
-                            val statusProgress = if (isLoggedIn) null else effectiveLocalProgress
                             val totalEps = anime.episodes.takeIf { it > 0 } ?: anime.episodes
 
                             if (statusToCheck != null) {
@@ -893,7 +937,7 @@ fun DetailedAnimeScreen(
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(
-                                                    text = if (statusProgress != null) "$statusProgress" else "0",
+                                                    text = "$statusProgress",
                                                     style = MaterialTheme.typography.titleLarge,
                                                     fontWeight = FontWeight.Bold,
                                                     color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
@@ -937,7 +981,6 @@ fun DetailedAnimeScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
-                    // Redesigned Information Section
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -967,20 +1010,23 @@ fun DetailedAnimeScreen(
                                 Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                     color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                            // Main stats row - enhanced design
+                            // Main stats row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                val episodeText = when {
-                                    displayData.episodes > 0 -> "${displayData.episodes} eps"
-                                    displayData.latestEpisode != null && displayData.latestEpisode > 0 -> "Ep ${displayData.latestEpisode}"
+                                val latestEp = displayData.latestEpisode?.takeIf { it > 0 }
+                                val totalEp = displayData.episodes.takeIf { it > 0 }
+                                val epDisplay = when {
+                                    latestEp != null && totalEp != null -> "$latestEp / $totalEp"
+                                    latestEp != null -> "$latestEp"
+                                    totalEp != null -> "$totalEp"
                                     else -> null
                                 }
-                                episodeText?.let { text ->
-                                    InfoStat("Episodes", text, Icons.Default.PlayCircle, MaterialTheme.colorScheme.primary)
+                                epDisplay?.let {
+                                    InfoStat("Episodes", it, Icons.Default.PlayCircle, MaterialTheme.colorScheme.primary)
                                 }
                                 displayData.duration?.let {
                                     InfoStat("Duration", "$it min", Icons.Default.Timer, MaterialTheme.colorScheme.primary)
@@ -991,39 +1037,40 @@ fun DetailedAnimeScreen(
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                            // Clean grid of info items
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                // Row 1: Format | Season | Status
+                            // Info grid - 2 columns
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     displayData.format?.let { 
-                                        InfoPill("Format", it, modifier = Modifier.weight(1f)) 
+                                        InfoItemRow("Format", it.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, isOled, modifier = Modifier.weight(1f)) 
                                     }
-                                    if (displayData.season != null && displayData.year != null) {
-                                        InfoPill("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", modifier = Modifier.weight(1f))
-                                    }
-                                    if (displayData.status != null) {
-                                        InfoPill("Status", statusDisplay, modifier = Modifier.weight(1f))
+                                    displayData.status?.let { 
+                                        InfoItemRow("Status", statusDisplay, isOled, modifier = Modifier.weight(1f)) 
                                     }
                                 }
-                                // Row 2: Source | Studio
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    displayData.source?.let { 
-                                        InfoPill("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, modifier = Modifier.weight(1f)) 
+                                    if (displayData.season != null && displayData.year != null) {
+                                        InfoItemRow("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", isOled, modifier = Modifier.weight(1f))
                                     }
-                                    if (displayData.studios.isNotEmpty()) {
-                                        val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
-                                        if (studio.isNotEmpty()) InfoPill("Studio", studio, modifier = Modifier.weight(1f))
+                                    displayData.source?.let { 
+                                        InfoItemRow("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, isOled, modifier = Modifier.weight(1f)) 
                                     }
                                 }
-                                // Row 3: Dates
+                                if (displayData.studios.isNotEmpty()) {
+                                    val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
+                                    if (studio.isNotEmpty()) {
+                                        InfoItemRow("Studio", studio, isOled)
+                                    }
+                                }
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     displayData.startDate?.let { 
-                                        InfoPill("Started", formatDate(it), modifier = Modifier.weight(1f)) 
+                                        InfoItemRow("Started", formatDate(it), isOled, modifier = Modifier.weight(1f)) 
                                     }
                                     if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
                                         displayData.endDate?.let { 
-                                            InfoPill("Ended", formatDate(it), modifier = Modifier.weight(1f)) 
+                                            InfoItemRow("Ended", formatDate(it), isOled, modifier = Modifier.weight(1f)) 
                                         }
                                     }
                                 }
@@ -1916,9 +1963,9 @@ fun DetailedAnimeScreen(
             titleEnglish = anime.titleEnglish,
             cover = anime.cover,
             banner = anime.banner,
-            progress = statusProgress ?: 0,
+            progress = statusProgress,
             totalEpisodes = totalEps,
-            latestEpisode = anime.episodes,
+            latestEpisode = displayData.latestEpisode,
             listStatus = statusToCheck ?: "",
             averageScore = anime.averageScore,
             year = anime.year
@@ -1933,6 +1980,10 @@ fun DetailedAnimeScreen(
             },
             onUpdate = { status: String, progress: Int? ->
                 effectiveOnUpdateStatus(status)
+                if (progress != null) {
+                    effectiveOnUpdateProgress(progress)
+                    displayProgress = progress
+                }
                 if (!isLoggedIn && progress != null) {
                     viewModel.setLocalAnimeStatus(
                         anime.id,
@@ -2056,6 +2107,23 @@ private fun InfoPill(label: String, value: String, modifier: Modifier = Modifier
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
+    }
+}
+
+@Composable
+private fun InfoItemRow(label: String, value: String, isOled: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.padding(end = 8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

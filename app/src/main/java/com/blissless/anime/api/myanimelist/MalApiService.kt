@@ -191,7 +191,7 @@ class MalApiService(private val context: Context) {
 
             while (offset < maxTotal) {
                 val fields =
-                    "list_status{status,score,num_episodes_watched,updated_at},title,main_picture,num_episodes"
+                    "list_status{status,score,num_episodes_watched,updated_at},title,main_picture,num_episodes,alternative_titles"
                 var url =
                     "$MAL_API_BASE/users/@me/animelist?fields=$fields&limit=$limit&offset=$offset"
                 if (status != null) {
@@ -270,6 +270,13 @@ class MalApiService(private val context: Context) {
                 val totalEpisodesMatch = Regex("\"num_episodes\"\\s*:\\s*(\\d+)").find(block)
                 val totalEpisodes = totalEpisodesMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
+                val altTitlesMatch = Regex("\"alternative_titles\"\\s*:\\s*\\{([^}]+)\\}").find(block)
+                var altTitleEn: String? = null
+                if (altTitlesMatch != null) {
+                    val enMatch = Regex("\"en\"\\s*:\\s*\"([^\"]+)\"").find(altTitlesMatch.value)
+                    altTitleEn = enMatch?.groupValues?.get(1)
+                }
+
                 val statusMatch = Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(block)
                 val status = statusMatch?.groupValues?.get(1)
 
@@ -285,7 +292,8 @@ class MalApiService(private val context: Context) {
                             id = id,
                             title = title,
                             main_picture = MalPicture(medium = mediumPic, large = largePic),
-                            num_episodes = totalEpisodes
+                            num_episodes = totalEpisodes,
+                            alternative_titles = if (altTitleEn != null) MalAlternativeTitles(en = altTitleEn) else null
                         ),
                         list_status = if (status != null) MalListStatus(
                             status = status,

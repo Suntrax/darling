@@ -2,7 +2,9 @@ package com.blissless.anime.dialogs
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -66,7 +70,7 @@ fun HomeAnimeStatusDialog(
 ) {
     val context = LocalContext.current
     var selectedStatus by remember { mutableStateOf(anime.listStatus) }
-    var selectedProgress by remember { mutableStateOf(anime.progress.toString()) }
+    var selectedProgress by remember { mutableStateOf(if (anime.progress > 0) anime.progress.toString() else "") }
     var markedForRemoval by remember { mutableStateOf(false) }
     var showAnimation by remember { mutableStateOf(false) }
 
@@ -90,7 +94,15 @@ fun HomeAnimeStatusDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("Progress: ${anime.progress} / ${anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 } ?: "?"}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                        val latestEp = anime.latestEpisode?.takeIf { it > 0 }
+                        val totalEp = anime.totalEpisodes?.takeIf { it > 0 }
+                        val progressText = when {
+                            latestEp != null && latestEp > 0 && totalEp != null -> "${anime.progress} / $latestEp / $totalEp"
+                            latestEp != null && latestEp > 0 -> "${anime.progress} / $latestEp"
+                            totalEp != null -> "${anime.progress} / $totalEp"
+                            else -> "${anime.progress}"
+                        }
+                        Text("Progress: $progressText", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
                         anime.year?.let { Text("Released: $it", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f)) }
                     }
                 }
@@ -185,29 +197,37 @@ fun HomeAnimeStatusDialog(
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Remove", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        Text("Remove", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1, color = if (markedForRemoval) Color.Red else Color.White.copy(alpha = 0.7f))
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Episode Progress", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(8.dp))
+
+                val maxEp = anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 }
+
                 OutlinedTextField(
                     value = selectedProgress,
                     onValueChange = { newValue ->
                         val filtered = newValue.filter { c -> c.isDigit() }
-                        val maxEp = when {
-                            anime.totalEpisodes > 0 -> anime.totalEpisodes
-                            anime.latestEpisode != null && anime.latestEpisode > 1 -> anime.latestEpisode - 1
-                            anime.latestEpisode == 1 -> 0
-                            else -> 0
+                        val clamped = if (maxEp != null) {
+                            filtered.toIntOrNull()?.coerceIn(0, maxEp)?.toString() ?: filtered
+                        } else {
+                            filtered
                         }
-                        val clamped = filtered.toIntOrNull()?.coerceIn(0, maxEp)?.toString() ?: filtered
                         selectedProgress = clamped
                     },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.White.copy(alpha = 0.3f), cursorColor = MaterialTheme.colorScheme.primary),
+                    placeholder = { Text("Enter last watched episode", color = Color.White.copy(alpha = 0.4f)) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = if (selectedProgress.isEmpty() || selectedProgress == "0") Color.Transparent else Color.White,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    ),
                     shape = RoundedCornerShape(10.dp)
                 )
 

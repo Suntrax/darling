@@ -30,7 +30,14 @@ data class MalAnimeNode(
     val id: Int = 0,
     val title: String = "",
     val main_picture: MalPicture? = null,
-    val num_episodes: Int = 0
+    val num_episodes: Int = 0,
+    val alternative_titles: MalAlternativeTitles? = null
+)
+
+@Serializable
+data class MalAlternativeTitles(
+    val en: String? = null,
+    val ja: String? = null
 )
 
 @Serializable
