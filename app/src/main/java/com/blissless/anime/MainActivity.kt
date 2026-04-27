@@ -13,7 +13,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,11 +69,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.blissless.anime.api.myanimelist.LoginProvider
 import com.blissless.anime.data.models.AnimeMedia
@@ -108,7 +111,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -122,6 +124,60 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val activity = this@MainActivity
+            var showSplash by remember { mutableStateOf(true) }
+            var splashProgress by remember { mutableStateOf(1f) }
+
+            LaunchedEffect(mainViewModel.splashReady) {
+                if (mainViewModel.splashReady.value) {
+                    splashProgress = 2f
+                    delay(400)
+                    showSplash = false
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                delay(1400)
+                splashProgress = 2f
+                delay(400)
+                showSplash = false
+            }
+
+            if (showSplash) {
+                val animatedProgress by animateFloatAsState(
+                    targetValue = splashProgress,
+                    animationSpec = tween(durationMillis = 400, easing = LinearEasing),
+                    label = "splash_progress"
+                )
+
+                val scale = when {
+                    animatedProgress < 1f -> 0.85f + (0.15f * animatedProgress)
+                    else -> 1f - ((animatedProgress - 1f) * 0.15f)
+                }
+                val alpha = when {
+                    animatedProgress < 1f -> animatedProgress
+                    animatedProgress < 2f -> 1f - ((animatedProgress - 1f) * 1f)
+                    else -> 0f
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.splash),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                alpha = alpha.coerceIn(0f, 1f)
+                            ),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            } else {
             val isOled by mainViewModel.isOled.collectAsState()
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
@@ -143,12 +199,10 @@ class MainActivity : ComponentActivity() {
                 isLoggedIn = isAnyLoggedIn
             }
 
-            // Always enable high refresh rate on supported devices
             LaunchedEffect(Unit) {
                 enableHighRefreshRate()
             }
             
-            // Observe toast messages
             val toastContext = LocalContext.current
             LaunchedEffect(Unit) {
                 mainViewModel.toastMessage.collect { message ->
@@ -156,7 +210,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
             
-            // Observe logout events to reset auth flags
             LaunchedEffect(Unit) {
                 mainViewModel.logoutEvent.collect {
                     (toastContext as? MainActivity)?.resetAuthFlags()
@@ -274,6 +327,7 @@ class MainActivity : ComponentActivity() {
                     preventScheduleSync = preventScheduleSync,
                     isLoggedIn = isLoggedIn
                 )
+            }
             }
         }
     }

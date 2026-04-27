@@ -452,6 +452,9 @@ class MainViewModel : ViewModel() {
     private val _isLoadingSchedule = MutableStateFlow(false)
     val isLoadingSchedule: StateFlow<Boolean> = _isLoadingSchedule.asStateFlow()
 
+    private val _splashReady = MutableStateFlow(false)
+    val splashReady: StateFlow<Boolean> = _splashReady.asStateFlow()
+
     // Anime lists
     private val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val currentlyWatching: StateFlow<List<AnimeMedia>> = _currentlyWatching.asStateFlow()
@@ -744,6 +747,8 @@ class MainViewModel : ViewModel() {
             homeDeferred.await()
             exploreDeferred.await()
             scheduleDeferred.await()
+
+            _splashReady.value = true
 
             // Fetch AniList favorites in background after initial load completes
             if (hasToken) {
