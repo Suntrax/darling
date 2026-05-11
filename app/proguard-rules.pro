@@ -100,6 +100,11 @@
 -keep class * extends androidx.glance.appwidget.GlanceAppWidget { *; }
 -keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver { *; }
 
+# Keep Room generated implementations (WorkManager uses Room internally, _Impl classes accessed by reflection)
+# Keep Room database implementations (WorkManager uses Room internally, generated _Impl classes need constructors)
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep @androidx.room.Database class * { *; }
+
 # Keep Kotlin serializers for all serializable classes
 -keep,includedescriptorclasses class com.blissless.anime.widget.**$$serializer { *; }
 -keepclassmembers class com.blissless.anime.widget.** {
