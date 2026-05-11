@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "3.9.7"
+        versionCode = 42
+        versionName = "3.9.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -134,4 +134,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.json)
     implementation(libs.kotlinx.serialization.json)
+    implementation("androidx.glance:glance-appwidget:1.1.0")
+    implementation("androidx.glance:glance-material3:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 }

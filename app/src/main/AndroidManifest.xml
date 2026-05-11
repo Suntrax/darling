@@ -39,6 +39,17 @@ android:theme="@style/Theme.MyApplication"
             </intent-filter>
 
         </activity>
+
+        <receiver
+            android:name=".widget.AiringScheduleWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/airing_schedule_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

@@ -626,6 +626,34 @@ fun MainScreen(
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
 
+    LaunchedEffect(Unit) {
+        val activity = context as? MainActivity ?: return@LaunchedEffect
+        val animeId = activity.intent?.getIntExtra("widget_anime_id", 0) ?: return@LaunchedEffect
+        if (animeId <= 0) return@LaunchedEffect
+        activity.intent?.removeExtra("widget_anime_id")
+        val detailedData = viewModel.fetchDetailedAnimeData(animeId)
+        if (detailedData != null) {
+            selectedAnimeState = AnimeMedia(
+                id = detailedData.id,
+                title = detailedData.title,
+                titleEnglish = detailedData.titleEnglish,
+                cover = detailedData.cover,
+                banner = detailedData.banner,
+                progress = 0,
+                totalEpisodes = detailedData.episodes,
+                latestEpisode = detailedData.latestEpisode,
+                status = detailedData.status ?: "",
+                averageScore = detailedData.averageScore,
+                genres = detailedData.genres,
+                listStatus = "",
+                listEntryId = 0,
+                year = detailedData.year,
+                malId = detailedData.malId
+            )
+            showDetailedAnimeScreen = true
+        }
+    }
+
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
         currentlyWatching.forEach { map[it.id] = "CURRENT" }
