@@ -88,3 +88,23 @@
 
 # Keep data classes used with Gson
 -keep class com.blissless.anime.data.models.** { *; }
+
+# Keep Widget classes (WorkManager creates workers via reflection, Glance uses reflection for widgets)
+-keep class com.blissless.anime.widget.** { *; }
+
+# Keep WorkManager workers (instantiated via reflection)
+-keep class * extends androidx.work.Worker { *; }
+-keep class * extends androidx.work.CoroutineWorker { *; }
+
+# Keep Glance widget and receiver
+-keep class * extends androidx.glance.appwidget.GlanceAppWidget { *; }
+-keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver { *; }
+
+# Keep Kotlin serializers for all serializable classes
+-keep,includedescriptorclasses class com.blissless.anime.widget.**$$serializer { *; }
+-keepclassmembers class com.blissless.anime.widget.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.blissless.anime.widget.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
