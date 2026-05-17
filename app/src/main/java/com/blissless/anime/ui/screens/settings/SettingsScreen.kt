@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -76,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
@@ -152,7 +154,7 @@ fun SettingsScreen(
             SettingsGroup(
                 id = "extensions",
                 title = "Extensions",
-                description = "Manage anime source extensions",
+                description = "Manage source extensions",
                 icon = Icons.Default.Extension,
                 iconBackgroundColor = if (isOled) Color.White else primary
             )
@@ -215,6 +217,7 @@ fun SettingsScreen(
                     onBack = { selectedGroup = null }
                 )
                 "extensions" -> ExtensionsSettingsPage(
+                    viewModel = viewModel,
                     isOled = isOled,
                     onBack = { selectedGroup = null }
                 )
@@ -356,9 +359,8 @@ private fun SettingsPageScaffold(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 110.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 130.dp)
             .windowInsetsPadding(WindowInsets.statusBars)
-            .verticalScroll(rememberScrollState())
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -406,7 +408,7 @@ private fun SettingsPageScaffold(
                     "Stream Settings" -> "Audio preferences and buffering"
                     "Player Settings" -> "Playback controls and skipping"
                     "Cache Management" -> "Storage and data cleanup"
-                    "Extensions" -> "Manage anime source extensions"
+                    "Extensions" -> "Manage source extensions"
                     else -> ""
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -417,7 +419,7 @@ private fun SettingsPageScaffold(
         Spacer(modifier = Modifier.height(16.dp))
 
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
         )
@@ -1228,9 +1230,15 @@ private fun formatFileSize(bytes: Long): String {
 
 @Composable
 private fun ExtensionsSettingsPage(
+    viewModel: MainViewModel,
     isOled: Boolean,
     onBack: () -> Unit
 ) {
+    val defaultExtPackage by viewModel.defaultExtensionPackage.collectAsState()
+    val extViewModel: ExtensionsViewModel = viewModel()
+    val extUiState by extViewModel.uiState.collectAsState()
+    var showExtPicker by remember { mutableStateOf(false) }
+
     SettingsPageScaffold(
         title = "Extensions",
         icon = Icons.Default.Extension,
@@ -1238,6 +1246,71 @@ private fun ExtensionsSettingsPage(
         onBack = onBack,
         isOled = isOled
     ) {
+        // Default extension picker
+        SettingsCard(isOled = isOled) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { showExtPicker = true },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Default Extension",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (defaultExtPackage.isNotEmpty()) {
+                            extUiState.extensions.find { it.packageName == defaultExtPackage }?.name
+                                ?: defaultExtPackage
+                        } else "None (use built-in)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "Pick extension",
+                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        if (showExtPicker) {
+            AlertDialog(
+                onDismissRequest = { showExtPicker = false },
+                title = { Text("Default Extension") },
+                text = {
+                    Column {
+                        TextButton(
+                            onClick = {
+                                viewModel.setDefaultExtensionPackage("")
+                                showExtPicker = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("None (use built-in)", modifier = Modifier.fillMaxWidth())
+                        }
+                        extUiState.extensions.forEach { ext ->
+                            TextButton(
+                                onClick = {
+                                    viewModel.setDefaultExtensionPackage(ext.packageName)
+                                    showExtPicker = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(ext.name, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showExtPicker = false }) { Text("Cancel") }
+                }
+            )
+        }
+
         ExtensionsScreen(
             isOled = isOled
         )

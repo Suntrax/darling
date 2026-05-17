@@ -578,6 +578,7 @@ class MainViewModel : ViewModel() {
     val localFavoriteIds: Set<Int> get() = userPreferences.localFavoriteIds
     val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> get() = userPreferences.localAnimeStatus
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
+    val defaultExtensionPackage: StateFlow<String> get() = userPreferences.defaultExtensionPackage
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
     val streamProvider: StateFlow<Int> get() = userPreferences.streamProvider
@@ -1550,6 +1551,7 @@ class MainViewModel : ViewModel() {
     fun setAutoPlayNextEpisode(enabled: Boolean) = userPreferences.setAutoPlayNextEpisode(enabled)
     fun setEnableThumbnailPreview(enabled: Boolean) = userPreferences.setEnableThumbnailPreview(enabled)
     fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
+    fun setDefaultExtensionPackage(packageName: String) = userPreferences.setDefaultExtensionPackage(packageName)
     fun setStreamProvider(provider: Int) = userPreferences.setStreamProvider(provider)
     fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
     fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)

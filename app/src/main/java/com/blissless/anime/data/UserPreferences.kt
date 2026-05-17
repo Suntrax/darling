@@ -41,6 +41,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LOCAL_FAVORITES = "local_favorites"
         private const val KEY_ANILIST_FAVORITES = "anilist_favorites"
         private const val KEY_PREFERRED_SCRAPER = "preferred_scraper"
+        private const val KEY_DEFAULT_EXTENSION = "default_extension_package"
         private const val KEY_HIDE_ADULT_CONTENT = "hide_adult_content"
         private const val KEY_STREAM_PROVIDER = "stream_provider"
         private const val KEY_STARTUP_SCREEN = "startup_screen"
@@ -116,6 +117,10 @@ class UserPreferences(private val context: Context) {
     // Preferred Scraper
     private val _preferredScraper = MutableStateFlow("Animekai")
     val preferredScraper: StateFlow<String> = _preferredScraper.asStateFlow()
+
+    // Default Extension
+    private val _defaultExtensionPackage = MutableStateFlow("")
+    val defaultExtensionPackage: StateFlow<String> = _defaultExtensionPackage.asStateFlow()
 
     // Hide Adult Content
     private val _hideAdultContent = MutableStateFlow(false)
@@ -225,6 +230,7 @@ class UserPreferences(private val context: Context) {
         _autoPlayNextEpisode.value = sharedPreferences.getBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, true)
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
+        _defaultExtensionPackage.value = sharedPreferences.getString(KEY_DEFAULT_EXTENSION, "") ?: ""
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
         _streamProvider.value = sharedPreferences.getInt(KEY_STREAM_PROVIDER, 1)
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
@@ -356,6 +362,11 @@ class UserPreferences(private val context: Context) {
     fun setPreferredScraper(scraper: String) {
         _preferredScraper.value = scraper
         sharedPreferences.edit { putString(KEY_PREFERRED_SCRAPER, scraper) }
+    }
+
+    fun setDefaultExtensionPackage(packageName: String) {
+        _defaultExtensionPackage.value = packageName
+        sharedPreferences.edit { putString(KEY_DEFAULT_EXTENSION, packageName) }
     }
 
     fun setHideAdultContent(enabled: Boolean) {
