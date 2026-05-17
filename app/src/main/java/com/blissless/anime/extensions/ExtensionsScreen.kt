@@ -13,10 +13,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,10 @@ fun ExtensionsScreen(
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadExtensions()
+    }
 
     Column(
         modifier = Modifier
@@ -75,29 +80,47 @@ fun ExtensionsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        PullToRefreshBox(
+            isRefreshing = uiState.isLoading,
+            onRefresh = { viewModel.loadExtensions() },
+            modifier = Modifier.fillMaxSize()
         ) {
-            items(uiState.repos, key = { it.url }) { repoState ->
-                RepoSection(
-                    repoState = repoState,
-                    installedPackages = installedPackages,
-                    isOled = isOled,
-                    onInstall = { viewModel.installExtension(it) },
-                    onRemoveRepo = { viewModel.removeRepo(repoState.url) }
-                )
-            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(uiState.repos, key = { it.url }) { repoState ->
+                    RepoSection(
+                        repoState = repoState,
+                        installedPackages = installedPackages,
+                        isOled = isOled,
+                        onInstall = { viewModel.installExtension(it) },
+                        onRemoveRepo = { viewModel.removeRepo(repoState.url) }
+                    )
+                }
 
-            item {
-                Text(
-                    text = "Installed",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Installed",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                        )
+                        IconButton(onClick = { viewModel.loadExtensions() }) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
             when {
                 uiState.isLoading -> {
@@ -160,34 +183,14 @@ fun ExtensionsScreen(
                                 }
                                 Toast.makeText(ctx, "Opening app settings...", Toast.LENGTH_SHORT).show()
                                 ctx.startActivity(intent)
-                            },
-                            onDelete = {
-                                try {
-                                    val intent = Intent(Intent.ACTION_DELETE, Uri.fromParts("package", ext.packageName, null))
-                                    if (intent.resolveActivity(ctx.packageManager) != null) {
-                                        Toast.makeText(ctx, "Opening uninstall screen...", Toast.LENGTH_SHORT).show()
-                                        ctx.startActivity(intent)
-                                    } else {
-                                        val sIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = Uri.parse("package:${ext.packageName}")
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        ctx.startActivity(sIntent)
-                                    }
-                                } catch (_: Exception) {
-                                    val sIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.parse("package:${ext.packageName}")
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    ctx.startActivity(sIntent)
-                                }
-                            }
+                        }
                         )
                     }
                 }
             }
         }
     }
+}
 }
 
 @Composable
@@ -331,8 +334,7 @@ private fun ExtensionItem(
 private fun InstalledExtensionCard(
     extension: Extension,
     isOled: Boolean,
-    onSettings: () -> Unit,
-    onDelete: () -> Unit
+    onSettings: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -409,14 +411,6 @@ private fun InstalledExtensionCard(
                         Icons.Default.Info,
                         contentDescription = "App info",
                         tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Uninstall",
-                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(20.dp)
                     )
                 }

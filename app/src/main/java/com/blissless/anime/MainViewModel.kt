@@ -52,11 +52,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import android.util.Log
+import com.blissless.anime.extensions.ExtensionDetector
+import com.blissless.anime.stream.ExtensionLoader
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.model.Hoster
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.Video
 
 class MainViewModel : ViewModel() {
 
     companion object {
         private const val TAG = "MainViewModel"
+        private const val TAG_EXT = "ExtensionStream"
         private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
         private const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
         private const val SYNC_DEBOUNCE_MS = 2000L // 2 seconds debounce for API sync
@@ -2320,6 +2329,117 @@ class MainViewModel : ViewModel() {
         android.util.Log.d("MAL_DEBUG", "addExploreAnimeToList: anime.id=${anime.id}, malId=${anime.malId}, status=$status")
         queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null)
         updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
+    }
+
+    private suspend fun getExtensionVideos(source: AnimeCatalogueSource, episode: SEpisode): List<Video> {
+        return withContext(Dispatchers.IO) {
+            val hosters = try {
+                source.getHosterList(episode)
+            } catch (_: Throwable) { null }
+            if (hosters != null && hosters.isNotEmpty()) {
+                hosters.flatMap { hoster ->
+                    if (hoster.lazy) {
+                        try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                    } else {
+                        hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                    }
+                }
+            } else {
+                try { source.getVideoList(episode) } catch (_: Throwable) { emptyList() }
+            }
+        }
+    }
+
+    fun logExtensionStreamsForAnime(anime: AnimeMedia) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val defaultPkg = defaultExtensionPackage.value
+            if (defaultPkg.isEmpty()) {
+                Log.d(TAG_EXT, "No default extension selected")
+                return@launch
+            }
+
+            val detector = ExtensionDetector(context)
+            val extensions = detector.detectInstalledExtensions()
+            val ext = extensions.find { it.packageName == defaultPkg }
+            if (ext == null) {
+                Log.d(TAG_EXT, "Default extension $defaultPkg not found among installed")
+                return@launch
+            }
+            Log.d(TAG_EXT, "Using extension: ${ext.name} (${ext.packageName}) sourceClass=${ext.sourceClass}")
+
+            val loader = ExtensionLoader(context)
+            val sources = loader.loadSources(ext)
+            if (sources.isEmpty()) {
+                Log.d(TAG_EXT, "No sources loaded from extension")
+                return@launch
+            }
+            val source = sources.first()
+            Log.d(TAG_EXT, "Loaded source: ${source.name} (id=${source.id}, lang=${source.lang})")
+
+            val searchTerms = listOfNotNull(
+                anime.titleEnglish,
+                anime.title
+            ).distinct()
+
+            var matchedSAnime: SAnime? = null
+            var matchedQuery = ""
+
+            for (query in searchTerms) {
+                try {
+                    val page = source.getSearchAnime(1, query, emptyList())
+                    Log.d(TAG_EXT, "Search '$query': ${page.animes.size} results")
+                    page.animes.forEach { a ->
+                        Log.d(TAG_EXT, "  -> ${a.title} | url=${a.url}")
+                    }
+                    matchedSAnime = page.animes.firstOrNull { a ->
+                        a.title.contains(anime.title ?: "", ignoreCase = true) ||
+                                (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
+                    } ?: page.animes.firstOrNull()
+                    if (matchedSAnime != null) {
+                        matchedQuery = query
+                        break
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG_EXT, "Search failed for '$query'", e)
+                }
+            }
+
+            if (matchedSAnime == null) {
+                Log.d(TAG_EXT, "Could not find anime '${anime.title}' in extension")
+                return@launch
+            }
+            Log.d(TAG_EXT, "Matched (via '$matchedQuery'): ${matchedSAnime.title}")
+
+            val sEpisodes = try {
+                source.getEpisodeList(matchedSAnime)
+            } catch (e: Exception) {
+                Log.e(TAG_EXT, "getEpisodeList failed", e)
+                return@launch
+            }
+            Log.d(TAG_EXT, "Got ${sEpisodes.size} episodes total")
+
+            for (sEpisode in sEpisodes) {
+                try {
+                    val videos = getExtensionVideos(source, sEpisode)
+                    val epNum = sEpisode.episode_number.toInt()
+                    Log.d(TAG_EXT, "--- Episode $epNum (${sEpisode.name}) ---")
+                    Log.d(TAG_EXT, "  Videos found: ${videos.size}")
+                    val subVideos = videos.filter { it.subtitleTracks.isNotEmpty() || !it.videoTitle.contains("DUB", ignoreCase = true) }
+                    val dubVideos = videos.filter { it.videoTitle.contains("DUB", ignoreCase = true) }
+                    Log.d(TAG_EXT, "  SUB count: ${subVideos.size} | DUB count: ${dubVideos.size}")
+                    videos.forEachIndexed { i, v ->
+                        val trackInfo = buildString {
+                            if (v.subtitleTracks.isNotEmpty()) append(" subs=[${v.subtitleTracks.joinToString { it.lang }}]")
+                            if (v.audioTracks.isNotEmpty()) append(" audios=[${v.audioTracks.joinToString { it.lang }}]")
+                        }
+                        Log.d(TAG_EXT, "  [$i] title='${v.videoTitle}' url=${v.videoUrl.take(120)} res=${v.resolution ?: "N/A"}$trackInfo")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG_EXT, "Failed to get videos for episode ${sEpisode.episode_number}", e)
+                }
+            }
+            Log.d(TAG_EXT, "=== Done logging extension streams ===")
+        }
     }
 
     override fun onCleared() {

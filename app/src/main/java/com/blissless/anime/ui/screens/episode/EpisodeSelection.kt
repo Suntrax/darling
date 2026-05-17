@@ -373,6 +373,10 @@ fun RichEpisodeScreen(
         }
     }
 
+    LaunchedEffect(anime.id) {
+        viewModel.logExtensionStreamsForAnime(anime)
+    }
+
     // Scroll to current episode (next to watch or last watched) with smooth animation
     LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
         if (!isLoadingEpisodes) {

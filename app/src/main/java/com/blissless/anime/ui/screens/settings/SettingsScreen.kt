@@ -243,8 +243,7 @@ private fun SettingsLandingPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(start = 16.dp, end = 16.dp, top = 36.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -354,6 +353,7 @@ private fun SettingsPageScaffold(
     iconBackgroundColor: Color,
     onBack: () -> Unit,
     isOled: Boolean,
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -418,11 +418,19 @@ private fun SettingsPageScaffold(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            content = content
-        )
+        if (scrollable) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                content = content
+            )
+        } else {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                content = content
+            )
+        }
     }
 }
 
@@ -1244,7 +1252,8 @@ private fun ExtensionsSettingsPage(
         icon = Icons.Default.Extension,
         iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
         onBack = onBack,
-        isOled = isOled
+        isOled = isOled,
+        scrollable = false
     ) {
         // Default extension picker
         SettingsCard(isOled = isOled) {
@@ -1264,7 +1273,7 @@ private fun ExtensionsSettingsPage(
                         text = if (defaultExtPackage.isNotEmpty()) {
                             extUiState.extensions.find { it.packageName == defaultExtPackage }?.name
                                 ?: defaultExtPackage
-                        } else "None (use built-in)",
+                        } else "None",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1283,15 +1292,6 @@ private fun ExtensionsSettingsPage(
                 title = { Text("Default Extension") },
                 text = {
                     Column {
-                        TextButton(
-                            onClick = {
-                                viewModel.setDefaultExtensionPackage("")
-                                showExtPicker = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("None (use built-in)", modifier = Modifier.fillMaxWidth())
-                        }
                         extUiState.extensions.forEach { ext ->
                             TextButton(
                                 onClick = {
@@ -1312,6 +1312,7 @@ private fun ExtensionsSettingsPage(
         }
 
         ExtensionsScreen(
+            viewModel = extViewModel,
             isOled = isOled
         )
     }

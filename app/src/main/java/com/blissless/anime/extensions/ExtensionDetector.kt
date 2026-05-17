@@ -99,14 +99,12 @@ class ExtensionDetector(private val context: Context) {
 
     private fun isMetadataTrue(metaData: android.os.Bundle?, key: String): Boolean {
         if (metaData == null) return false
-        return try {
-            metaData.getBoolean(key)
-        } catch (_: ClassCastException) {
-            try {
-                metaData.getInt(key) != 0
-            } catch (_: ClassCastException) {
-                false
-            }
+        val value = metaData.get(key) ?: return false
+        return when (value) {
+            is Boolean -> value
+            is Int -> value != 0
+            is String -> value.toBooleanStrictOrNull() ?: false
+            else -> false
         }
     }
 }
