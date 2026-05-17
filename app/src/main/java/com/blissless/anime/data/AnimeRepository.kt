@@ -765,6 +765,7 @@ class AnimeRepository(
                         rank
                         isMediaSpoiler
                         description
+                        isAdult
                     }
                     season
                     seasonYear
@@ -1219,27 +1220,35 @@ class AnimeRepository(
 
     suspend fun fetchMiruroEpisodes(
         animeId: Int,
+        animeTitle: String? = null,
+        animeYear: Int? = null,
+        animeFormat: String? = null,
         latestAiredEpisode: Int = Int.MAX_VALUE
     ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
         try {
-            val miruroEpisodes = miruroService.getAnimeEpisodes(animeId) ?: return@withContext emptyList()
-            
-            val episodes = miruroEpisodes.episodes.map { miruroEp: MiruroEpisodeInfo ->
-                val hasAired = latestAiredEpisode == Int.MAX_VALUE || miruroEp.number <= latestAiredEpisode
-                
-                TmdbEpisode(
-                    episode = miruroEp.number,
-                    title = miruroEp.title ?: "Episode ${miruroEp.number}",
-                    description = if (hasAired) miruroEp.description ?: "" else "Not yet aired",
-                    image = miruroEp.image
-                )
+            val miruroEpisodes = miruroService.getAnimeEpisodes(animeId)
+            if (miruroEpisodes != null && miruroEpisodes.episodes.isNotEmpty()) {
+                return@withContext miruroEpisodes.episodes.map { miruroEp: MiruroEpisodeInfo ->
+                    val hasAired = latestAiredEpisode == Int.MAX_VALUE || miruroEp.number <= latestAiredEpisode
+                    TmdbEpisode(
+                        episode = miruroEp.number,
+                        title = miruroEp.title ?: "Episode ${miruroEp.number}",
+                        description = if (hasAired) miruroEp.description ?: "" else "Not yet aired",
+                        image = miruroEp.image
+                    )
+                }
             }
-            
-            episodes
         } catch (e: Exception) {
             e.printStackTrace()
-            emptyList()
         }
+        if (animeTitle != null) {
+            try {
+                return@withContext fetchTmdbEpisodes(animeTitle, animeId, animeYear, animeFormat, latestAiredEpisode)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        emptyList()
     }
 
     // ============================================
@@ -1465,7 +1474,8 @@ class AnimeRepository(
         var absoluteIndex = 1
 
         // First, collect all episodes from TMDB
-        val tmdbEpisodes = mutableListOf<Triple<Int, String?, String?>>() // (relativeNum, title, description)
+        data class EpisodeData(val relativeNum: Int, val title: String?, val description: String?, val image: String?)
+        val tmdbEpisodes = mutableListOf<EpisodeData>()
         
         for (season in allSeasonDetails) {
             for (episode in season.episodes) {
@@ -1480,8 +1490,9 @@ class AnimeRepository(
                     val title = if (episode.name != null && !episode.name.startsWith("Episode", ignoreCase = true)) {
                         episode.name
                     } else null
+                    val image = episode.still_path?.let { "https://image.tmdb.org/t/p/w500$it" }
                     
-                    tmdbEpisodes.add(Triple(relativeNum, title, episode.overview))
+                    tmdbEpisodes.add(EpisodeData(relativeNum, title, episode.overview, image))
                 }
                 absoluteIndex++
             }
@@ -1492,14 +1503,14 @@ class AnimeRepository(
         val expectedEpisodeCount = if (maxEpisodes > 0) maxEpisodes else tmdbEpisodeCount
         
         // Add TMDB episodes with proper airing status
-        for ((relativeNum, title, description) in tmdbEpisodes) {
+        for ((relativeNum, title, description, image) in tmdbEpisodes) {
             val hasAired = latestAiredEpisode == Int.MAX_VALUE || relativeNum <= latestAiredEpisode
             
             allEpisodes.add(TmdbEpisode(
                 episode = relativeNum,
                 title = title ?: "Episode $relativeNum",
                 description = if (hasAired) (description ?: "") else "",
-                image = null // TMDB episode images are not stored to keep memory low
+                image = image
             ))
         }
         

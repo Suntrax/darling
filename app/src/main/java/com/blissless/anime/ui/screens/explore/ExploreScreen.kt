@@ -1,5 +1,6 @@
 package com.blissless.anime.ui.screens.explore
 
+import com.blissless.anime.data.models.isAdultContent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -126,18 +127,18 @@ fun ExploreScreen(
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     
     val filteredFeaturedAnime = remember(featuredAnime, hideAdultContent) {
-        if (hideAdultContent) featuredAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else featuredAnime
+        if (hideAdultContent) featuredAnime.filter { !isAdultContent(it.isAdult, it.genres) } else featuredAnime
     }
     val filteredSeasonalAnime = remember(seasonalAnime, hideAdultContent) {
-        if (hideAdultContent) seasonalAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else seasonalAnime
+        if (hideAdultContent) seasonalAnime.filter { !isAdultContent(it.isAdult, it.genres) } else seasonalAnime
     }
-    val filteredTopSeries = remember(topSeries, hideAdultContent) { if (hideAdultContent) topSeries.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else topSeries }
-    val filteredTopMovies = remember(topMovies, hideAdultContent) { if (hideAdultContent) topMovies.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else topMovies }
-    val filteredActionAnime = remember(actionAnime, hideAdultContent) { if (hideAdultContent) actionAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else actionAnime }
-    val filteredRomanceAnime = remember(romanceAnime, hideAdultContent) { if (hideAdultContent) romanceAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else romanceAnime }
-    val filteredComedyAnime = remember(comedyAnime, hideAdultContent) { if (hideAdultContent) comedyAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else comedyAnime }
-    val filteredFantasyAnime = remember(fantasyAnime, hideAdultContent) { if (hideAdultContent) fantasyAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else fantasyAnime }
-    val filteredScifiAnime = remember(scifiAnime, hideAdultContent) { if (hideAdultContent) scifiAnime.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else scifiAnime }
+    val filteredTopSeries = remember(topSeries, hideAdultContent) { if (hideAdultContent) topSeries.filter { !isAdultContent(it.isAdult, it.genres) } else topSeries }
+    val filteredTopMovies = remember(topMovies, hideAdultContent) { if (hideAdultContent) topMovies.filter { !isAdultContent(it.isAdult, it.genres) } else topMovies }
+    val filteredActionAnime = remember(actionAnime, hideAdultContent) { if (hideAdultContent) actionAnime.filter { !isAdultContent(it.isAdult, it.genres) } else actionAnime }
+    val filteredRomanceAnime = remember(romanceAnime, hideAdultContent) { if (hideAdultContent) romanceAnime.filter { !isAdultContent(it.isAdult, it.genres) } else romanceAnime }
+    val filteredComedyAnime = remember(comedyAnime, hideAdultContent) { if (hideAdultContent) comedyAnime.filter { !isAdultContent(it.isAdult, it.genres) } else comedyAnime }
+    val filteredFantasyAnime = remember(fantasyAnime, hideAdultContent) { if (hideAdultContent) fantasyAnime.filter { !isAdultContent(it.isAdult, it.genres) } else fantasyAnime }
+    val filteredScifiAnime = remember(scifiAnime, hideAdultContent) { if (hideAdultContent) scifiAnime.filter { !isAdultContent(it.isAdult, it.genres) } else scifiAnime }
 
     // Create a map of animeId -> status for quick lookup
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {

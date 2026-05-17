@@ -1,5 +1,6 @@
 package com.blissless.anime.ui.screens.airing
 
+import com.blissless.anime.data.models.isAdultContent
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.animation.core.RepeatMode
@@ -151,7 +152,7 @@ fun ScheduleScreen(
 
     // Filter adult content if setting is enabled
     val filteredAiringList = remember(airingList, hideAdultContent) {
-        if (hideAdultContent) airingList.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } } else airingList
+        if (hideAdultContent) airingList.filter { !isAdultContent(it.isAdult, it.genres) } else airingList
     }
 
     val scope = rememberCoroutineScope()
@@ -343,7 +344,7 @@ fun ScheduleScreen(
 
         // Process all anime from the schedule
         scheduleByDay.values.flatten()
-            .filter { !hideAdultContent || !it.isAdult }
+            .filter { !hideAdultContent || (!isAdultContent(it.isAdult, it.genres)) }
             .forEach { anime ->
             // Calculate which day of week this anime airs on
             val animeCalendar = Calendar.getInstance()

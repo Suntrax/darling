@@ -55,6 +55,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -616,8 +617,8 @@ fun MainScreen(
     var animekaiOutroStart by remember { mutableStateOf<Int?>(null) }
     var animekaiOutroEnd by remember { mutableStateOf<Int?>(null) }
 
-    var showStatusListScreen by remember { mutableStateOf(false) }
-    var statusListTitle by remember { mutableStateOf("") }
+        var showStatusListScreen by remember { mutableStateOf(false) }
+        var statusListTitle by remember { mutableStateOf("") }
     var statusListType by remember { mutableStateOf("") }
     var statusListIcon by remember { mutableStateOf<ImageVector?>(null) }
     var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }

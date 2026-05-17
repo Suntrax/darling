@@ -89,7 +89,10 @@ data class WidgetAiringEntry(
     val cover: String = "",
     val averageScore: Int? = null,
     val dayOfWeek: Int = 0,
-    val userStatus: String? = null
+    val userStatus: String? = null,
+    val isAdult: Boolean = false,
+    val titleEnglish: String? = null,
+    val titleRomaji: String? = null
 )
 
 @Serializable
@@ -146,11 +149,15 @@ object AiringScheduleWidget : GlanceAppWidget() {
             cache
         }
 
+        val userPrefs = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
+        val hideAdult = userPrefs.getBoolean("hide_adult_content", false)
+        val preferEnglish = userPrefs.getBoolean("prefer_english_titles", true)
+
         if (data.entries.isEmpty() || isStale(data.lastUpdateTime))
             triggerNow(context, bypassCooldown = true)
         schedulePeriodic(context)
 
-        provideContent { WidgetContent(context, data, coverCache) }
+        provideContent { WidgetContent(context, data, coverCache, hideAdult, preferEnglish) }
     }
 
     private fun loadData(prefs: android.content.SharedPreferences): WidgetScheduleData {
@@ -190,7 +197,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
     }
 
     @Composable
-    fun WidgetContent(context: Context, data: WidgetScheduleData, coverCache: Map<Int, Bitmap?>) {
+    fun WidgetContent(context: Context, data: WidgetScheduleData, coverCache: Map<Int, Bitmap?>, hideAdult: Boolean = false, preferEnglish: Boolean = true) {
         val cal = Calendar.getInstance()
         val dow = cal.get(Calendar.DAY_OF_WEEK) - 1
         val dayNames = listOf("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")
@@ -204,44 +211,48 @@ object AiringScheduleWidget : GlanceAppWidget() {
 
         val nowTs = System.currentTimeMillis() / 1000
         val items = data.entries
+            .filter { if (hideAdult) !it.isAdult else true }
             .filter { it.dayOfWeek == dow && it.airingAt >= todayStart && it.airingAt < todayEnd }
             .sortedBy { it.airingAt }
 
-        LazyColumn(
+        val ago = if (data.lastUpdateTime > 0) {
+            val d = System.currentTimeMillis() - data.lastUpdateTime
+            when { d < 60_000 -> "just now"; d < 3_600_000 -> "${d / 60_000}m ago"; else -> "${d / 3_600_000}h ago" }
+        } else "never"
+
+        Column(
             modifier = GlanceModifier.fillMaxSize()
                 .background(ColorProvider(Color(0xFF0D0D0D)))
-                .padding(12.dp)
+                .padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)
         ) {
-            item {
-                Column {
-                    Row(
-                        modifier = GlanceModifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = GlanceModifier.defaultWeight()) {
-                            Text(dayNames[dow], style = TextStyle(
-                                color = ColorProvider(Color.White), fontSize = 16.sp, fontWeight = FontWeight.Bold
-                            ))
-                            Text("${items.size} airing today", style = TextStyle(
-                                color = ColorProvider(Color(0xFF9E9E9E)), fontSize = 12.sp
-                            ))
-                        }
-                        CircleIconButton(
-                            imageProvider = ImageProvider(R.drawable.ic_refresh),
-                            contentDescription = "Refresh",
-                            onClick = action("refresh") {
-                                triggerNow(context)
-                            },
-                            modifier = GlanceModifier.size(32.dp)
-                        )
-                    }
-                    Spacer(GlanceModifier.height(10.dp))
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = GlanceModifier.defaultWeight()) {
+                    Text(dayNames[dow], style = TextStyle(
+                        color = ColorProvider(Color.White), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                    ))
+                    Text("${items.size} airing today", style = TextStyle(
+                        color = ColorProvider(Color(0xFF9E9E9E)), fontSize = 12.sp
+                    ))
                 }
+                CircleIconButton(
+                    imageProvider = ImageProvider(R.drawable.ic_refresh),
+                    contentDescription = "Refresh",
+                    onClick = action("refresh") {
+                        triggerNow(context)
+                    },
+                    modifier = GlanceModifier.size(32.dp)
+                )
             }
+            Spacer(GlanceModifier.height(10.dp))
 
-            if (items.isEmpty()) {
-                item {
-                    Column {
+            LazyColumn(
+                modifier = GlanceModifier.defaultWeight().fillMaxWidth()
+            ) {
+                if (items.isEmpty()) {
+                    item {
                         Box(
                             modifier = GlanceModifier.fillMaxWidth().padding(vertical = 20.dp),
                             contentAlignment = Alignment.Center,
@@ -250,50 +261,45 @@ object AiringScheduleWidget : GlanceAppWidget() {
                             ))}
                         )
                     }
-                }
-            } else {
-                items(items) { e ->
-                    Column {
-                        Box(
-                            modifier = GlanceModifier.fillMaxWidth()
-                                .padding(horizontal = 2.dp)
-                                .background(ImageProvider(R.drawable.widget_item_bg)),
-                            content = @Composable {
-                                AiringItem(e, coverCache[e.id], nowTs, context)
-                            }
-                        )
-                        Spacer(GlanceModifier.height(4.dp))
+                } else {
+                    items(items) { e ->
+                        Column {
+                            Box(
+                                modifier = GlanceModifier.fillMaxWidth()
+                                    .padding(horizontal = 2.dp)
+                                    .background(ImageProvider(R.drawable.widget_item_bg)),
+                                content = @Composable {
+                                    AiringItem(e, coverCache[e.id], nowTs, context, preferEnglish)
+                                }
+                            )
+                            Spacer(GlanceModifier.height(4.dp))
+                        }
                     }
                 }
             }
 
-            item {
-                Column {
-                    Spacer(GlanceModifier.height(6.dp))
-                    val ago = if (data.lastUpdateTime > 0) {
-                        val d = System.currentTimeMillis() - data.lastUpdateTime
-                        when { d < 60_000 -> "just now"; d < 3_600_000 -> "${d / 60_000}m ago"; else -> "${d / 3_600_000}h ago" }
-                    } else "never"
-                    Row(
-                        modifier = GlanceModifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Updated $ago", style = TextStyle(
-                            color = ColorProvider(Color(0xFF616161)), fontSize = 10.sp
-                        ))
-                        Spacer(GlanceModifier.defaultWeight())
-                        Text("Darling", style = TextStyle(
-                            color = ColorProvider(Color(0xFF424242)), fontSize = 10.sp, fontWeight = FontWeight.Bold
-                        ))
-                    }
-                    Spacer(GlanceModifier.height(4.dp))
-                }
+            Spacer(GlanceModifier.height(6.dp))
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Updated $ago", style = TextStyle(
+                    color = ColorProvider(Color(0xFF616161)), fontSize = 10.sp
+                ))
+                Spacer(GlanceModifier.defaultWeight())
+                Text("Darling", style = TextStyle(
+                    color = ColorProvider(Color(0xFF424242)), fontSize = 10.sp, fontWeight = FontWeight.Bold
+                ))
             }
+            Spacer(GlanceModifier.height(4.dp))
         }
     }
 
     @Composable
-    private fun AiringItem(e: WidgetAiringEntry, coverBitmap: Bitmap?, nowTs: Long, context: Context) {
+    private fun AiringItem(e: WidgetAiringEntry, coverBitmap: Bitmap?, nowTs: Long, context: Context, preferEnglish: Boolean = true) {
+        fun String?.valid(): String? = this?.takeIf { it.isNotBlank() && it != "null" }
+        val displayTitle = if (preferEnglish) e.titleEnglish.valid() ?: e.titleRomaji.valid() ?: e.title
+                           else e.titleRomaji.valid() ?: e.titleEnglish.valid() ?: e.title
         val isPast = e.airingAt <= nowTs
         val displayTime = if (isPast) {
             val ago = nowTs - e.airingAt
@@ -325,6 +331,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
 
         Row(
             modifier = GlanceModifier.fillMaxWidth()
+                .padding(end = 14.dp)
                 .clickable(action("open_${e.id}") {
                     val intent = Intent(context, MainActivity::class.java).apply {
                         putExtra("widget_anime_id", e.id)
@@ -354,7 +361,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                             modifier = GlanceModifier.fillMaxSize()
                         )
                     } else {
-                        Text(e.title.take(1), style = TextStyle(
+                        Text(displayTitle.take(1), style = TextStyle(
                             color = ColorProvider(Color(0xFF616161)), fontSize = 18.sp
                         ))
                     }
@@ -362,7 +369,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
             )
             Spacer(GlanceModifier.width(10.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
-                Text(e.title, style = TextStyle(
+                Text(displayTitle, style = TextStyle(
                     color = ColorProvider(titleColor), fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
                 ))
@@ -493,7 +500,7 @@ object WidgetScheduleFetcher {
     fun quickFetch(context: Context, authToken: String? = null): WidgetScheduleData {
         val ct = System.currentTimeMillis() / 1000
         val body = JSONObject().apply {
-            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}")
+            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres tags{name isAdult} seasonYear isAdult mediaListEntry{id status}}}}}")
             put("variables", JSONObject(mapOf("p" to 1, "s" to (ct - 86400).toInt(), "e" to (ct + 86400).toInt())))
         }
         val resp = execute(body.toString(), authToken, shortTimeout = true)
@@ -504,7 +511,7 @@ object WidgetScheduleFetcher {
 
     fun fetch(context: Context, authToken: String? = null): WidgetScheduleData {
         val ct = System.currentTimeMillis() / 1000
-        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"
+        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres tags{name isAdult} seasonYear isAdult mediaListEntry{id status}}}}}"
         val entries = mutableListOf<WidgetAiringEntry>()
         var page = 1
         while (page <= 5) {
@@ -587,13 +594,24 @@ object WidgetScheduleFetcher {
                 val s = schedules.getJSONObject(i)
                 val m = s.optJSONObject("media") ?: continue
                 val t = m.optJSONObject("title") ?: continue
-                val title = t.optString("english", "").ifEmpty { t.optString("romaji", "Unknown") }
+                val titleEn = t.optString("english", "").takeIf { it.isNotBlank() && it != "null" }
+                val titleRo = t.optString("romaji", "").takeIf { it.isNotBlank() && it != "null" }
+                val title = titleEn ?: titleRo ?: "Unknown"
                 val cover = m.optJSONObject("coverImage")?.optString("extraLarge", "") ?: ""
                 val score = if (m.has("averageScore") && !m.isNull("averageScore")) m.getInt("averageScore") else null
                 val ta = if (s.has("timeUntilAiring") && !s.isNull("timeUntilAiring")) s.getLong("timeUntilAiring") else null
                 val status = m.optJSONObject("mediaListEntry")?.optString("status")?.takeIf { it.isNotEmpty() }
+                val ga = m.optJSONArray("genres")
+                val hasAdultGenre = if (ga != null) (0 until ga.length()).any {
+                    val g = ga.optString(it, ""); g.equals("Hentai", ignoreCase = true) || g.equals("Nudity", ignoreCase = true)
+                } else false
+                val tagArr = m.optJSONArray("tags")
+                val hasAdultTag = if (tagArr != null) (0 until tagArr.length()).any {
+                    val t = tagArr.getJSONObject(it); t.optBoolean("isAdult", false) || t.optString("name", "").equals("Nudity", ignoreCase = true)
+                } else false
+                val adult = m.optBoolean("isAdult", false) || hasAdultGenre || hasAdultTag
                 val cal = Calendar.getInstance().apply { timeInMillis = s.getLong("airingAt") * 1000L }
-                r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status))
+                r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status, adult, titleEn, titleRo))
             } catch (_: Exception) { }
         }
         return r

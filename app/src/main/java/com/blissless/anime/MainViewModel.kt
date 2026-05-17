@@ -1186,6 +1186,7 @@ class MainViewModel : ViewModel() {
         val episodes = media.episodes ?: 0
         val latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 }
 
+        val isAdultByTags = media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true
         return ExploreAnime(
             id = media.id,
             title = title,
@@ -1198,7 +1199,7 @@ class MainViewModel : ViewModel() {
             genres = media.genres ?: emptyList(),
             year = media.startDate?.year ?: media.seasonYear,
             malId = media.idMal,
-            isAdult = media.isAdult
+            isAdult = media.isAdult || isAdultByTags
         )
     }
 
@@ -1229,6 +1230,7 @@ class MainViewModel : ViewModel() {
                     android.util.Log.d("JOJO_DEBUG", "  - status: ${media.status}")
                 }
 
+                val isAdultByTags = media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true
                 AiringScheduleAnime(
                     id = media.id,
                     title = title,
@@ -1242,7 +1244,7 @@ class MainViewModel : ViewModel() {
                     genres = media.genres ?: emptyList(),
                     year = media.seasonYear,
                     malId = media.idMal,
-                    isAdult = media.isAdult
+                    isAdult = media.isAdult || isAdultByTags
                 )
             }.sortedBy { it.airingAt }
 
@@ -1835,7 +1837,7 @@ class MainViewModel : ViewModel() {
             latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
             nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt,
             relations = relationsList,
-            isAdult = media.isAdult ?: false,
+            isAdult = media.isAdult ?: false || media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true,
             characters = media.characters,
             trailerUrl = media.trailer?.let {
                 if (it.site == "youtube") "https://www.youtube.com/watch?v=${it.id}"
@@ -2308,7 +2310,7 @@ class MainViewModel : ViewModel() {
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
 
-    suspend fun fetchMiruroEpisodes(animeId: Int, latest: Int = Int.MAX_VALUE) = repository.fetchMiruroEpisodes(animeId, latest)
+    suspend fun fetchMiruroEpisodes(animeId: Int, title: String? = null, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchMiruroEpisodes(animeId, title, year, format, latest)
 
     fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId)
 

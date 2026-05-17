@@ -16,14 +16,14 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "com.blissless.anime"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 42
-        versionName = "3.9.8"
+        versionCode = 43
+        versionName = "4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -137,4 +137,7 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.0")
     implementation("androidx.glance:glance-material3:1.1.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation(libs.rxjava)
+    implementation(libs.kotlinx.serialization.json.okio)
+    implementation(libs.kotlinx.serialization.json)
 }

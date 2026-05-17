@@ -1,5 +1,6 @@
 package com.blissless.anime.ui.components
 
+import com.blissless.anime.data.models.isAdultContent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
@@ -213,7 +214,7 @@ fun SearchOverlay(
     // Filter adult content if setting is enabled
     val filteredSearchResults = remember(searchResults, hideAdultContent) {
         if (hideAdultContent) {
-            searchResults.filter { !it.isAdult && !it.genres.any { g -> g.equals("Hentai", ignoreCase = true) } }
+            searchResults.filter { !isAdultContent(it.isAdult, it.genres) }
         } else {
             searchResults
         }

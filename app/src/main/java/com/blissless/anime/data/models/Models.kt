@@ -2,6 +2,11 @@ package com.blissless.anime.data.models
 
 import kotlinx.serialization.Serializable
 
+private val ADULT_GENRES = setOf("hentai", "nudity")
+
+fun isAdultContent(isAdult: Boolean, genres: List<String>): Boolean =
+    isAdult || genres.any { it.lowercase() in ADULT_GENRES }
+
 // ============================================
 // CORE ANIME MODELS
 // ============================================
@@ -200,7 +205,8 @@ data class TagData(
     val name: String,
     val rank: Int? = null,
     val isMediaSpoiler: Boolean = false,
-    val description: String? = null
+    val description: String? = null,
+    val isAdult: Boolean = false
 )
 
 @Serializable
@@ -468,6 +474,7 @@ data class ExploreMedia(
     val status: String?,
     val averageScore: Int?,
     val genres: List<String>?,
+    val tags: List<TagData>? = null,
     val seasonYear: Int? = null,
     val startDate: FuzzyDate? = null,
     val isAdult: Boolean = false
@@ -545,6 +552,7 @@ data class AiringScheduleMedia(
     val status: String?,
     val averageScore: Int?,
     val genres: List<String>?,
+    val tags: List<TagData>? = null,
     val seasonYear: Int? = null,
     val isAdult: Boolean = false
 )

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -80,6 +81,8 @@ import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.R
 import com.blissless.anime.api.myanimelist.LoginProvider
+import com.blissless.anime.extensions.ExtensionsScreen
+import com.blissless.anime.extensions.ExtensionsViewModel
 import kotlin.math.round
 
 @Composable
@@ -145,6 +148,13 @@ fun SettingsScreen(
                 description = "Storage and data cleanup",
                 icon = Icons.Default.Memory,
                 iconBackgroundColor = if (isOled) Color.White else tertiary
+            ),
+            SettingsGroup(
+                id = "extensions",
+                title = "Extensions",
+                description = "Manage anime source extensions",
+                icon = Icons.Default.Extension,
+                iconBackgroundColor = if (isOled) Color.White else primary
             )
         )
     }
@@ -204,6 +214,10 @@ fun SettingsScreen(
                     isOled = isOled,
                     onBack = { selectedGroup = null }
                 )
+                "extensions" -> ExtensionsSettingsPage(
+                    isOled = isOled,
+                    onBack = { selectedGroup = null }
+                )
             }
         }
     }
@@ -243,6 +257,7 @@ private fun SettingsLandingPage(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+
             )
         }
 
@@ -252,7 +267,9 @@ private fun SettingsLandingPage(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 80.dp)
         ) {
             items(groups) { group ->
                 SettingsGroupCard(
@@ -339,8 +356,9 @@ private fun SettingsPageScaffold(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 100.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 110.dp)
             .windowInsetsPadding(WindowInsets.statusBars)
+            .verticalScroll(rememberScrollState())
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -388,6 +406,7 @@ private fun SettingsPageScaffold(
                     "Stream Settings" -> "Audio preferences and buffering"
                     "Player Settings" -> "Playback controls and skipping"
                     "Cache Management" -> "Storage and data cleanup"
+                    "Extensions" -> "Manage anime source extensions"
                     else -> ""
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -398,7 +417,7 @@ private fun SettingsPageScaffold(
         Spacer(modifier = Modifier.height(16.dp))
 
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
         )
@@ -1204,5 +1223,23 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
         else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+@Composable
+private fun ExtensionsSettingsPage(
+    isOled: Boolean,
+    onBack: () -> Unit
+) {
+    SettingsPageScaffold(
+        title = "Extensions",
+        icon = Icons.Default.Extension,
+        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
+        onBack = onBack,
+        isOled = isOled
+    ) {
+        ExtensionsScreen(
+            isOled = isOled
+        )
     }
 }
