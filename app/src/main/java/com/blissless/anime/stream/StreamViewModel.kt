@@ -137,7 +137,8 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                     launchPlayer(source.source, episode)
                 }
                 else -> {
-                    android.util.Log.d("StreamVM", "${hosters.size} hosters available, waiting for user selection")
+                    android.util.Log.d("StreamVM", "${hosters.size} hosters available, auto-selecting first: ${hosters.first().hosterName}")
+                    loadAndPlay(source.source, hosters.first(), episode)
                 }
             }
         }

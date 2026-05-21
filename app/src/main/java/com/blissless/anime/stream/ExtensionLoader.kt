@@ -7,7 +7,28 @@ import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
 import com.blissless.anime.extensions.Extension
-import java.io.File
+
+class ParentFirstClassLoader(apkPath: String, dexOutput: String, parent: ClassLoader) :
+    DexClassLoader(apkPath, dexOutput, null, parent) {
+
+    private val parentFirstPackages = listOf(
+        "uy.kohesive.injekt",
+        "kotlinx.serialization",
+    )
+
+    override fun loadClass(name: String, resolve: Boolean): Class<*>? {
+        for (pkg in parentFirstPackages) {
+            if (name.startsWith(pkg)) {
+                return try {
+                    parent.loadClass(name)
+                } catch (_: ClassNotFoundException) {
+                    super.loadClass(name, resolve)
+                }
+            }
+        }
+        return super.loadClass(name, resolve)
+    }
+}
 
 class ExtensionLoader(private val context: Context) {
 
@@ -21,10 +42,9 @@ class ExtensionLoader(private val context: Context) {
         val apkPath = ai.sourceDir
         val dexOutput = context.codeCacheDir
 
-        val loader = DexClassLoader(
+        val loader = ParentFirstClassLoader(
             apkPath,
             dexOutput.absolutePath,
-            null,
             context.classLoader
         )
 

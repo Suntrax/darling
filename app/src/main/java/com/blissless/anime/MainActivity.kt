@@ -88,6 +88,8 @@ import com.blissless.anime.data.models.LocalAnimeEntry
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import com.blissless.anime.data.models.QualityOption
+import com.blissless.anime.data.models.ServerInfo
+import com.blissless.anime.stream.PlayerData
 import okhttp3.OkHttpClient
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.screens.cast.AllCastScreen
@@ -621,6 +623,12 @@ fun MainScreen(
     var isExtensionFlow by remember { mutableStateOf(false) }
     var extensionOkHttpClient by remember { mutableStateOf<okhttp3.OkHttpClient?>(null) }
     var extensionVideoHeaders by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var extensionSourcePackage by remember { mutableStateOf("") }
+    var extensionEpisodeUrl by remember { mutableStateOf("") }
+    var extensionEpisodeNumber by remember { mutableIntStateOf(0) }
+    var extensionEpisodeTrigger by remember { mutableIntStateOf(0) }
+    var extensionServers by remember { mutableStateOf<List<ServerInfo>>(emptyList<ServerInfo>()) }
+    var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
     
     // Callback to show detailed anime from MAL history using AniList API
     val onShowDetailedAnimeFromMal: (Int) -> Unit = { malId ->
@@ -753,7 +761,7 @@ fun MainScreen(
         currentVideoUrl = params.videoUrl
         currentReferer = params.referer
         currentSubtitleUrl = params.subtitleUrl
-        currentServerName = "Extension"
+        currentServerName = if (params.allHosters.isNotEmpty()) params.allHosters.first().hosterName else "Extension"
         currentCategory = "sub"
         actualCategory = "sub"
         requestedCategory = preferredCategory
@@ -762,6 +770,13 @@ fun MainScreen(
         currentServerIndex = 0
         extensionOkHttpClient = params.extensionClient
         extensionVideoHeaders = params.extensionHeaders
+        extensionHosters = params.allHosters
+        extensionSourcePackage = params.sourcePackageName
+        extensionEpisodeUrl = params.episodeUrl
+        extensionEpisodeNumber = params.episodeNumber
+        extensionServers = params.allHosters.map { hoster ->
+            ServerInfo(name = hoster.hosterName, url = hoster.hosterUrl)
+        }
         if (currentAnime == null) {
             currentAnime = AnimeMedia(
                 id = 0,
@@ -1111,148 +1126,214 @@ fun MainScreen(
         }
     }
 
+    fun prefetchExtensionNextEpisode() {
+        if (currentAnime == null) return
+        scope.launch {
+            val nextEp = currentEpisode + 1
+            val pkg = extensionSourcePackage
+            if (pkg.isEmpty()) return@launch
+            android.util.Log.d("ExtensionPlay", "Prefetching next episode $nextEp from $pkg")
+            val result = viewModel.playEpisodeWithExtension(currentAnime!!, nextEp, pkg)
+            if (result != null) {
+                cachedExtensionNext = result
+                android.util.Log.d("ExtensionPlay", "Next episode $nextEp prefetched: ${result.url}")
+            } else {
+                android.util.Log.d("ExtensionPlay", "Next episode $nextEp prefetch failed")
+            }
+        }
+    }
+
     val onNextEpisode: () -> Unit = {
         if (!isChangingEpisode && currentAnime != null) {
             isChangingEpisode = true
-            
-            val anime = currentAnime!!
-            if (totalEpisodes == 0 || currentEpisode < totalEpisodes) {
-                val nextEp = currentEpisode + 1
 
-                // Reset timestamps for next episode
-                animekaiIntroStart = null
-                animekaiIntroEnd = null
-                animekaiOutroStart = null
-                animekaiOutroEnd = null
+            // Extension flow: use prefetched next episode
+            if (extensionHosters != null && extensionHosters!!.isNotEmpty() && cachedExtensionNext != null) {
+                val next = cachedExtensionNext!!
+                cachedExtensionNext = null
+                currentEpisode++
+                currentVideoUrl = next.url
+                currentReferer = next.referer
+                currentSubtitleUrl = next.subtitleUrl
+                currentServerName = if (next.hosters != null && next.hosters!!.isNotEmpty()) next.hosters!!.first().hosterName else "Extension"
+                currentCategory = "sub"
+                currentQualityOptions = next.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                currentQuality = next.videoTitle
+                extensionOkHttpClient = next.extensionClient
+                extensionVideoHeaders = next.videoHeaders
+                extensionHosters = next.hosters
+                extensionServers = (next.hosters ?: emptyList()).map { h -> ServerInfo(name = h.hosterName, url = h.hosterUrl) }
+                episodeTrigger++
+                isChangingEpisode = false
+                prefetchExtensionNextEpisode()
+            } else {
+                val anime = currentAnime!!
+                if (totalEpisodes == 0 || currentEpisode < totalEpisodes) {
+                    val nextEp = currentEpisode + 1
 
-                val cachedStream = viewModel.getCachedStreamImmediate(anime.id, nextEp, preferredCategory)
+                    // Reset timestamps for next episode
+                    animekaiIntroStart = null
+                    animekaiIntroEnd = null
+                    animekaiOutroStart = null
+                    animekaiOutroEnd = null
 
-                if (cachedStream != null) {
-                    savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
-                    android.util.Log.d("NEXT_DEBUG", ">>> CACHE HIT - STREAM M3U8 URL: ${cachedStream.url}")
-                    currentVideoUrl = cachedStream.url
-                    episodeTrigger++
-                    android.util.Log.d("NEXT_DEBUG", ">>> episodeTrigger incremented to: $episodeTrigger")
-                    currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
-                    currentSubtitleUrl = cachedStream.subtitleUrl
-                    currentEpisode = nextEp
-                    currentServerName = cachedStream.serverName
-                    currentCategory = cachedStream.category
-                    currentServerIndex = 0
+                    val cachedStream = viewModel.getCachedStreamImmediate(anime.id, nextEp, preferredCategory)
 
-                    isFallbackStream = cachedStream.category != preferredCategory
-                    requestedCategory = preferredCategory
-                    actualCategory = cachedStream.category
+                    if (cachedStream != null) {
+                        savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
+                        android.util.Log.d("NEXT_DEBUG", ">>> CACHE HIT - STREAM M3U8 URL: ${cachedStream.url}")
+                        currentVideoUrl = cachedStream.url
+                        episodeTrigger++
+                        android.util.Log.d("NEXT_DEBUG", ">>> episodeTrigger incremented to: $episodeTrigger")
+                        currentReferer = cachedStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                        currentSubtitleUrl = cachedStream.subtitleUrl
+                        currentEpisode = nextEp
+                        currentServerName = cachedStream.serverName
+                        currentCategory = cachedStream.category
+                        currentServerIndex = 0
 
-                    currentQualityOptions = cachedStream.qualities.map {
-                        QualityOption(quality = it.quality, url = it.url, width = it.width)
-                    }
-                    currentQuality = "Auto"
+                        isFallbackStream = cachedStream.category != preferredCategory
+                        requestedCategory = preferredCategory
+                        actualCategory = cachedStream.category
 
-                    // Extract Animekai timestamps from CachedStream (PRIMARY)
-                    animekaiIntroStart = cachedStream.introStart
-                    animekaiIntroEnd = cachedStream.introEnd
-                    animekaiOutroStart = cachedStream.outroStart
-                    animekaiOutroEnd = cachedStream.outroEnd
-
-                    scope.launch {
-                        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
-                        currentEpisodeInfo = epInfo
-                        viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
-                        currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
-                        isChangingEpisode = false
-                    }
-
-                    if (isFallbackStream) {
-                        val message = if (requestedCategory == "dub") {
-                            "Dub not available, playing sub"
-                        } else {
-                            "Sub not available, playing dub"
+                        currentQualityOptions = cachedStream.qualities.map {
+                            QualityOption(quality = it.quality, url = it.url, width = it.width)
                         }
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                    }
-                } else {
-                    isLoadingStream = true
-                    currentServerAttempt = null
-                    currentServerAttemptIsFallback = false
-                    loadingJob = scope.launch {
-                        val latestAired = anime.latestEpisode ?: anime.totalEpisodes
-                        
-                        // Get episode info from cache or fetch it
-                        val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
-                        currentEpisodeInfo = epInfo
-                        
-                        if (epInfo != null) {
-                            val servers = if (preferredCategory == "sub") epInfo.subServers else epInfo.dubServers
-                            
-                            // Try each server in order
-                            var foundStream: AniwatchStreamResult? = null
-                            for (server in servers) {
-                                val watchPath = server.url
-                                val providerName = server.name
-                                android.util.Log.d("NEXT_DEBUG", ">>> Trying watchPath: $watchPath")
-                                
-                                val miruroResult = com.blissless.anime.api.miruro.MiruroService.getStreamFromPath(watchPath, preferredCategory, providerName)
-                                if (miruroResult != null) {
-                                    foundStream = AniwatchStreamResult(
-                                        url = miruroResult.url,
-                                        headers = miruroResult.headers,
-                                        serverName = providerName,
-                                        category = preferredCategory,
-                                        qualities = miruroResult.qualities,
-                                        introStart = miruroResult.introStart,
-                                        introEnd = miruroResult.introEnd,
-                                        outroStart = miruroResult.outroStart,
-                                        outroEnd = miruroResult.outroEnd,
-                                        subtitleUrl = miruroResult.subtitleUrl
-                                    )
-                                    break
-                                }
-                            }
-                            
-                            if (foundStream != null) {
-                                streamError = null
-                                savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
-                                android.util.Log.d("NEXT_DEBUG", ">>> STREAM M3U8 URL: ${foundStream.url}")
-                                currentVideoUrl = foundStream.url
-                                episodeTrigger++
-                                currentReferer = foundStream.headers?.get("Referer") ?: "https://megacloud.tv/"
-                                currentSubtitleUrl = foundStream.subtitleUrl
-                                currentEpisode = nextEp
-                                currentServerName = foundStream.serverName
-                                currentCategory = preferredCategory
-                                currentServerIndex = 0
+                        currentQuality = "Auto"
 
-                                isFallbackStream = false
-                                requestedCategory = preferredCategory
-                                actualCategory = preferredCategory
+                        // Extract Animekai timestamps from CachedStream (PRIMARY)
+                        animekaiIntroStart = cachedStream.introStart
+                        animekaiIntroEnd = cachedStream.introEnd
+                        animekaiOutroStart = cachedStream.outroStart
+                        animekaiOutroEnd = cachedStream.outroEnd
 
-                                currentQualityOptions = foundStream.qualities
-                                currentQuality = "Auto"
-
-                                animekaiIntroStart = foundStream.introStart
-                                animekaiIntroEnd = foundStream.introEnd
-                                animekaiOutroStart = foundStream.outroStart
-                                animekaiOutroEnd = foundStream.outroEnd
-
-                                currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
-                                isChangingEpisode = false
-                                isLoadingStream = false
-                            } else {
-                                android.util.Log.d("NEXT_DEBUG", ">>> NO STREAM FOUND for ep=$nextEp")
-                                streamError = "Could not find stream for episode $nextEp"
-                                isChangingEpisode = false
-                                isLoadingStream = false
-                            }
-                        } else {
-                            streamError = "Could not get episode info for $nextEp"
+                        scope.launch {
+                            val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+                            val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
+                            currentEpisodeInfo = epInfo
+                            viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), nextEp, anime.id, latestAired)
+                            currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
                             isChangingEpisode = false
-                            isLoadingStream = false
+                        }
+
+                        if (isFallbackStream) {
+                            val message = if (requestedCategory == "dub") {
+                                "Dub not available, playing sub"
+                            } else {
+                                "Sub not available, playing dub"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        isLoadingStream = true
+                        currentServerAttempt = null
+                        currentServerAttemptIsFallback = false
+                        loadingJob = scope.launch {
+                            val latestAired = anime.latestEpisode ?: anime.totalEpisodes
+
+                            // Get episode info from cache or fetch it
+                            val epInfo = viewModel.getEpisodeInfo(getScrapingName(anime), nextEp, anime.id, latestAired)
+                            currentEpisodeInfo = epInfo
+
+                            if (epInfo != null) {
+                                val servers = if (preferredCategory == "sub") epInfo.subServers else epInfo.dubServers
+
+                                // Try each server in order
+                                var foundStream: AniwatchStreamResult? = null
+                                for (server in servers) {
+                                    val watchPath = server.url
+                                    val providerName = server.name
+                                    android.util.Log.d("NEXT_DEBUG", ">>> Trying watchPath: $watchPath")
+
+                                    val miruroResult = com.blissless.anime.api.miruro.MiruroService.getStreamFromPath(watchPath, preferredCategory, providerName)
+                                    if (miruroResult != null) {
+                                        foundStream = AniwatchStreamResult(
+                                            url = miruroResult.url,
+                                            headers = miruroResult.headers,
+                                            serverName = providerName,
+                                            category = preferredCategory,
+                                            qualities = miruroResult.qualities,
+                                            introStart = miruroResult.introStart,
+                                            introEnd = miruroResult.introEnd,
+                                            outroStart = miruroResult.outroStart,
+                                            outroEnd = miruroResult.outroEnd,
+                                            subtitleUrl = miruroResult.subtitleUrl
+                                        )
+                                        break
+                                    }
+                                }
+
+                                if (foundStream != null) {
+                                    streamError = null
+                                    savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, nextEp)
+                                    android.util.Log.d("NEXT_DEBUG", ">>> STREAM M3U8 URL: ${foundStream.url}")
+                                    currentVideoUrl = foundStream.url
+                                    episodeTrigger++
+                                    currentReferer = foundStream.headers?.get("Referer") ?: "https://megacloud.tv/"
+                                    currentSubtitleUrl = foundStream.subtitleUrl
+                                    currentEpisode = nextEp
+                                    currentServerName = foundStream.serverName
+                                    currentCategory = preferredCategory
+                                    currentServerIndex = 0
+
+                                    isFallbackStream = false
+                                    requestedCategory = preferredCategory
+                                    actualCategory = preferredCategory
+
+                                    currentQualityOptions = foundStream.qualities
+                                    currentQuality = "Auto"
+
+                                    animekaiIntroStart = foundStream.introStart
+                                    animekaiIntroEnd = foundStream.introEnd
+                                    animekaiOutroStart = foundStream.outroStart
+                                    animekaiOutroEnd = foundStream.outroEnd
+
+                                    currentEpisodeTitle = getTmdbEpisodeTitle(anime, nextEp)
+                                    isChangingEpisode = false
+                                    isLoadingStream = false
+                                } else {
+                                    android.util.Log.d("NEXT_DEBUG", ">>> NO STREAM FOUND for ep=$nextEp")
+                                    streamError = "Could not find stream for episode $nextEp"
+                                    isChangingEpisode = false
+                                    isLoadingStream = false
+                                }
+                            } else {
+                                streamError = "Could not get episode info for $nextEp"
+                                isChangingEpisode = false
+                                isLoadingStream = false
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    fun handleExtensionServerChange(hosterName: String) {
+        val hoster = extensionHosters?.find { it.hosterName == hosterName } ?: return
+        val source = PlayerData.extensionSource
+        if (source == null) {
+            Toast.makeText(context, "Source not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        scope.launch {
+            isLoadingStream = true
+            val result = viewModel.fetchExtensionHosterVideos(source, hoster)
+            if (result != null) {
+                currentVideoUrl = result.url
+                currentReferer = result.referer
+                currentSubtitleUrl = result.subtitleUrl
+                currentServerName = hosterName
+                currentCategory = "sub"
+                currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                currentQuality = result.videoTitle
+                extensionOkHttpClient = result.extensionClient
+                extensionVideoHeaders = result.videoHeaders
+                episodeTrigger++
+            } else {
+                Toast.makeText(context, "Failed to load $hosterName", Toast.LENGTH_SHORT).show()
+            }
+            isLoadingStream = false
         }
     }
 
@@ -2144,10 +2225,19 @@ fun MainScreen(
                     currentVideoUrl = null
                     extensionOkHttpClient = null
                     extensionVideoHeaders = emptyMap()
+                    extensionHosters = null
+                    extensionServers = emptyList()
+                    cachedExtensionNext = null
+                    PlayerData.extensionSource = null
+                    PlayerData.extensionEpisode = null
+                    PlayerData.allHosters = emptyList()
                 },
                 episodeTrigger = episodeTrigger,
                 extensionOkHttpClient = extensionOkHttpClient,
                 extensionVideoHeaders = extensionVideoHeaders,
+                extensionServers = extensionServers,
+                onExtensionServerChange = { hosterName -> handleExtensionServerChange(hosterName) },
+                onPrefetchNextExtensionEpisode = { prefetchExtensionNextEpisode() },
             )
         }
 
@@ -2164,6 +2254,12 @@ fun MainScreen(
                     currentVideoUrl = null
                     extensionOkHttpClient = null
                     extensionVideoHeaders = emptyMap()
+                    extensionHosters = null
+                    extensionServers = emptyList()
+                    cachedExtensionNext = null
+                    PlayerData.extensionSource = null
+                    PlayerData.extensionEpisode = null
+                    PlayerData.allHosters = emptyList()
                 }
             }
         }

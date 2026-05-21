@@ -1,16 +1,20 @@
 package com.blissless.anime
 
 import android.app.Application
+import android.content.Context
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import kotlinx.serialization.json.Json
 
 class DarlingApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
         uy.kohesive.injekt.Injekt.register(Application::class.java, this)
+        uy.kohesive.injekt.Injekt.register(Context::class.java, this)
+        uy.kohesive.injekt.Injekt.register(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
     }
 
     override fun newImageLoader(): ImageLoader {

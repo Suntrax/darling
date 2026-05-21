@@ -122,6 +122,7 @@ import com.blissless.anime.api.AnimeSkipService
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.EpisodeTimestamps
 import com.blissless.anime.data.models.QualityOption
+import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.Timestamp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -188,6 +189,9 @@ fun PlayerScreen(
     episodeTrigger: Int = 0,
     extensionOkHttpClient: okhttp3.OkHttpClient? = null,
     extensionVideoHeaders: Map<String, String> = emptyMap(),
+    extensionServers: List<ServerInfo> = emptyList(),
+    onExtensionServerChange: ((hosterName: String) -> Unit)? = null,
+    onPrefetchNextExtensionEpisode: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -245,6 +249,8 @@ fun PlayerScreen(
     var showServerMenu by remember { mutableStateOf(false) }
     var showQualityMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
+    var showSubtitleMenu by remember { mutableStateOf(false) }
+    var subtitlesEnabled by remember { mutableStateOf(subtitleUrl != null) }
 
     var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
@@ -547,6 +553,13 @@ fun PlayerScreen(
         }
     }
 
+    // Prefetch next extension episode on first playback
+    LaunchedEffect(hasPlaybackStarted) {
+        if (hasPlaybackStarted && extensionServers.isNotEmpty()) {
+            onPrefetchNextExtensionEpisode?.invoke()
+        }
+    }
+
 fun seekBy(milliseconds: Long, isForward: Boolean) {
         isManuallySeeking = true
          
@@ -704,10 +717,10 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, isManuallySeeking) {
-        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !isManuallySeeking) {
+    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, showSubtitleMenu, isManuallySeeking) {
+        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
             delay(2000)
-            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu && !isManuallySeeking) {
+            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
                 showControls = false
             }
         }
@@ -782,6 +795,29 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
     fun handlePlaybackError() {
         onInvalidateStreamCache?.invoke()
         onPlaybackError?.invoke()
+    }
+
+    fun toggleSubtitles() {
+        subtitlesEnabled = !subtitlesEnabled
+        val position = exoPlayer.currentPosition
+        val playWhenReady = exoPlayer.playWhenReady
+        val currentItem = exoPlayer.currentMediaItem ?: return
+        val subtitleConfigs = if (subtitlesEnabled && subtitleUrl != null) {
+            listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
+                .setMimeType(MimeTypes.TEXT_VTT)
+                .setLanguage("en")
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build())
+        } else {
+            emptyList()
+        }
+        val newItem = currentItem.buildUpon()
+            .setSubtitleConfigurations(subtitleConfigs)
+            .build()
+        exoPlayer.stop()
+        exoPlayer.setMediaItem(newItem, position)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = playWhenReady
     }
 
     Box(
@@ -1059,13 +1095,31 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
                             // Server selector
-                            Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                                if (onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) {
-                                    IconButton(
-                                        onClick = { showServerMenu = true },
-                                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                            if ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty()) {
+                                Box {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color.Black.copy(alpha = 0.5f),
+                                        onClick = { showServerMenu = true }
                                     ) {
-                                        Icon(Icons.Default.Settings, "Server Selection", tint = Color.White)
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = currentServerName.take(12),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = if (extensionServers.isNotEmpty()) "EXT" else currentCategory.uppercase(),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.Gray
+                                            )
+                                        }
                                     }
 
                                     DropdownMenu(
@@ -1074,12 +1128,26 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                     ) {
                                         Text(
-                                            text = "${currentServerName.uppercase()} (${currentCategory.uppercase()})",
+                                            text = "${currentServerName.uppercase()} (${if (extensionServers.isNotEmpty()) "EXT" else currentCategory.uppercase()})",
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.labelMedium,
                                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                         )
+                                        if (extensionServers.isNotEmpty()) {
+                                            Text("EXT", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                            extensionServers.forEach { server ->
+                                                ServerSelectorButton(
+                                                    serverName = server.name,
+                                                    isSelected = server.name == currentServerName,
+                                                    onClick = {
+                                                        showServerMenu = false
+                                                        onExtensionServerChange?.invoke(server.name)
+                                                    }
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
                                         if (subServers.isNotEmpty()) {
                                             Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
                                             subServers.forEach { server ->
@@ -1107,6 +1175,53 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                                 )
                                             }
                                         }
+                                    }
+                                }
+                            }
+
+                            // CC/Subtitles button
+                            if (subtitleUrl != null) {
+                                Box {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color.Black.copy(alpha = 0.5f),
+                                        onClick = { showSubtitleMenu = true }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = "CC",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (subtitlesEnabled) Color.White else Color.Gray.copy(alpha = 0.5f)
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showSubtitleMenu,
+                                        onDismissRequest = { showSubtitleMenu = false },
+                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(160.dp)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                            onClick = {
+                                                if (subtitlesEnabled) toggleSubtitles()
+                                                showSubtitleMenu = false
+                                            },
+                                            leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("English", color = if (subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                            onClick = {
+                                                if (!subtitlesEnabled) toggleSubtitles()
+                                                showSubtitleMenu = false
+                                            },
+                                            leadingIcon = if (subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                        )
                                     }
                                 }
                             }

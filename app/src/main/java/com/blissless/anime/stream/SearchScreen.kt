@@ -1,5 +1,6 @@
 package com.blissless.anime.stream
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -64,66 +65,38 @@ fun SearchScreen(
         )
     }
 
-    val hosters = uiState.hosters
-    if (hosters != null && hosters.size > 1 && uiState.selectedHoster == null) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Select Server") },
-            text = {
-                Column {
-                    hosters.forEach { hoster ->
-                        TextButton(
-                            onClick = { viewModel.selectHoster(hoster) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(hoster.hosterName.ifEmpty { "Server" })
-                        }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
-    }
-
+    // Auto-play when videos are ready: auto-select best video (prefer 1080p)
     val pendingVideos = uiState.pendingVideos
-    if (pendingVideos != null && uiState.selectedHoster == null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.backToResults() },
-            title = { Text("Select Source") },
-            text = {
-                Column {
-                    pendingVideos.forEachIndexed { idx, video ->
-                        val label = if (video.resolution != null && video.resolution > 0) "${video.videoTitle} (${video.resolution}p)"
-                                     else video.videoTitle.ifEmpty { "Source ${idx + 1}" }
-                        TextButton(
-                            onClick = {
-                                val source = uiState.selectedSource?.source
-                                val referer = video.headers?.let { h ->
-                                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                                        ?.let { h.value(it) }
-                                } ?: ""
-                                val headers = video.headers?.let { h ->
-                                    (0 until h.size).associate { h.name(it) to h.value(it) }
-                                } ?: emptyMap()
-                                onPlayVideo(ExtensionStreamParams(
-                                    videoUrl = video.videoUrl,
-                                    referer = referer,
-                                    subtitleUrl = video.subtitleTracks.firstOrNull()?.url,
-                                    animeName = uiState.selectedAnime?.title ?: "",
-                                    episodeNumber = uiState.selectedEpisode?.episode_number?.toInt() ?: 1,
-                                    extensionClient = (source as? AnimeHttpSource)?.client,
-                                    extensionHeaders = headers,
-                                ))
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
+    LaunchedEffect(pendingVideos) {
+        if (pendingVideos != null && pendingVideos.isNotEmpty()) {
+            val idx = pendingVideos.indexOfLast { it.videoTitle.contains("1080", ignoreCase = true) || it.videoTitle.contains("1080p", ignoreCase = true) }
+                .let { if (it < 0) pendingVideos.indices.last else it }
+            val video = pendingVideos[idx]
+            val source = uiState.selectedSource?.source
+            val referer = video.headers?.let { h ->
+                (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                    ?.let { h.value(it) }
+            } ?: ""
+            val headers = video.headers?.let { h ->
+                (0 until h.size).associate { h.name(it) to h.value(it) }
+            } ?: emptyMap()
+            PlayerData.extensionSource = source
+            PlayerData.extensionEpisode = uiState.selectedEpisode
+            PlayerData.allHosters = uiState.hosters ?: emptyList()
+            onPlayVideo(ExtensionStreamParams(
+                videoUrl = video.videoUrl,
+                referer = referer,
+                subtitleUrl = video.subtitleTracks.firstOrNull()?.url,
+                animeName = uiState.selectedAnime?.title ?: "",
+                episodeNumber = uiState.selectedEpisode?.episode_number?.toInt() ?: 1,
+                extensionClient = (source as? AnimeHttpSource)?.client,
+                extensionHeaders = headers,
+                allHosters = uiState.hosters ?: emptyList(),
+                allVideos = pendingVideos,
+                sourcePackageName = uiState.selectedSource?.extension?.packageName ?: "",
+                episodeUrl = uiState.selectedEpisode?.url ?: "",
+            ))
+        }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }

@@ -2479,6 +2479,7 @@ class MainViewModel : ViewModel() {
             videos = videos,
             videoHeaders = videoHeaders,
             extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client,
+            source = source,
         )
     }
 
@@ -2491,6 +2492,8 @@ class MainViewModel : ViewModel() {
         val hosters: List<Hoster>? = null,
         val extensionClient: OkHttpClient? = null,
         val videoHeaders: Map<String, String> = emptyMap(),
+        val source: AnimeCatalogueSource? = null,
+        val episode: SEpisode? = null,
     )
 
     suspend fun playEpisodeWithExtension(
@@ -2647,9 +2650,57 @@ class MainViewModel : ViewModel() {
                     hosters = hosters,
                     extensionClient = extensionClient,
                     videoHeaders = videoHeaders,
+                    source = source,
+                    episode = sEpisode,
                 )
             } catch (e: Exception) {
                 Log.e(TAG_EXT, "Extension playback failed", e)
+                null
+            }
+        }
+    }
+
+    suspend fun fetchExtensionHosterVideos(
+        source: AnimeCatalogueSource,
+        hoster: Hoster,
+    ): ExtensionStreamResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val videos = withContext(Dispatchers.IO) {
+                    if (hoster.lazy) {
+                        try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                    } else {
+                        hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                    }
+                }
+                if (videos.isEmpty()) return@withContext null
+
+                val bestVideo = videos.maxByOrNull {
+                    val res = it.resolution ?: 0
+                    if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
+                } ?: videos.last()
+
+                val referer = bestVideo.headers?.let { h ->
+                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                        ?.let { h.value(it) }
+                } ?: ""
+                val videoHeaders = bestVideo.headers?.let { h ->
+                    (0 until h.size).associate { h.name(it) to h.value(it) }
+                } ?: emptyMap()
+
+                ExtensionStreamResult(
+                    url = bestVideo.videoUrl,
+                    referer = referer,
+                    subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
+                    videoTitle = bestVideo.videoTitle,
+                    videos = videos,
+                    hosters = listOf(hoster),
+                    extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client,
+                    videoHeaders = videoHeaders,
+                    source = source,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG_EXT, "Failed to fetch hoster videos", e)
                 null
             }
         }

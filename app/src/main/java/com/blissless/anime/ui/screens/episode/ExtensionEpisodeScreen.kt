@@ -69,6 +69,10 @@ data class ExtensionStreamParams(
     val episodeNumber: Int,
     val extensionClient: OkHttpClient?,
     val extensionHeaders: Map<String, String>,
+    val allHosters: List<Hoster> = emptyList(),
+    val allVideos: List<Video> = emptyList(),
+    val sourcePackageName: String = "",
+    val episodeUrl: String = "",
 )
 
 private data class SearchResult(

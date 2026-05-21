@@ -1,5 +1,8 @@
 package com.blissless.anime.stream
 
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.model.Hoster
+import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import okhttp3.OkHttpClient
@@ -11,4 +14,7 @@ object PlayerData {
     var selectedSubtitle: Track? = null
     var selectedAudio: Track? = null
     var extensionClient: OkHttpClient? = null
+    var extensionSource: AnimeCatalogueSource? = null
+    var extensionEpisode: SEpisode? = null
+    var allHosters: List<Hoster> = emptyList()
 }
