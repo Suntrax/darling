@@ -458,10 +458,12 @@ fun PlayerScreen(
                             }
                         }
                         if (playbackState == Player.STATE_ENDED) {
+                            android.util.Log.d("NextEp", "STATE_ENDED autoPlayNextEpisode=$autoPlayNextEpisode onNextEpisode=${onNextEpisode != null} isChangingServer=$isChangingServer isLatestEpisode=$isLatestEpisode")
                             if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
                                 if (isLatestEpisode) {
                                     Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
                                 } else {
+                                    android.util.Log.d("NextEp", "Invoking onNextEpisode from STATE_ENDED")
                                     onNextEpisode.invoke()
                                 }
                             }
@@ -1289,7 +1291,10 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                         }
 
                             IconButton(
-                                onClick = { onNextEpisode?.invoke() },
+                                onClick = {
+                                    android.util.Log.d("NextEp", "SkipNext button clicked: onNextEpisode=${onNextEpisode != null} isLatestEpisode=$isLatestEpisode isLoadingStream=$isLoadingStream isChangingServer=$isChangingServer")
+                                    onNextEpisode?.invoke()
+                                },
                                 modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
                                 enabled = onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer
                             ) {

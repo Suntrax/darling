@@ -607,8 +607,6 @@ fun MainScreen(
 
     var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     
-    var showExtensionScreen by remember { mutableStateOf(false) }
-    
     var scheduleDialogOpen by remember { mutableStateOf(false) }
     
     var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
@@ -753,6 +751,9 @@ fun MainScreen(
         isExtensionFlow = false
         extensionOkHttpClient = result.extensionClient
         extensionVideoHeaders = result.videoHeaders
+        extensionServers = (result.hosters ?: emptyList()).map { hoster ->
+            ServerInfo(name = hoster.hosterName, url = hoster.hosterUrl)
+        }
         showPlayer = true
     }
 
@@ -783,8 +784,8 @@ fun MainScreen(
                 title = params.animeName,
                 cover = "",
                 progress = 0,
-                totalEpisodes = 0,
-                latestEpisode = params.episodeNumber,
+                totalEpisodes = params.episodeNumber + 1,
+                latestEpisode = null,
                 year = null,
             )
         }
@@ -818,14 +819,13 @@ fun MainScreen(
                 if (result != null && result.videos.isNotEmpty()) {
                     extensionVideos = result.videos
                     extensionHosters = result.hosters
-                    val hostersList = result.hosters
-                    if (hostersList != null && hostersList.size > 1) {
-                        showExtHosterDialog = true
-                    } else if (result.videos.size > 1) {
-                        showExtVideoDialog = true
-                    } else {
-                        playExtensionVideo(result, 0)
-                    }
+                    extensionSourcePackage = extPackage
+                    extensionEpisodeNumber = episode
+                    extensionEpisodeUrl = result.episode?.url ?: ""
+                    PlayerData.extensionSource = result.source
+                    PlayerData.extensionEpisode = result.episode
+                    PlayerData.allHosters = result.hosters ?: emptyList()
+                    playExtensionVideo(result, 0)
                 } else {
                     streamError = "Extension stream not found: Ep $episode"
                     Toast.makeText(context, "Extension failed for Ep $episode", Toast.LENGTH_SHORT).show()
@@ -1144,11 +1144,13 @@ fun MainScreen(
     }
 
     val onNextEpisode: () -> Unit = {
+        android.util.Log.d("NextEp", "onNextEpisode called: isChangingEpisode=$isChangingEpisode currentAnime=${currentAnime != null} extensionHosters=${extensionHosters?.size} cachedExtensionNext=${cachedExtensionNext != null}")
         if (!isChangingEpisode && currentAnime != null) {
             isChangingEpisode = true
 
             // Extension flow: use prefetched next episode
             if (extensionHosters != null && extensionHosters!!.isNotEmpty() && cachedExtensionNext != null) {
+                android.util.Log.d("NextEp", "Using extension cached next episode: ep=${currentEpisode + 1} url=${cachedExtensionNext!!.url.take(50)}")
                 val next = cachedExtensionNext!!
                 cachedExtensionNext = null
                 currentEpisode++
@@ -1166,7 +1168,9 @@ fun MainScreen(
                 episodeTrigger++
                 isChangingEpisode = false
                 prefetchExtensionNextEpisode()
+                android.util.Log.d("NextEp", "Extension next episode done, triggering playback")
             } else {
+                android.util.Log.d("NextEp", "Falling through to legacy next episode: totalEpisodes=$totalEpisodes currentEpisode=$currentEpisode extensionHosters=${extensionHosters != null} cachedExtensionNext=${cachedExtensionNext != null}")
                 val anime = currentAnime!!
                 if (totalEpisodes == 0 || currentEpisode < totalEpisodes) {
                     val nextEp = currentEpisode + 1
@@ -2085,78 +2089,7 @@ fun MainScreen(
         )
     }
 
-    if (showExtHosterDialog && extensionHosters != null && pendingExtResult != null) {
-        AlertDialog(
-            onDismissRequest = { showExtHosterDialog = false; isExtensionFlow = false },
-            title = { Text("Select Server") },
-            text = {
-                Column {
-                    extensionHosters!!.forEach { hoster ->
-                        TextButton(
-                            onClick = {
-                                showExtHosterDialog = false
-                                val hosterVideos = extensionVideos ?: emptyList()
-                                if (hosterVideos.size > 1) {
-                                    showExtVideoDialog = true
-                                } else {
-                                    playExtensionVideo(pendingExtResult!!, 0)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(hoster.hosterName.ifEmpty { "Server" })
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showExtHosterDialog = false; isExtensionFlow = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (showExtVideoDialog && extensionVideos != null && pendingExtResult != null) {
-        AlertDialog(
-            onDismissRequest = { showExtVideoDialog = false; isExtensionFlow = false },
-            title = { Text("Select Quality") },
-            text = {
-                Column {
-                    extensionVideos!!.forEachIndexed { idx, video ->
-                        val label = if (video.resolution != null && video.resolution > 0) "${video.videoTitle} (${video.resolution}p)"
-                                     else video.videoTitle.ifEmpty { "Source ${idx + 1}" }
-                        TextButton(
-                            onClick = {
-                                showExtVideoDialog = false
-                                playExtensionVideo(pendingExtResult!!, idx)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showExtVideoDialog = false; isExtensionFlow = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (showExtensionScreen) {
-        androidx.activity.compose.BackHandler {
-            showExtensionScreen = false
-        }
-        com.blissless.anime.stream.SearchScreen(
-            onPlayVideo = { params ->
-                showExtensionScreen = false
-                playFromExtensionSearch(params)
-            },
-        )
-    } else if (showPlayer && currentVideoUrl != null) {
+    if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
             val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
             PlayerScreen(
@@ -2625,20 +2558,6 @@ fun MainScreen(
                                         )
                                     }
                                 }
-                            }
-                            IconButton(
-                                onClick = {
-                                    showExtensionScreen = true
-                                },
-                                modifier = Modifier
-                                    .size(38.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Extension,
-                                    contentDescription = "Extensions",
-                                    tint = if (isOledTheme) Color.White.copy(alpha = 0.7f) else onSurfaceColor.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(18.dp)
-                                )
                             }
                         }
                     }
