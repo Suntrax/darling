@@ -6,4 +6,18 @@ class Hoster(
     val videoList: List<Video>? = null,
     val internalData: String = "",
     val lazy: Boolean = false,
-)
+) {
+    companion object {
+        const val NO_HOSTER_LIST = "no_hoster_list"
+
+        fun List<Video>.toHosterList(): List<Hoster> {
+            return listOf(
+                Hoster(
+                    hosterUrl = "",
+                    hosterName = NO_HOSTER_LIST,
+                    videoList = this,
+                ),
+            )
+        }
+    }
+}

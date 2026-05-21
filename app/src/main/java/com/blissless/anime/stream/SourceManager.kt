@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -62,7 +63,7 @@ class SourceManager(private val context: Context) {
             val targets = if (sourceFilter != null) listOf(sourceFilter) else sources
             for (sw in targets) {
                 try {
-                    val page = sw.source.getSearchAnime(1, query, emptyList())
+                    val page = sw.source.getSearchAnime(1, query, AnimeFilterList())
                     if (page.animes.isNotEmpty()) {
                         onProgress(sw, page.animes)
                     }
@@ -75,11 +76,20 @@ class SourceManager(private val context: Context) {
 
     suspend fun getEpisodes(source: AnimeCatalogueSource, anime: SAnime): List<SEpisode> {
         return withContext(Dispatchers.IO) {
+            Log.d(TAG, "getEpisodes: source=${source.name} sourceClass=${source::class.qualifiedName} anime.title=${anime.title} anime.url=${anime.url}")
+            Log.d(TAG, "  source.javaClass=${source.javaClass}")
+            Log.d(TAG, "  getEpisodeList method exists: ${source.javaClass.methods.any { it.name == "getEpisodeList" }}")
+            Log.d(TAG, "  super class: ${source.javaClass.superclass?.name}")
             try {
-                source.getEpisodeList(anime)
+                val result = source.getEpisodeList(anime)
+                Log.d(TAG, "getEpisodes OK: returned ${result.size} episodes")
+                result.forEachIndexed { i, ep ->
+                    Log.d(TAG, "  episode[$i]: name=${ep.name} url=${ep.url} ep_num=${ep.episode_number}")
+                }
+                result
             } catch (e: Exception) {
-                Log.e(TAG, "getEpisodeList failed", e)
-                emptyList()
+                Log.e(TAG, "getEpisodeList EXCEPTION", e)
+                throw e
             }
         }
     }
@@ -170,4 +180,5 @@ class SourceManager(private val context: Context) {
             }
         }
     }
+
 }

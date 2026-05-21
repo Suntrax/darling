@@ -15,16 +15,12 @@ class ExtensionDetector(private val context: Context) {
                 PackageManager.GET_SIGNING_CERTIFICATES else 0)
 
     fun detectInstalledExtensions(): List<Extension> {
-        return try {
-            val pm = context.packageManager
-            val installedPackages = getInstalledPackages(pm)
-            installedPackages
-                .filter { isExtension(it) }
-                .map { toExtension(it, pm) }
-                .sortedBy { it.name }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        val pm = context.packageManager
+        val installedPackages = getInstalledPackages(pm)
+        return installedPackages
+            .filter { isExtension(it) }
+            .map { toExtension(it, pm) }
+            .sortedBy { it.name }
     }
 
     private fun getInstalledPackages(pm: PackageManager): List<PackageInfo> {
@@ -39,17 +35,13 @@ class ExtensionDetector(private val context: Context) {
     }
 
     private fun isExtension(pkgInfo: PackageInfo): Boolean {
-        try {
-            if (pkgInfo.reqFeatures.orEmpty().any { it.name != null && it.name in EXTENSION_FEATURES }) {
-                return true
-            }
-            val metaData = pkgInfo.applicationInfo?.metaData ?: return false
-            return metaData.containsKey(METADATA_SOURCE_CLASS) ||
-                    metaData.containsKey(METADATA_ANIME_SOURCE_CLASS) ||
-                    metaData.containsKey(METADATA_SOURCE_FACTORY)
-        } catch (_: Exception) {
-            return false
+        if (pkgInfo.reqFeatures.orEmpty().any { it.name in EXTENSION_FEATURES }) {
+            return true
         }
+        val metaData = pkgInfo.applicationInfo?.metaData ?: return false
+        return metaData.containsKey(METADATA_SOURCE_CLASS) ||
+                metaData.containsKey(METADATA_ANIME_SOURCE_CLASS) ||
+                metaData.containsKey(METADATA_SOURCE_FACTORY)
     }
 
     private fun toExtension(pkgInfo: PackageInfo, pm: PackageManager): Extension {
@@ -99,7 +91,7 @@ class ExtensionDetector(private val context: Context) {
 
     private fun isMetadataTrue(metaData: android.os.Bundle?, key: String): Boolean {
         if (metaData == null) return false
-        val value = metaData.get(key) ?: return false
+        val value = metaData.get(key)
         return when (value) {
             is Boolean -> value
             is Int -> value != 0

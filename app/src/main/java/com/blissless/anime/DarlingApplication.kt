@@ -8,6 +8,11 @@ import coil.memory.MemoryCache
 
 class DarlingApplication : Application(), ImageLoaderFactory {
 
+    override fun onCreate() {
+        super.onCreate()
+        uy.kohesive.injekt.Injekt.register(Application::class.java, this)
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {

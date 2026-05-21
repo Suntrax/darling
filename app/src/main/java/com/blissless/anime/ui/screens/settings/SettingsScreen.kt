@@ -1313,7 +1313,6 @@ private fun ExtensionsSettingsPage(
 
         ExtensionsScreen(
             viewModel = extViewModel,
-            isOled = isOled
         )
     }
 }

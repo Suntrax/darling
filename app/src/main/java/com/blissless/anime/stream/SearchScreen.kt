@@ -6,31 +6,30 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.blissless.anime.stream.SourceManager.SourceWithExt
+
+import com.blissless.anime.ui.screens.episode.ExtensionStreamParams
+import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExtensionSearchScreen(
-    isOled: Boolean,
-    onBack: () -> Unit,
-    viewModel: ExtensionStreamViewModel = viewModel(),
+fun SearchScreen(
+    onPlayVideo: (ExtensionStreamParams) -> Unit = {},
+    viewModel: StreamViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var searchText by remember { mutableStateOf("") }
     var selectedExtIndex by remember { mutableIntStateOf(-1) }
     var showExtPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val sources = viewModel.getSources()
 
     LaunchedEffect(Unit) {
@@ -89,15 +88,33 @@ fun ExtensionSearchScreen(
     val pendingVideos = uiState.pendingVideos
     if (pendingVideos != null && uiState.selectedHoster == null) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = { viewModel.backToResults() },
             title = { Text("Select Source") },
             text = {
                 Column {
                     pendingVideos.forEachIndexed { idx, video ->
                         val label = if (video.resolution != null && video.resolution > 0) "${video.videoTitle} (${video.resolution}p)"
-                                    else video.videoTitle.ifEmpty { "Source ${idx + 1}" }
+                                     else video.videoTitle.ifEmpty { "Source ${idx + 1}" }
                         TextButton(
-                            onClick = { viewModel.selectVideo(idx) },
+                            onClick = {
+                                val source = uiState.selectedSource?.source
+                                val referer = video.headers?.let { h ->
+                                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                                        ?.let { h.value(it) }
+                                } ?: ""
+                                val headers = video.headers?.let { h ->
+                                    (0 until h.size).associate { h.name(it) to h.value(it) }
+                                } ?: emptyMap()
+                                onPlayVideo(ExtensionStreamParams(
+                                    videoUrl = video.videoUrl,
+                                    referer = referer,
+                                    subtitleUrl = video.subtitleTracks.firstOrNull()?.url,
+                                    animeName = uiState.selectedAnime?.title ?: "",
+                                    episodeNumber = uiState.selectedEpisode?.episode_number?.toInt() ?: 1,
+                                    extensionClient = (source as? AnimeHttpSource)?.client,
+                                    extensionHeaders = headers,
+                                ))
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -118,16 +135,9 @@ fun ExtensionSearchScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Extension Search") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                },
+                title = { Text("Search Anime") },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface,
-                    titleContentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         }
@@ -145,11 +155,13 @@ fun ExtensionSearchScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 trailingIcon = {
-                    if (uiState.isSearching || !uiState.isInitialized) {
+                    if (uiState.isSearching) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    } else if (!uiState.isInitialized) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     } else {
                         Button(onClick = {
-                            if (selectedExtIndex >= 0 && selectedExtIndex < sources.size) {
+                            if (selectedExtIndex >= 0) {
                                 viewModel.search(searchText, sources[selectedExtIndex])
                             } else {
                                 showExtPicker = true
@@ -165,18 +177,19 @@ fun ExtensionSearchScreen(
 
             if (sources.isNotEmpty()) {
                 Text(
-                    text = if (selectedExtIndex >= 0 && selectedExtIndex < sources.size)
-                            "Using: ${sources[selectedExtIndex].extension.name.removePrefix("Aniyomi: ")}"
+                    text = if (selectedExtIndex >= 0) "Using: ${sources[selectedExtIndex].extension.name.removePrefix("Aniyomi: ")}"
                            else "No extension selected — searches all",
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 sources.forEachIndexed { index, sw ->
@@ -217,20 +230,20 @@ fun ExtensionSearchScreen(
                 }
                 uiState.searchResults.isEmpty() && uiState.query.isNotEmpty() -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No results found", color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No results found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 uiState.selectedAnime != null -> {
-                    EpisodeListContent(viewModel, uiState, isOled)
+                    EpisodeListContent(viewModel, uiState, context)
                 }
                 uiState.searchResults.isNotEmpty() -> {
-                    AnimeResults(viewModel, uiState, isOled)
+                    AnimeResults(viewModel, uiState)
                 }
                 else -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             "Select an extension, enter an anime name, and tap Search",
-                            color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -241,27 +254,23 @@ fun ExtensionSearchScreen(
 
 @Composable
 private fun AnimeResults(
-    viewModel: ExtensionStreamViewModel,
-    uiState: ExtensionStreamUiState,
-    isOled: Boolean,
+    viewModel: StreamViewModel,
+    uiState: StreamUiState,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(uiState.searchResults, key = { "${it.source.extension.packageName}_${it.anime.url}" }) { result ->
             Card(
-                modifier = Modifier.fillMaxWidth().clickable {
-                    viewModel.selectAnime(result.source, result.anime)
-                },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
-                ),
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        viewModel.selectAnime(result.source, result.anime)
+                    }
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = result.anime.title,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -285,9 +294,9 @@ private fun AnimeResults(
 
 @Composable
 private fun EpisodeListContent(
-    viewModel: ExtensionStreamViewModel,
-    uiState: ExtensionStreamUiState,
-    isOled: Boolean,
+    viewModel: StreamViewModel,
+    uiState: StreamUiState,
+    context: android.content.Context,
 ) {
     Column {
         Row(
@@ -299,7 +308,6 @@ private fun EpisodeListContent(
                 text = uiState.selectedAnime!!.title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -327,7 +335,7 @@ private fun EpisodeListContent(
             }
         } else if (uiState.episodes.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No episodes found", color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No episodes found", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(
@@ -336,14 +344,14 @@ private fun EpisodeListContent(
             ) {
                 items(uiState.episodes, key = { it.url }) { episode ->
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { viewModel.selectEpisode(episode) },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.selectEpisode(episode) }
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -357,7 +365,6 @@ private fun EpisodeListContent(
                                 Text(
                                     text = episode.name.ifEmpty { "Episode ${episode.episode_number}" },
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )

@@ -128,6 +128,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import java.util.Locale
 import kotlin.math.abs
 
@@ -184,7 +185,9 @@ fun PlayerScreen(
     onPrefetchAdjacent: (() -> Unit)? = null,
     onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null },
     onBackClick: (() -> Unit)? = null,
-    episodeTrigger: Int = 0
+    episodeTrigger: Int = 0,
+    extensionOkHttpClient: okhttp3.OkHttpClient? = null,
+    extensionVideoHeaders: Map<String, String> = emptyMap(),
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -361,7 +364,7 @@ fun PlayerScreen(
         }
     }
 
-    val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl) {
+    val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders) {
         val bufferAheadMs = bufferAheadSeconds * 1000
         // Use a higher max buffer to ensure more content is cached for offline viewing
         val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000) // At least 3 minutes, or buffer ahead + 1 minute
@@ -376,10 +379,19 @@ fun PlayerScreen(
         
         // Get data source factory - use cache if available
         val cacheDataSourceFactory = onGetCacheDataSourceFactory(referer)
-        val upstreamFactory = DefaultHttpDataSource.Factory()
-            .setConnectTimeoutMs(20000)
-            .setReadTimeoutMs(20000)
-            .setDefaultRequestProperties(mapOf("Referer" to referer))
+        val upstreamFactory = if (extensionOkHttpClient != null && extensionVideoHeaders.isNotEmpty()) {
+            val okHttpFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
+            okHttpFactory.setDefaultRequestProperties(extensionVideoHeaders)
+            okHttpFactory
+        } else if (extensionOkHttpClient != null) {
+            androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
+                .setDefaultRequestProperties(mapOf("Referer" to referer))
+        } else {
+            DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(20000)
+                .setReadTimeoutMs(20000)
+                .setDefaultRequestProperties(mapOf("Referer" to referer))
+        }
         
         val dataSourceFactory = if (cacheDataSourceFactory != null) {
             cacheDataSourceFactory

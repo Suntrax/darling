@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
@@ -74,6 +75,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.blissless.anime.api.myanimelist.LoginProvider
@@ -83,7 +85,10 @@ import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.ExploreAnime
 import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.LocalAnimeEntry
+import eu.kanade.tachiyomi.animesource.model.Video
+import eu.kanade.tachiyomi.animesource.model.Hoster
 import com.blissless.anime.data.models.QualityOption
+import okhttp3.OkHttpClient
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.screens.cast.AllCastScreen
 import com.blissless.anime.ui.screens.cast.AllStaffScreen
@@ -92,6 +97,7 @@ import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
 import com.blissless.anime.ui.screens.explore.ExploreScreen
 import com.blissless.anime.ui.screens.home.HomeScreen
 import com.blissless.anime.ui.screens.player.PlayerScreen
+import com.blissless.anime.ui.screens.episode.ExtensionStreamParams
 import com.blissless.anime.ui.screens.airing.ScheduleScreen
 import com.blissless.anime.ui.screens.settings.SettingsScreen
 import com.blissless.anime.ui.screens.status.StatusListScreen
@@ -599,9 +605,22 @@ fun MainScreen(
 
     var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     
+    var showExtensionScreen by remember { mutableStateOf(false) }
+    
     var scheduleDialogOpen by remember { mutableStateOf(false) }
     
     var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
+
+    // Extension flow state
+    var showNoExtDialog by remember { mutableStateOf(false) }
+    var extensionVideos by remember { mutableStateOf<List<Video>?>(null) }
+    var extensionHosters by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Hoster>?>(null) }
+    var showExtHosterDialog by remember { mutableStateOf(false) }
+    var showExtVideoDialog by remember { mutableStateOf(false) }
+    var pendingExtResult by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
+    var isExtensionFlow by remember { mutableStateOf(false) }
+    var extensionOkHttpClient by remember { mutableStateOf<okhttp3.OkHttpClient?>(null) }
+    var extensionVideoHeaders by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     
     // Callback to show detailed anime from MAL history using AniList API
     val onShowDetailedAnimeFromMal: (Int) -> Unit = { malId ->
@@ -707,6 +726,57 @@ fun MainScreen(
         return anime.titleEnglish ?: anime.title
     }
 
+    fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
+        val video = result.videos.getOrNull(index) ?: return
+        streamError = null
+        currentVideoUrl = video.videoUrl
+        currentReferer = video.headers?.let { h ->
+            (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                ?.let { h.value(it) }
+        } ?: ""
+        currentSubtitleUrl = video.subtitleTracks.firstOrNull()?.url
+        currentServerName = "Extension"
+        currentCategory = "sub"
+        actualCategory = "sub"
+        requestedCategory = preferredCategory
+        currentQualityOptions = emptyList()
+        currentQuality = "Auto"
+        currentServerIndex = 0
+        isExtensionFlow = false
+        extensionOkHttpClient = result.extensionClient
+        extensionVideoHeaders = result.videoHeaders
+        showPlayer = true
+    }
+
+    fun playFromExtensionSearch(params: ExtensionStreamParams) {
+        streamError = null
+        currentVideoUrl = params.videoUrl
+        currentReferer = params.referer
+        currentSubtitleUrl = params.subtitleUrl
+        currentServerName = "Extension"
+        currentCategory = "sub"
+        actualCategory = "sub"
+        requestedCategory = preferredCategory
+        currentQualityOptions = emptyList()
+        currentQuality = "Auto"
+        currentServerIndex = 0
+        extensionOkHttpClient = params.extensionClient
+        extensionVideoHeaders = params.extensionHeaders
+        if (currentAnime == null) {
+            currentAnime = AnimeMedia(
+                id = 0,
+                title = params.animeName,
+                cover = "",
+                progress = 0,
+                totalEpisodes = 0,
+                latestEpisode = params.episodeNumber,
+                year = null,
+            )
+        }
+        currentEpisode = params.episodeNumber
+        showPlayer = true
+    }
+
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int) {
         currentAnime = anime
         currentEpisode = episode
@@ -714,6 +784,44 @@ fun MainScreen(
         streamError = null
         showPlayer = false
 
+        // Check if extension streaming should be used
+        val extPackage = viewModel.defaultExtensionPackage.value
+        android.util.Log.d("ExtensionPlay", "loadAndPlayEpisode extPackage='$extPackage'")
+        if (extPackage.isNotEmpty()) {
+            android.util.Log.d("ExtensionPlay", "Using extension flow for ep $episode")
+            isExtensionFlow = true
+            isLoadingStream = true
+            extensionVideos = null
+            extensionHosters = null
+            pendingExtResult = null
+            showExtHosterDialog = false
+            showExtVideoDialog = false
+            scope.launch {
+                val result = viewModel.playEpisodeWithExtension(anime, episode, extPackage)
+                android.util.Log.d("ExtensionPlay", "Extension result: ${result != null}")
+                pendingExtResult = result
+                if (result != null && result.videos.isNotEmpty()) {
+                    extensionVideos = result.videos
+                    extensionHosters = result.hosters
+                    val hostersList = result.hosters
+                    if (hostersList != null && hostersList.size > 1) {
+                        showExtHosterDialog = true
+                    } else if (result.videos.size > 1) {
+                        showExtVideoDialog = true
+                    } else {
+                        playExtensionVideo(result, 0)
+                    }
+                } else {
+                    streamError = "Extension stream not found: Ep $episode"
+                    Toast.makeText(context, "Extension failed for Ep $episode", Toast.LENGTH_SHORT).show()
+                }
+                isLoadingStream = false
+            }
+            return
+        }
+
+        android.util.Log.d("ExtensionPlay", "No extension set, showing dialog")
+        showNoExtDialog = true
         // Reset timestamps for new episode
         animekaiIntroStart = null
         animekaiIntroEnd = null
@@ -1881,7 +1989,93 @@ fun MainScreen(
         )
     }
 
-    if (showPlayer && currentVideoUrl != null) {
+    if (showNoExtDialog) {
+        AlertDialog(
+            onDismissRequest = { showNoExtDialog = false },
+            title = { Text("No Default Extension") },
+            text = {
+                Text("Go to Settings → Extensions to set a default extension for streaming.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showNoExtDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    if (showExtHosterDialog && extensionHosters != null && pendingExtResult != null) {
+        AlertDialog(
+            onDismissRequest = { showExtHosterDialog = false; isExtensionFlow = false },
+            title = { Text("Select Server") },
+            text = {
+                Column {
+                    extensionHosters!!.forEach { hoster ->
+                        TextButton(
+                            onClick = {
+                                showExtHosterDialog = false
+                                val hosterVideos = extensionVideos ?: emptyList()
+                                if (hosterVideos.size > 1) {
+                                    showExtVideoDialog = true
+                                } else {
+                                    playExtensionVideo(pendingExtResult!!, 0)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(hoster.hosterName.ifEmpty { "Server" })
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showExtHosterDialog = false; isExtensionFlow = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showExtVideoDialog && extensionVideos != null && pendingExtResult != null) {
+        AlertDialog(
+            onDismissRequest = { showExtVideoDialog = false; isExtensionFlow = false },
+            title = { Text("Select Quality") },
+            text = {
+                Column {
+                    extensionVideos!!.forEachIndexed { idx, video ->
+                        val label = if (video.resolution != null && video.resolution > 0) "${video.videoTitle} (${video.resolution}p)"
+                                     else video.videoTitle.ifEmpty { "Source ${idx + 1}" }
+                        TextButton(
+                            onClick = {
+                                showExtVideoDialog = false
+                                playExtensionVideo(pendingExtResult!!, idx)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showExtVideoDialog = false; isExtensionFlow = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showExtensionScreen) {
+        androidx.activity.compose.BackHandler {
+            showExtensionScreen = false
+        }
+        com.blissless.anime.stream.SearchScreen(
+            onPlayVideo = { params ->
+                showExtensionScreen = false
+                playFromExtensionSearch(params)
+            },
+        )
+    } else if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
             val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
             PlayerScreen(
@@ -1948,8 +2142,12 @@ fun MainScreen(
                 onBackClick = { 
                     showPlayer = false
                     currentVideoUrl = null
+                    extensionOkHttpClient = null
+                    extensionVideoHeaders = emptyMap()
                 },
-                episodeTrigger = episodeTrigger
+                episodeTrigger = episodeTrigger,
+                extensionOkHttpClient = extensionOkHttpClient,
+                extensionVideoHeaders = extensionVideoHeaders,
             )
         }
 
@@ -1964,6 +2162,8 @@ fun MainScreen(
                 else -> {
                     showPlayer = false
                     currentVideoUrl = null
+                    extensionOkHttpClient = null
+                    extensionVideoHeaders = emptyMap()
                 }
             }
         }
@@ -2329,6 +2529,20 @@ fun MainScreen(
                                         )
                                     }
                                 }
+                            }
+                            IconButton(
+                                onClick = {
+                                    showExtensionScreen = true
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Extension,
+                                    contentDescription = "Extensions",
+                                    tint = if (isOledTheme) Color.White.copy(alpha = 0.7f) else onSurfaceColor.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }

@@ -1,6 +1,7 @@
 package com.blissless.anime.extensions
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -15,9 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.net.URL
 
 data class ExtensionsUiState(
     val isLoading: Boolean = true,
@@ -64,6 +67,14 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
         }
+    }
+
+    fun openExtensionSettings(packageName: String) {
+        val context = getApplication<Application>()
+        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     fun addRepo(url: String) {

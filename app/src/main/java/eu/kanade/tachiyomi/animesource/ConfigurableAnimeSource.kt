@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.animesource
 
-interface ConfigurableAnimeSource : AnimeSource {
-    fun setupPreferences()
+import androidx.preference.PreferenceScreen
+
+interface ConfigurableAnimeSource {
+    fun setupPreferenceScreen(screen: PreferenceScreen)
 }

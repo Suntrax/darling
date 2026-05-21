@@ -16,11 +16,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,7 +38,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -47,6 +47,8 @@ import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 class PlayerActivity : ComponentActivity() {
 
@@ -63,8 +65,11 @@ class PlayerActivity : ComponentActivity() {
         Log.d(TAG, "Received ${videos.size} videos")
         videos.forEachIndexed { i, v ->
             Log.d(TAG, "  Video[$i]: title='${v.videoTitle}' url='${v.videoUrl}' res=${v.resolution}")
+            Log.d(TAG, "    subtitleTracks: ${v.subtitleTracks.map { "${it.lang}:${it.url}" }}")
+            Log.d(TAG, "    audioTracks: ${v.audioTracks.map { "${it.lang}:${it.url}" }}")
         }
         val startQuality = PlayerData.currentQualityIndex.coerceIn(0, videos.lastIndex)
+        Log.d(TAG, "Start quality index: $startQuality")
         var currentVideo by mutableStateOf(videos.getOrNull(startQuality))
         var showOverlay by mutableStateOf(true)
         var showQualitySheet by mutableStateOf(false)
@@ -73,6 +78,7 @@ class PlayerActivity : ComponentActivity() {
         var selectedSubtitle by mutableStateOf(PlayerData.selectedSubtitle)
         var selectedAudio by mutableStateOf(PlayerData.selectedAudio)
         var isPlaying by mutableStateOf(true)
+        var adaptiveMode by mutableStateOf(false)
         var playbackPosition by mutableLongStateOf(0L)
         var playbackDuration by mutableLongStateOf(0L)
 
@@ -90,20 +96,27 @@ class PlayerActivity : ComponentActivity() {
         }
 
         fun buildMediaItem(video: Video, subtitle: Track?): MediaItem {
+            Log.d(TAG, "buildMediaItem: videoUrl=${video.videoUrl}")
             val builder = MediaItem.Builder()
                 .setUri(android.net.Uri.parse(video.videoUrl))
+            video.headers?.let { h: okhttp3.Headers ->
+                val sb = StringBuilder("Video headers:")
+                for (i in 0 until h.size) sb.append(" ${h.name(i)}=${h.value(i)}")
+                Log.d(TAG, sb.toString())
+            }
             builder.setMediaMetadata(
-                androidx.media3.common.MediaMetadata.Builder()
-                    .setTitle(PlayerData.animeTitle)
-                    .setSubtitle(video.videoTitle)
-                    .build()
-            )
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(PlayerData.animeTitle)
+                        .setSubtitle(video.videoTitle)
+                        .build()
+                )
             subtitle?.let { track ->
                 val mime = when {
                     track.url.contains(".vtt") -> "text/vtt"
                     track.url.contains(".srt") -> "application/x-subrip"
                     else -> "text/vtt"
                 }
+                Log.d(TAG, "  Adding subtitle: url=${track.url} lang=${track.lang} mime=$mime")
                 builder.setSubtitleConfigurations(
                     listOf(
                         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(track.url))
@@ -113,7 +126,7 @@ class PlayerActivity : ComponentActivity() {
                             .build()
                     )
                 )
-            }
+            } ?: Log.d(TAG, "  No subtitle selected")
             return builder.build()
         }
 
@@ -121,6 +134,13 @@ class PlayerActivity : ComponentActivity() {
             currentVideo = video
             val mediaItem = buildMediaItem(video, selectedSubtitle)
             val pos = player?.currentPosition ?: 0L
+            Log.d(TAG, "playVideo: switching at pos=$pos, subs=${selectedSubtitle?.lang}")
+            mediaItem.localConfiguration?.let { lc ->
+                Log.d(TAG, "  mediaItem subtitleConfigs: ${lc.subtitleConfigurations.size}")
+                lc.subtitleConfigurations.forEach { sc ->
+                    Log.d(TAG, "    config: uri=${sc.uri} mime=${sc.mimeType} lang=${sc.language} flags=${sc.selectionFlags}")
+                }
+            }
             player?.let { p ->
                 p.stop()
                 p.clearMediaItems()
@@ -133,9 +153,20 @@ class PlayerActivity : ComponentActivity() {
         }
 
         val extClient = PlayerData.extensionClient
+        Log.d(TAG, "extensionClient = $extClient")
+        val firstVideo = videos.getOrNull(startQuality)
+        Log.d(TAG, "firstVideo: url=${firstVideo?.videoUrl} headers=${firstVideo?.headers} title=${firstVideo?.videoTitle}")
+        firstVideo?.headers?.let { h ->
+            for (i in 0 until h.size) Log.d(TAG, "  header: ${h.name(i)}=${h.value(i)}")
+        }
 
         player = if (extClient != null) {
-            val dsFactory = DefaultHttpDataSource.Factory()
+            val dsFactory = OkHttpDataSource.Factory(extClient)
+            firstVideo?.headers?.let { h ->
+                val props = (0 until h.size).associate { h.name(it) to h.value(it) }
+                Log.d(TAG, "Setting OkHttpDataSource default properties: $props")
+                dsFactory.setDefaultRequestProperties(props)
+            }
             val msFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(dsFactory)
             ExoPlayer.Builder(this).setMediaSourceFactory(msFactory).build()
         } else {
@@ -143,9 +174,11 @@ class PlayerActivity : ComponentActivity() {
         }.also { exo ->
             val first = videos.getOrNull(startQuality)
             if (first != null) {
+                Log.d(TAG, "Creating mediaSource for url=${first.videoUrl}")
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(android.net.Uri.parse(first.videoUrl))
 
+                // Add subtitle config
                 val sub = PlayerData.selectedSubtitle
                 if (sub != null) {
                     val subMime = when {
@@ -170,6 +203,15 @@ class PlayerActivity : ComponentActivity() {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_READY) {
                         isPlaying = exo.playWhenReady
+                        val tracks = exo.currentTracks
+                        Log.d(TAG, "STATE_READY: groups=${tracks.groups.size}")
+                        tracks.groups.forEachIndexed { gi, g ->
+                            Log.d(TAG, "  Group[$gi]: type=${g.type} tracks=${g.length}")
+                            for (ti in 0 until g.length) {
+                                val t = g.getTrackFormat(ti)
+                                Log.d(TAG, "    Track[$ti]: id=${t.id} lang=${t.language} mime=${t.sampleMimeType}")
+                            }
+                        }
                     }
                 }
                 override fun onIsPlayingChanged(it: Boolean) {
@@ -177,6 +219,12 @@ class PlayerActivity : ComponentActivity() {
                 }
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     Log.e(TAG, "Player error: errorCode=${error.errorCode} msg=${error.message}")
+                    Log.e(TAG, "  cause=${error.cause}")
+                    error.cause?.let { Log.e(TAG, "  causeStackTrace:", it) }
+                }
+                override fun onPlayerErrorChanged(error: androidx.media3.common.PlaybackException?) {
+                    Log.e(TAG, "Player error changed: ${error?.message}")
+                    error?.cause?.let { Log.e(TAG, "  cause=${it}") }
                 }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     val ratio = if (videoSize.width == 0 || videoSize.height == 0) 0f
@@ -190,9 +238,13 @@ class PlayerActivity : ComponentActivity() {
                     videoContainer?.setAspectRatio(ratio)
                 }
                 override fun onCues(cues: List<Cue>) {
+                    Log.d(TAG, "onCues(List) called, cues=${cues.size}")
+                    cues.forEachIndexed { i, c -> Log.d(TAG, "  Cue[$i]: text='${c.text}'") }
                     subtitleView?.setCues(cues)
                 }
                 override fun onCues(cueGroup: CueGroup) {
+                    Log.d(TAG, "onCues(CueGroup) called, cues=${cueGroup.cues.size} timeUs=${cueGroup.presentationTimeUs}")
+                    cueGroup.cues.forEachIndexed { i, c -> Log.d(TAG, "  Cue[$i]: text='${c.text}'") }
                     subtitleView?.setCues(cueGroup.cues)
                 }
             })
@@ -275,9 +327,16 @@ class PlayerActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(16.dp))
 
                             if (showQualitySheet) {
-                                QualitySheet(videos, PlayerData.currentQualityIndex, onSelect = { idx ->
-                                    showQualitySheet = false; playVideo(videos[idx])
-                                })
+                                QualitySheet(
+                                    videos = videos,
+                                    currentIndex = PlayerData.currentQualityIndex,
+                                    adaptiveMode = adaptiveMode,
+                                    onSelect = { idx ->
+                                        showQualitySheet = false; playVideo(videos[idx])
+                                    },
+                                    onToggleAdaptive = { adaptiveMode = !adaptiveMode },
+                                    onDismiss = { showQualitySheet = false }
+                                )
                             }
                             if (showSubSheet) {
                                 SubtitleSheet(
@@ -288,7 +347,8 @@ class PlayerActivity : ComponentActivity() {
                                         selectedSubtitle = track
                                         PlayerData.selectedSubtitle = track
                                         currentVideo?.let { playVideo(it) }
-                                    }
+                                    },
+                                    onDismiss = { showSubSheet = false }
                                 )
                             }
                             if (showAudioSheet) {
@@ -300,7 +360,8 @@ class PlayerActivity : ComponentActivity() {
                                         selectedAudio = track
                                         PlayerData.selectedAudio = track
                                         currentVideo?.let { playVideo(it) }
-                                    }
+                                    },
+                                    onDismiss = { showAudioSheet = false }
                                 )
                             }
 
@@ -420,7 +481,10 @@ private fun ControlChip(icon: ImageVector, label: String, onClick: () -> Unit) {
 private fun QualitySheet(
     videos: List<Video>,
     currentIndex: Int,
-    onSelect: (Int) -> Unit
+    adaptiveMode: Boolean,
+    onSelect: (Int) -> Unit,
+    onToggleAdaptive: () -> Unit,
+    onDismiss: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -429,18 +493,28 @@ private fun QualitySheet(
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Quality", color = Color.White, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                itemsIndexed(videos) { idx, v ->
-                    val label = if (v.resolution != null && v.resolution > 0) "${v.resolution}p"
-                                else v.videoTitle.ifEmpty { "Q$idx" }
-                    FilterChip(
-                        selected = idx == currentIndex,
-                        onClick = { onSelect(idx) },
-                        label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF1976D2), selectedLabelColor = Color.White
-                        )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = adaptiveMode,
+                    onClick = onToggleAdaptive,
+                    label = { Text("Auto") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF1976D2), selectedLabelColor = Color.White
                     )
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    itemsIndexed(videos) { idx, v ->
+                        val label = if (v.resolution != null && v.resolution > 0) "${v.resolution}p"
+                                     else v.videoTitle.ifEmpty { "Q$idx" }
+                        FilterChip(
+                            selected = !adaptiveMode && idx == currentIndex,
+                            onClick = { onSelect(idx) },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF1976D2), selectedLabelColor = Color.White
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -448,7 +522,7 @@ private fun QualitySheet(
 }
 
 @Composable
-private fun SubtitleSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit) {
+private fun SubtitleSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xEE333333))
@@ -481,7 +555,7 @@ private fun SubtitleSheet(tracks: List<Track>, selected: Track?, onSelect: (Trac
 }
 
 @Composable
-private fun AudioSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit) {
+private fun AudioSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xEE333333))

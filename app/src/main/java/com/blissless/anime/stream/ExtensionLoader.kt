@@ -4,8 +4,10 @@ import android.content.Context
 import android.util.Log
 import dalvik.system.DexClassLoader
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
 import com.blissless.anime.extensions.Extension
+import java.io.File
 
 class ExtensionLoader(private val context: Context) {
 

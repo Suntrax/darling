@@ -56,10 +56,12 @@ import android.util.Log
 import com.blissless.anime.extensions.ExtensionDetector
 import com.blissless.anime.stream.ExtensionLoader
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
-import eu.kanade.tachiyomi.animesource.model.Hoster
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
+import okhttp3.OkHttpClient
 
 class MainViewModel : ViewModel() {
 
@@ -77,6 +79,9 @@ class MainViewModel : ViewModel() {
     private lateinit var repository: AnimeRepository
     private lateinit var context: Context
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
+    private var sourceManager: com.blissless.anime.stream.SourceManager? = null
+
+    fun getSourceManager(): com.blissless.anime.stream.SourceManager? = sourceManager
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: android.net.Network) {
@@ -714,6 +719,7 @@ class MainViewModel : ViewModel() {
         repository = AnimeRepository(userPreferences, cacheManager)
         malApiService = MalApiService(context)
         jikanService = JikanService(context)
+        sourceManager = com.blissless.anime.stream.SourceManager(context)
 
         // Initialize video cache for offline playback
         cacheManager.initializeVideoCache(context)
@@ -2358,22 +2364,23 @@ class MainViewModel : ViewModel() {
                 return@launch
             }
 
-            val detector = ExtensionDetector(context)
-            val extensions = detector.detectInstalledExtensions()
-            val ext = extensions.find { it.packageName == defaultPkg }
-            if (ext == null) {
-                Log.d(TAG_EXT, "Default extension $defaultPkg not found among installed")
+            val sm = sourceManager
+            if (sm == null) {
+                Log.d(TAG_EXT, "SourceManager not initialized")
                 return@launch
             }
-            Log.d(TAG_EXT, "Using extension: ${ext.name} (${ext.packageName}) sourceClass=${ext.sourceClass}")
 
-            val loader = ExtensionLoader(context)
-            val sources = loader.loadSources(ext)
-            if (sources.isEmpty()) {
-                Log.d(TAG_EXT, "No sources loaded from extension")
+            if (sm.getSources().isEmpty()) {
+                sm.loadSources()
+            }
+            val allSources = sm.getSources()
+            val sw = allSources.find { it.extension.packageName == defaultPkg }
+            if (sw == null) {
+                Log.d(TAG_EXT, "Default extension $defaultPkg not found among loaded sources")
                 return@launch
             }
-            val source = sources.first()
+            val source = sw.source
+            Log.d(TAG_EXT, "Using extension: ${sw.extension.name} (${sw.extension.packageName}) sourceClass=${sw.extension.sourceClass}")
             Log.d(TAG_EXT, "Loaded source: ${source.name} (id=${source.id}, lang=${source.lang})")
 
             val searchTerms = listOfNotNull(
@@ -2386,12 +2393,12 @@ class MainViewModel : ViewModel() {
 
             for (query in searchTerms) {
                 try {
-                    val page = source.getSearchAnime(1, query, emptyList())
+                    val page = source.getSearchAnime(1, query, AnimeFilterList())
                     Log.d(TAG_EXT, "Search '$query': ${page.animes.size} results")
-                    page.animes.forEach { a ->
+                    page.animes.forEach { a: SAnime ->
                         Log.d(TAG_EXT, "  -> ${a.title} | url=${a.url}")
                     }
-                    matchedSAnime = page.animes.firstOrNull { a ->
+                    matchedSAnime = page.animes.firstOrNull { a: SAnime ->
                         a.title.contains(anime.title ?: "", ignoreCase = true) ||
                                 (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
                     } ?: page.animes.firstOrNull()
@@ -2410,11 +2417,21 @@ class MainViewModel : ViewModel() {
             }
             Log.d(TAG_EXT, "Matched (via '$matchedQuery'): ${matchedSAnime.title}")
 
-            val sEpisodes = try {
+            // Try getEpisodeList directly from search result first
+            var sEpisodes: List<SEpisode> = try {
                 source.getEpisodeList(matchedSAnime)
-            } catch (e: Exception) {
-                Log.e(TAG_EXT, "getEpisodeList failed", e)
-                return@launch
+            } catch (_: Exception) { emptyList() }
+
+            if (sEpisodes.isEmpty()) {
+                try {
+                    matchedSAnime = source.getAnimeDetails(matchedSAnime)
+                } catch (e: Exception) {
+                    Log.w(TAG_EXT, "getAnimeDetails failed", e)
+                }
+
+                sEpisodes = try {
+                    source.getEpisodeList(matchedSAnime)
+                } catch (_: Exception) { emptyList() }
             }
             Log.d(TAG_EXT, "Got ${sEpisodes.size} episodes total")
 
@@ -2439,6 +2456,202 @@ class MainViewModel : ViewModel() {
                 }
             }
             Log.d(TAG_EXT, "=== Done logging extension streams ===")
+        }
+    }
+
+    private fun createResult(source: eu.kanade.tachiyomi.animesource.AnimeCatalogueSource, videos: List<Video>, videoUrl: String): ExtensionStreamResult {
+        val bestVideo = videos.maxByOrNull {
+            val res = it.resolution ?: 0
+            if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
+        } ?: videos.last()
+        val referer = bestVideo.headers?.let { h ->
+            (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                ?.let { h.value(it) }
+        } ?: ""
+        val videoHeaders = bestVideo.headers?.let { h ->
+            (0 until h.size).associate { h.name(it) to h.value(it) }
+        } ?: emptyMap()
+        return ExtensionStreamResult(
+            url = bestVideo.videoUrl,
+            referer = referer,
+            subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
+            videoTitle = bestVideo.videoTitle,
+            videos = videos,
+            videoHeaders = videoHeaders,
+            extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client,
+        )
+    }
+
+    data class ExtensionStreamResult(
+        val url: String,
+        val referer: String,
+        val subtitleUrl: String?,
+        val videoTitle: String,
+        val videos: List<Video> = emptyList(),
+        val hosters: List<Hoster>? = null,
+        val extensionClient: OkHttpClient? = null,
+        val videoHeaders: Map<String, String> = emptyMap(),
+    )
+
+    suspend fun playEpisodeWithExtension(
+        anime: AnimeMedia,
+        episodeNumber: Int,
+        defaultPackage: String,
+    ): ExtensionStreamResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                android.util.Log.d(TAG_EXT, "playEpisodeWithExtension: '$defaultPackage' ep=$episodeNumber")
+                val sm = sourceManager
+                if (sm == null) {
+                    Log.e(TAG_EXT, "SourceManager not initialized")
+                    return@withContext null
+                }
+
+                // Ensure sources are loaded (like StreamViewModel does)
+                if (sm.getSources().isEmpty()) {
+                    sm.loadSources()
+                }
+                val allSources = sm.getSources()
+                val sourceWithExt = allSources.find { it.extension.packageName == defaultPackage }
+                if (sourceWithExt == null) {
+                    android.util.Log.d(TAG_EXT, "Found ${allSources.size} loaded sources, looking for $defaultPackage")
+                    // Fallback: reload and try again
+                    sm.reloadSources()
+                    sm.loadSources()
+                    val reloaded = sm.getSources()
+                    val found = reloaded.find { it.extension.packageName == defaultPackage }
+                    if (found == null) {
+                        Log.e(TAG_EXT, "Extension $defaultPackage not found among loaded sources")
+                        return@withContext null
+                    }
+                }
+                val sw = sourceWithExt ?: sm.getSources().find { it.extension.packageName == defaultPackage } ?: return@withContext null
+                val source = sw.source
+                android.util.Log.d(TAG_EXT, "Using source: ${source.name} (id=${source.id})")
+
+                val extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client
+
+                val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
+                var matchedSAnime: SAnime? = null
+
+                for (query in searchTerms) {
+                    try {
+                        val page = source.getSearchAnime(1, query, AnimeFilterList())
+                        matchedSAnime = page.animes.firstOrNull { a: SAnime ->
+                            a.title.contains(anime.title ?: "", ignoreCase = true) ||
+                                (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
+                        } ?: page.animes.firstOrNull()
+                        if (matchedSAnime != null) break
+                    } catch (_: Exception) { }
+                }
+
+                if (matchedSAnime == null) {
+                    Log.e(TAG_EXT, "Could not match anime in extension")
+                    return@withContext null
+                }
+
+                // Use SourceManager.getEpisodes (matches reference app's StreamViewModel behavior)
+                var sEpisodes = sm.getEpisodes(source, matchedSAnime).also {
+                    Log.d(TAG_EXT, "getEpisodeList on search result returned ${it.size} episodes")
+                }
+
+                if (sEpisodes.isEmpty()) {
+                    try {
+                        matchedSAnime = sm.getAnimeDetails(source, matchedSAnime)
+                        Log.d(TAG_EXT, "getAnimeDetails returned url=${matchedSAnime.url}")
+                    } catch (e: Exception) {
+                        Log.w(TAG_EXT, "getAnimeDetails failed", e)
+                    }
+                    sEpisodes = sm.getEpisodes(source, matchedSAnime).also {
+                        Log.d(TAG_EXT, "getEpisodeList after details returned ${it.size} episodes")
+                    }
+                }
+
+                if (sEpisodes.isEmpty()) {
+                    Log.d(TAG_EXT, "No episodes found, trying direct video/hoster fetch")
+                    val syntheticEpisode = SEpisode.create().apply {
+                        url = matchedSAnime.url
+                        name = matchedSAnime.title
+                        episode_number = 1.0f
+                    }
+                    val hosters = try { source.getHosterList(syntheticEpisode) } catch (_: Throwable) { null }
+                    val videos = if (hosters != null && hosters.isNotEmpty()) {
+                        hosters.flatMap { hoster ->
+                            if (hoster.lazy) {
+                                try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                            } else {
+                                hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                            }
+                        }
+                    } else {
+                        try { source.getVideoList(syntheticEpisode) } catch (_: Throwable) { emptyList() }
+                    }
+                    if (videos.isNotEmpty()) {
+                        Log.d(TAG_EXT, "Got ${videos.size} videos directly (movie/special)")
+                        return@withContext createResult(source, videos, matchedSAnime.url).copy(hosters = hosters)
+                    }
+                    Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (no episodes or direct videos)")
+                    return@withContext null
+                }
+
+                val sEpisode = sEpisodes.find { it.episode_number.toInt() == episodeNumber }
+                    ?: sEpisodes.firstOrNull { it.name?.contains("Episode $episodeNumber", ignoreCase = true) == true }
+                    ?: sEpisodes.firstOrNull { it.name?.contains("$episodeNumber", ignoreCase = true) == true }
+                    ?: sEpisodes.getOrNull(episodeNumber - 1)
+
+                if (sEpisode == null) {
+                    Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (${sEpisodes.size} episodes available)")
+                    return@withContext null
+                }
+
+                val hosters = try { source.getHosterList(sEpisode) } catch (_: Throwable) { null }
+                val videos = if (hosters != null && hosters.isNotEmpty()) {
+                    hosters.flatMap { hoster ->
+                        if (hoster.lazy) {
+                            try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                        } else {
+                            hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                        }
+                    }
+                } else {
+                    try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
+                }
+
+                if (videos.isEmpty()) {
+                    Log.e(TAG_EXT, "No videos found for episode $episodeNumber")
+                    return@withContext null
+                }
+
+                val bestVideo = videos.maxByOrNull {
+                    val res = it.resolution ?: 0
+                    if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
+                } ?: videos.last()
+
+                val videoUrl = bestVideo.videoUrl
+                val referer = bestVideo.headers?.let { h ->
+                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                        ?.let { h.value(it) }
+                } ?: ""
+                val videoHeaders = bestVideo.headers?.let { h ->
+                    (0 until h.size).associate { h.name(it) to h.value(it) }
+                } ?: emptyMap()
+
+                Log.d(TAG_EXT, "Extension stream ready: $videoUrl")
+
+                ExtensionStreamResult(
+                    url = videoUrl,
+                    referer = referer,
+                    subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
+                    videoTitle = bestVideo.videoTitle,
+                    videos = videos,
+                    hosters = hosters,
+                    extensionClient = extensionClient,
+                    videoHeaders = videoHeaders,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG_EXT, "Extension playback failed", e)
+                null
+            }
         }
     }
 
