@@ -30,7 +30,17 @@ class NetworkHelper {
             .cookieJar(cookieJar)
             .addInterceptor { chain ->
                 val request = chain.request()
-                val response = chain.proceed(request)
+                val host = request.url.host
+                // Ensure Referer is always set for aniwave sites (required by their API)
+                val newRequest = if (!request.headers.names().any { it.equals("Referer", ignoreCase = true) }
+                    && (host.contains("animewave") || host.contains("aniwave"))) {
+                    request.newBuilder()
+                        .header("Referer", "https://$host/")
+                        .build()
+                } else {
+                    request
+                }
+                val response = chain.proceed(newRequest)
                 if (response.code == 500) {
                     android.util.Log.e("HTTP_500", "URL: ${request.url}")
                     android.util.Log.e("HTTP_500", "Headers: ${request.headers}")

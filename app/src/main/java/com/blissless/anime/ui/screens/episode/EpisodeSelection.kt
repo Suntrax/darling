@@ -363,17 +363,6 @@ fun RichEpisodeScreen(
     }
 
     LaunchedEffect(anime.id) {
-        isLoadingEpisodes = true
-        try {
-            val result = viewModel.fetchMiruroEpisodes(anime.id, anime.title, anime.year, anime.format)
-            if (result.isNotEmpty()) tmdbEpisodes = result
-        } catch (e: Exception) {
-        } finally {
-            isLoadingEpisodes = false
-        }
-    }
-
-    LaunchedEffect(anime.id) {
         viewModel.logExtensionStreamsForAnime(anime)
     }
 

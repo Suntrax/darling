@@ -8,7 +8,6 @@ import android.net.NetworkRequest
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.blissless.anime.api.miruro.MiruroService
 import com.blissless.anime.data.AnimeRepository
 import com.blissless.anime.data.CacheManager
 import com.blissless.anime.api.jikan.JikanService
@@ -30,9 +29,7 @@ import com.blissless.anime.data.models.HomeCacheData
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.MediaCoverImage
 import com.blissless.anime.data.models.MediaTitle
-import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.StoredFavorite
-import com.blissless.anime.data.models.StreamFetchResult
 import com.blissless.anime.data.models.StudioData
 import com.blissless.anime.data.models.TmdbEpisode
 import com.blissless.anime.data.models.UserActivity
@@ -53,8 +50,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import android.util.Log
-import com.blissless.anime.extensions.ExtensionDetector
-import com.blissless.anime.stream.ExtensionLoader
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -1643,169 +1638,13 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * Get the best title for Animekai scraping from DetailedAnimeData.
-     */
-    private fun getScrapingName(anime: DetailedAnimeData): String {
-        return anime.titleEnglish ?: anime.title
-    }
-
-    suspend fun tryAllServersWithFallback(
-        name: String,
-        ep: Int,
-        id: Int,
-        latest: Int,
-        preferredCategory: String = this.preferredCategory.value,
-        onServerAttempt: (String, String, Boolean) -> Unit = { _, _, _ -> }
-    ) = tryAllScrapersWithFallback(name, ep, id, latest, preferredCategory, onServerAttempt)
-
-    /**
      * Get stream for a specific server.
      * Uses the watchPath from the provider.
      */
-    suspend fun getStreamForServer(
-        animeName: String,
-        episodeNumber: Int,
-        serverName: String,
-        category: String,
-        animeId: Int,
-        watchPath: String? = null
-    ): AniwatchStreamResult? = withContext(Dispatchers.IO) {
-        val path = watchPath ?: "${MiruroService.getBaseUrl()}/watch/$serverName/$animeId/$category/$serverName-$episodeNumber"
-        val miruroResult = MiruroService.getStreamFromPath(path, category, serverName)
-        if (miruroResult != null) {
-            return@withContext AniwatchStreamResult(
-                url = miruroResult.url,
-                headers = miruroResult.headers,
-                serverName = serverName,
-                category = miruroResult.category,
-                qualities = miruroResult.qualities,
-                introStart = miruroResult.introStart,
-                introEnd = miruroResult.introEnd,
-                outroStart = miruroResult.outroStart,
-                outroEnd = miruroResult.outroEnd,
-                subtitleUrl = miruroResult.subtitleUrl
-            )
-        }
-        return@withContext null
-    }
-
-    /**
-     * Get episode info (servers list).
-     * Returns all providers from Miruro as servers.
-     */
-    suspend fun getEpisodeInfo(name: String, ep: Int, id: Int, latest: Int): EpisodeStreams? {
-        if (latest > 0 && ep > latest) return null
-
-        val epKey = "${id}_$ep"
-        cacheManager.getCachedEpisodeInfo(epKey)?.let { return it }
-
-        // Get all providers for this episode
-        val providers = MiruroService.getProvidersForEpisode(id, ep)
-
-        val subServers = providers.filter { it.category == "sub" }.map {
-            ServerInfo(name = it.name, url = it.watchPath)
-        }
-        val dubServers = providers.filter { it.category == "dub" }.map {
-            ServerInfo(name = it.name, url = it.watchPath)
-        }
-
-        val result = EpisodeStreams(
-            subServers = subServers,
-            dubServers = dubServers,
-            animeId = id.toString(),
-            episodeId = ep.toString()
-        )
-        cacheManager.cacheEpisodeInfo(epKey, result)
-        return result
-    }
-
-    /**
-     * Check if a specific category is available for an episode.
-     * Returns true if the category has at least one server.
-     */
-    fun isCategoryAvailable(episodeInfo: EpisodeStreams?, category: String): Boolean {
-        if (episodeInfo == null) return false
-        return if (category == "dub") {
-            episodeInfo.dubServers.isNotEmpty()
-        } else {
-            episodeInfo.subServers.isNotEmpty()
-        }
-    }
 
     /**
      * Get stream using Miruro. Scrapes preferred first, then other in background.
      */
-    private suspend fun tryAllScrapersWithFallback(
-        animeName: String,
-        episodeNumber: Int,
-        animeId: Int,
-        latestAiredEpisode: Int = Int.MAX_VALUE,
-        preferredCategory: String,
-        onServerAttempt: (String, String, Boolean) -> Unit = { _, _, _ -> }
-    ): StreamFetchResult = withContext(Dispatchers.IO) {
-        if (latestAiredEpisode > 0 && episodeNumber > latestAiredEpisode) {
-            return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
-        }
-
-        val key = "${animeId}_${episodeNumber}_$preferredCategory"
-
-        // Check cache first
-        cacheManager.getCachedStream(key)?.let { cachedStream ->
-            return@withContext StreamFetchResult(cachedStream, false, preferredCategory, cachedStream.category)
-        }
-
-        // Fetch all providers for this episode
-        val providers = MiruroService.getProvidersForEpisode(animeId, episodeNumber)
-        val filteredProviders = providers.filter { it.category == preferredCategory }
-
-        if (filteredProviders.isEmpty()) {
-            android.util.Log.w("STREAM_PROVIDER", "No providers found for Ep $episodeNumber")
-            return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
-        }
-
-        // Try each provider in order
-        for (provider in filteredProviders) {
-            onServerAttempt(provider.name, provider.category, false)
-            android.util.Log.d("STREAM", ">>> TRY PROVIDER: ${provider.name} ${provider.category} ep=$episodeNumber")
-
-            val result = fetchMiruroStreamFromPath(provider.watchPath, provider.category, provider.name)
-
-            if (result != null) {
-                cacheManager.cacheStream(key, result)
-                onServerAttempt(provider.name, provider.category, true)
-                android.util.Log.d("STREAM", ">>> SUCCESS: ${provider.name} stream=${result.url}")
-                return@withContext StreamFetchResult(result, false, preferredCategory, result.category)
-            }
-            android.util.Log.d("STREAM", ">>> FAILED: ${provider.name}")
-        }
-
-        onServerAttempt(filteredProviders.first().name, preferredCategory, false)
-        return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
-    }
-
-    private suspend fun fetchMiruroStreamFromPath(watchPath: String, category: String, providerName: String? = null): AniwatchStreamResult? {
-        android.util.Log.d("STREAM", ">>> FETCH STREAM: $watchPath")
-        val miruroResult = MiruroService.getStreamFromPath(watchPath, category, providerName)
-
-        if (miruroResult != null) {
-            android.util.Log.d("STREAM", ">>> STREAM LOADED: url=${miruroResult.url}")
-            return AniwatchStreamResult(
-                url = miruroResult.url,
-                headers = miruroResult.headers,
-                serverName = providerName ?: miruroResult.serverName,
-                category = miruroResult.category,
-                qualities = miruroResult.qualities,
-                introStart = miruroResult.introStart,
-                introEnd = miruroResult.introEnd,
-                outroStart = miruroResult.outroStart,
-                outroEnd = miruroResult.outroEnd,
-                subtitleUrl = miruroResult.subtitleUrl
-            )
-        }
-
-        android.util.Log.w("STREAM_PROVIDER", "Stream failed for path: $watchPath")
-        return null
-    }
 
     suspend fun fetchDetailedAnimeData(animeId: Int, malId: Int? = null): DetailedAnimeData? {
         android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId, malId=$malId")
@@ -2098,184 +1937,6 @@ class MainViewModel : ViewModel() {
         return cacheManager.hasStream(key)
     }
 
-    /**
-     * Get cached stream immediately if available (synchronous).
-     * Returns null if not cached - caller should then use suspend function.
-     * This is the KEY method for instant playback - no loading indicator shown.
-     */
-    fun getCachedStreamImmediate(animeId: Int, episode: Int, category: String): AniwatchStreamResult? {
-        val key = "${animeId}_${episode}_$category"
-        return cacheManager.getCachedStream(key)
-    }
-
-    /**
-     * Prefetch stream for the next episode to watch (progress + 1).
-     * Called when viewing home screen for currently watching anime.
-     */
-    fun prefetchCurrentEpisodeStream(anime: AnimeMedia) {
-        val nextEp = anime.progress + 1
-        val latest = anime.latestEpisode ?: anime.totalEpisodes
-        if ((latest > 0 && nextEp > latest) || (anime.totalEpisodes > 0 && nextEp > anime.totalEpisodes)) return
-        val category = preferredCategory.value
-        if (cacheManager.hasStream("${anime.id}_${nextEp}_$category")) return
-        val scrapingName = getScrapingName(anime)
-        viewModelScope.launch(Dispatchers.IO) {
-            tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
-        }
-    }
-
-    /**
-     * Prefetch streams for adjacent episodes (previous and next) during playback.
-     * This preloads the actual stream URLs so episode transitions are instant.
-     * Called from PlayerScreen during playback.
-     * Fetches BOTH sub and dub for each adjacent episode.
-     * Skips unreleased episodes.
-     */
-    fun prefetchNextEpisodeStream(
-        animeName: String,
-        currentEpisode: Int,
-        animeId: Int,
-        latestAired: Int,
-        category: String? = null
-    ) {
-        android.util.Log.d("PREFETCH", "prefNextEpisode: anime='$animeName', currentEp=$currentEpisode, animeId=$animeId, latestAired=$latestAired")
-
-        viewModelScope.launch(Dispatchers.IO) {
-            // Prefetch BOTH sub and dub for NEXT episode only
-            listOf("sub", "dub").forEach { prefetchCategory ->
-                // Prefetch next episode stream - only if released
-                val nextEp = currentEpisode + 1
-                // nextEp is released if latestAired <= 0 (unknown) OR nextEp <= latestAired
-                val isReleased = latestAired <= 0 || nextEp <= latestAired
-
-                if (isReleased) {
-                    val nextKey = "${animeId}_${nextEp}_$prefetchCategory"
-                    if (!cacheManager.hasStream(nextKey)) {
-                        android.util.Log.d("PREFETCH", "  Fetching next Ep $nextEp ($prefetchCategory)")
-                        tryAllScrapersWithFallback(animeName, nextEp, animeId, latestAired, prefetchCategory)
-                    } else {
-                        android.util.Log.d("PREFETCH", "  Next Ep $nextEp ($prefetchCategory) - already cached")
-                    }
-                } else {
-                    android.util.Log.d("PREFETCH", "  Next Ep $nextEp - skipped (not released yet, latestAired=$latestAired)")
-                }
-            }
-        }
-    }
-
-    fun prefetchAdjacentEpisodeStreams(
-        animeName: String,
-        currentEpisode: Int,
-        animeId: Int,
-        latestAired: Int,
-        category: String? = null
-    ) {
-        // Delegate to the new method
-        prefetchNextEpisodeStream(animeName, currentEpisode, animeId, latestAired, category)
-    }
-
-    /**
-     * Legacy function name - now calls the stream prefetching function.
-     * Kept for backward compatibility with existing code.
-     */
-    fun prefetchAdjacentEpisodes(name: String, current: Int, id: Int, latest: Int) {
-        prefetchAdjacentEpisodeStreams(name, current, id, latest)
-    }
-
-    /**
-     * Prefetch streams for all anime in "Continue Watching" (Currently Watching list).
-     * This preloads the next episode to watch so playback starts instantly.
-     * Called after fetching lists on app start.
-     * Fetches BOTH sub and dub to ensure instant playback regardless of preference.
-     * Also prefetches TMDB episode info for episode titles.
-     * Skips unreleased episodes.
-     */
-    private fun prefetchContinueWatchingStreams() {
-        val watchingList = _currentlyWatching.value
-        if (watchingList.isEmpty()) return
-
-        android.util.Log.d("PREFETCH", "Starting prefetch for ${watchingList.size} anime in Continue Watching")
-
-        viewModelScope.launch(Dispatchers.IO) {
-            watchingList.forEach { anime ->
-                // Prefetch TMDB episode info if not cached
-                if (cacheManager.getCachedTmdbEpisodes(anime.id) == null) {
-                    android.util.Log.d("PREFETCH", "Prefetching TMDB episodes for '${anime.title}' (id=${anime.id})")
-                    val tmdbEpisodes = repository.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format, anime.totalEpisodes)
-                    if (tmdbEpisodes.isNotEmpty()) {
-                        cacheManager.cacheTmdbEpisodes(anime.id, tmdbEpisodes)
-                        android.util.Log.d("PREFETCH", "  Cached ${tmdbEpisodes.size} TMDB episodes")
-                    }
-                }
-
-                val nextEp = anime.progress + 1
-                val latest = anime.latestEpisode ?: anime.totalEpisodes
-
-                // Skip if no more episodes to watch OR if episode not yet released
-                if ((latest > 0 && nextEp > latest) || (anime.totalEpisodes > 0 && nextEp > anime.totalEpisodes)) {
-                    return@forEach
-                }
-
-                // Use English title for scraping
-                val scrapingName = getScrapingName(anime)
-                android.util.Log.d("PREFETCH", "Prefetching '${anime.title}' (Ep $nextEp, category: sub+dub)")
-
-                // Prefetch BOTH sub and dub
-                listOf("sub", "dub").forEach { category ->
-                    val cacheKey = "${anime.id}_${nextEp}_$category"
-                    if (!cacheManager.hasStream(cacheKey)) {
-                        android.util.Log.d("PREFETCH", "  Fetching $category for Ep $nextEp")
-                        tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
-                    } else {
-                        android.util.Log.d("PREFETCH", "  $category for Ep $nextEp - already cached")
-                    }
-                    // Also pre-scrape all servers for this episode and category
-                    prefetchAllServersForEpisode(scrapingName, nextEp, anime.id, latest, category)
-                }
-            }
-            android.util.Log.d("PREFETCH", "Completed prefetch for Continue Watching")
-        }
-    }
-
-    private suspend fun prefetchAllServersForEpisode(
-        animeName: String,
-        episodeNumber: Int,
-        animeId: Int,
-        latestAiredEpisode: Int,
-        category: String
-    ) {
-        // Disabled - no more auto-prefetch scraping
-        android.util.Log.d("PREFETCH", "  Prefetch disabled")
-    }
-
-    private fun prefetchOfflineWatchingStreams() {
-        val watchingList = _offlineCurrentlyWatching.value
-        if (watchingList.isEmpty()) return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            watchingList.forEach { anime ->
-                val nextEp = anime.progress + 1
-                val latest = anime.latestEpisode ?: anime.totalEpisodes
-
-                // Skip if no more episodes to watch OR if episode not yet released
-                if ((latest > 0 && nextEp > latest) || (anime.totalEpisodes > 0 && nextEp > anime.totalEpisodes)) {
-                    return@forEach
-                }
-
-                // Use English title for scraping
-                val scrapingName = getScrapingName(anime)
-
-                // Prefetch BOTH sub and dub
-                listOf("sub", "dub").forEach { category ->
-                    val cacheKey = "${anime.id}_${nextEp}_$category"
-                    if (!cacheManager.hasStream(cacheKey)) {
-                        tryAllScrapersWithFallback(scrapingName, nextEp, anime.id, latest, category)
-                    }
-                }
-            }
-        }
-    }
-
     private suspend fun refreshReleasingAnimeProgress() {
         if (_loginProvider.value == LoginProvider.MAL) {
             return
@@ -2329,8 +1990,6 @@ class MainViewModel : ViewModel() {
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
 
-    suspend fun fetchMiruroEpisodes(animeId: Int, title: String? = null, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchMiruroEpisodes(animeId, title, year, format, latest)
-
     fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId)
 
     fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
@@ -2339,8 +1998,11 @@ class MainViewModel : ViewModel() {
         updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
     }
 
-    private suspend fun getExtensionVideos(source: AnimeCatalogueSource, episode: SEpisode): List<Video> {
+    private suspend fun getExtensionVideos(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Video> {
         return withContext(Dispatchers.IO) {
+            if (anime != null && source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
+                source.prepareNewEpisode(episode, anime)
+            }
             val hosters = try {
                 source.getHosterList(episode)
             } catch (_: Throwable) { null }
@@ -2439,7 +2101,7 @@ class MainViewModel : ViewModel() {
 
             for (sEpisode in sEpisodes) {
                 try {
-                    val videos = getExtensionVideos(source, sEpisode)
+                    val videos = getExtensionVideos(source, sEpisode, matchedSAnime)
                     val epNum = sEpisode.episode_number.toInt()
                     Log.d(TAG_EXT, "--- Episode $epNum (${sEpisode.name}) ---")
                     Log.d(TAG_EXT, "  Videos found: ${videos.size}")
@@ -2623,6 +2285,9 @@ class MainViewModel : ViewModel() {
                 Log.d(TAG_EXT, "Episode scanlator.isNullOrEmpty=${sEpisode.scanlator.isNullOrEmpty()} scanlator.length=${sEpisode.scanlator?.length}")
                 val baseUrl = try { (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.baseUrl } catch (_: Throwable) { null }
                 Log.d(TAG_EXT, "Source baseUrl=$baseUrl")
+                if (source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
+                    source.prepareNewEpisode(sEpisode, matchedSAnime)
+                }
                 val hosters = try {
                     val h = source.getHosterList(sEpisode)
                     Log.d(TAG_EXT, "getHosterList returned ${h?.size ?: 0} hosters")

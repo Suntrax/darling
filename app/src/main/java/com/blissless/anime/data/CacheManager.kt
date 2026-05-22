@@ -27,15 +27,9 @@ import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.data.models.StreamCacheData
 import com.blissless.anime.data.models.StreamCacheEntry
 import com.blissless.anime.data.models.TmdbEpisode
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -100,108 +94,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     // Get the raw SimpleCache for direct access if needed
     @OptIn(UnstableApi::class)
     fun getVideoCache(): SimpleCache? = videoCache
-    
-    // Release the cache when app closes
-    @OptIn(UnstableApi::class)
-    fun releaseVideoCache() {
-        try {
-            videoCache?.release()
-            videoCache = null
-            isCacheInitialized = false
-        } catch (e: Exception) {
-            // Ignore errors during release
-        }
-    }
-    
-    // Preload a video URL to the cache completely
-    @OptIn(UnstableApi::class)
-    fun preloadVideoToCache(
-        context: Context,
-        videoUrl: String,
-        referer: String,
-        onProgress: ((Long, Long) -> Unit)? = null,
-        scope: CoroutineScope
-    ): Job? {
-        val cache = videoCache ?: return null
-        
-        val job = scope.launch(Dispatchers.IO) {
-            try {
-                // Check if already fully cached
-                val key = videoUrl.hashCode().toString()
-                val cachedSpans = cache.getCachedSpans(key)
-                val cachedBytes = cachedSpans.sumOf { it.length }
-                
-                // Get content length from the server
-                val contentLength = getContentLength(videoUrl, referer)
-                
-                if (contentLength > 0 && cachedBytes >= contentLength) {
-                    // Already fully cached
-                    withContext(Dispatchers.Main) {
-                        onProgress?.invoke(contentLength, contentLength)
-                    }
-                    return@launch
-                }
-                
-                // Use CacheDataSource to download the entire video
-                val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-                    .setConnectTimeoutMs(20000)
-                    .setReadTimeoutMs(20000)
-                    .setDefaultRequestProperties(mapOf("Referer" to referer))
-                
-                val cacheDataSourceFactory = CacheDataSource.Factory()
-                    .setCache(cache)
-                    .setUpstreamDataSourceFactory(httpDataSourceFactory)
-                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-                
-                val dataSource = cacheDataSourceFactory.createDataSource()
-                
-                // Read the data to trigger caching
-                val buffer = ByteArray(64 * 1024) // 64KB buffer
-                var totalRead = cachedBytes
-                var lastProgressUpdate = 0L
-                
-                try {
-                    val dataSpec = androidx.media3.datasource.DataSpec.Builder()
-                        .setUri(videoUrl)
-                        .setPosition(cachedBytes)
-                        .build()
-                    
-                    val sourceResponse = dataSource.open(dataSpec)
-                    try {
-                        while (isActive) {
-                            val bytesRead = dataSource.read(buffer, 0, buffer.size)
-                            if (bytesRead == -1) break
-                            totalRead += bytesRead
-                            
-                            // Update progress periodically (every 500ms)
-                            val now = System.currentTimeMillis()
-                            if (contentLength > 0 && now - lastProgressUpdate > 500) {
-                                lastProgressUpdate = now
-                                withContext(Dispatchers.Main) {
-                                    onProgress?.invoke(totalRead, contentLength)
-                                }
-                            }
-                        }
-                    } finally {
-                        dataSource.close()
-                    }
-                } catch (e: Exception) {
-                    // Read failed, but cache may have some data
-                }
-                
-                // Report completion
-                withContext(Dispatchers.Main) {
-                    onProgress?.invoke(totalRead, totalRead)
-                }
-                
-            } catch (e: Exception) {
-                // Preload failed, continue without full cache
-            }
-        }
-        
-        return job
-    }
-    
+
     private fun getContentLength(videoUrl: String, referer: String): Long {
         return try {
             val connection = java.net.URL(videoUrl).openConnection() as java.net.HttpURLConnection
@@ -503,23 +396,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         return stream
     }
 
-    fun getCachedStreamImmediate(animeId: Int, episode: Int, category: String): AniwatchStreamResult? {
-        val key = "${animeId}_${episode}_$category"
-        val stream = _prefetchedStreams.value[key]
-        val timestamp = _streamCacheTimestamps.value[key]
-        
-        // Check if cache is still valid (within TTL)
-        if (stream != null && timestamp != null) {
-            val age = System.currentTimeMillis() - timestamp
-            if (age < streamCacheTtlMs) {
-                return stream
-            }
-            // Cache expired - remove it
-            invalidateStreamCache(animeId, episode, category)
-        }
-        return null
-    }
-
     fun cacheStream(key: String, stream: AniwatchStreamResult?) {
         _prefetchedStreams.value = _prefetchedStreams.value + (key to stream)
         // Store timestamp for TTL tracking
@@ -535,35 +411,9 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
     }
 
-    fun hasEpisodeInfo(key: String): Boolean {
-        return _prefetchedEpisodeInfo.value.containsKey(key)
-    }
-
     fun hasStream(key: String): Boolean {
         val exists = _prefetchedStreams.value.containsKey(key)
         return exists
-    }
-
-    fun hasAnyStreamForEpisode(animeId: Int, episode: Int): String? {
-        val subKey = "${animeId}_${episode}_sub"
-        val dubKey = "${animeId}_${episode}_dub"
-
-        return when {
-            _prefetchedStreams.value.containsKey(subKey) -> "sub"
-            _prefetchedStreams.value.containsKey(dubKey) -> "dub"
-            else -> null
-        }
-    }
-
-    fun getAvailableCategories(animeId: Int, episode: Int): List<String> {
-        val categories = mutableListOf<String>()
-        val subKey = "${animeId}_${episode}_sub"
-        val dubKey = "${animeId}_${episode}_dub"
-
-        if (_prefetchedStreams.value.containsKey(subKey)) categories.add("sub")
-        if (_prefetchedStreams.value.containsKey(dubKey)) categories.add("dub")
-
-        return categories
     }
 
     /**
@@ -598,35 +448,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             _prefetchedStreams.value = newMap
             saveStreamCache()
         }
-    }
-
-    /**
-     * Clear stream cache for a specific server/category combination.
-     */
-    fun invalidateServerCache(animeId: Int, episode: Int, serverName: String, category: String) {
-        val key = "${animeId}_${episode}_${serverName}_$category"
-
-        if (_prefetchedStreams.value.containsKey(key)) {
-            val newMap = _prefetchedStreams.value.toMutableMap()
-            newMap.remove(key)
-            _prefetchedStreams.value = newMap
-            saveStreamCache()
-        }
-    }
-
-    fun clearStreamForEpisode(animeId: Int, episode: Int) {
-        val subKey = "${animeId}_${episode}_sub"
-        val dubKey = "${animeId}_${episode}_dub"
-
-        val newMap = _prefetchedStreams.value.toMutableMap()
-        newMap.remove(subKey)
-        newMap.remove(dubKey)
-        _prefetchedStreams.value = newMap
-
-        val oldKey = "${animeId}_$episode"
-        newMap.remove(oldKey)
-
-        saveStreamCache()
     }
 
     // Time-based expiration for detailed anime cache
@@ -756,26 +577,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             // Error getting disk cache size
         }
         return 0L
-    }
-
-    // Get total cache size for settings display
-    fun getTotalCacheSize(context: Context): Long {
-        var total = 0L
-
-        // Video cache
-        total += getVideoCacheSize(context)
-
-        // Stream cache (approximate)
-        try {
-            val streamData = sharedPreferences.getString(CACHE_STREAM_DATA, null)
-            if (streamData != null) {
-                total += streamData.toByteArray().size.toLong()
-            }
-        } catch (e: Exception) {
-            // Ignore
-        }
-
-        return total
     }
 
     // Clear all non-essential caches (for settings "Clear Cache" button)

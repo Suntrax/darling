@@ -743,6 +743,7 @@ fun MainScreen(
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
         val video = result.videos.getOrNull(index) ?: return
         streamError = null
+        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode ${currentEpisode}"
         currentVideoUrl = video.videoUrl
         currentReferer = video.headers?.let { h ->
             (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
@@ -787,6 +788,7 @@ fun MainScreen(
 
     fun playFromExtensionSearch(params: ExtensionStreamParams) {
         streamError = null
+        currentEpisodeTitle = "Episode ${params.episodeNumber}"
         currentVideoUrl = params.videoUrl
         currentReferer = params.referer
         currentSubtitleUrl = params.subtitleUrl
@@ -1104,93 +1106,6 @@ fun MainScreen(
         }
     }
 
-    fun changeServer(serverName: String, category: String) {
-        currentAnime?.let { anime ->
-            // Reset timestamps when changing server
-            animekaiIntroStart = null
-            animekaiIntroEnd = null
-            animekaiOutroStart = null
-            animekaiOutroEnd = null
-
-            // Check if we have episode info cached with server list
-            val epInfoKey = "${anime.id}_$currentEpisode"
-            val cachedEpInfo = prefetchedEpisodeInfo[epInfoKey] ?: currentEpisodeInfo
-
-            if (cachedEpInfo == null) {
-                Toast.makeText(context, "No server info available", Toast.LENGTH_SHORT).show()
-                return@let
-            }
-
-            // Find the server in the list to verify it exists
-            val servers = if (category == "sub") cachedEpInfo.subServers else cachedEpInfo.dubServers
-            val selectedServer = servers?.find { it.name == serverName }
-            val serverExists = selectedServer != null
-
-            if (!serverExists) {
-                // Try the other category
-                val fallbackServers = if (category == "sub") cachedEpInfo.dubServers else cachedEpInfo.subServers
-                val fallbackExists = fallbackServers.any { it.name == serverName }
-                if (!fallbackExists) {
-                    Toast.makeText(context, "Server not found: $serverName", Toast.LENGTH_SHORT).show()
-                    return@let
-                }
-            }
-
-            val serverUrl = selectedServer?.url ?: servers?.find { it.name == serverName }?.url
-
-            isLoadingStream = true
-            isManualServerChange = true
-            loadingJob = scope.launch {
-                val result = viewModel.getStreamForServer(
-                    getScrapingName(anime),
-                    currentEpisode,
-                    serverName,
-                    category,
-                    anime.id,
-                    serverUrl
-                )
-                if (result != null) {
-                    streamError = null
-                    currentVideoUrl = result.url
-                    currentReferer = result.headers?.get("Referer") ?: "https://megacloud.tv/"
-                    currentSubtitleUrl = result.subtitleUrl
-                    currentServerName = result.serverName
-                    currentCategory = result.category
-                    
-                    // Re-fetch saved position for new provider (handles seek position)
-                    // For kiwi provider, always start from beginning (position 0) as seek doesn't work
-                    savedPlaybackPosition = if (serverName == "kiwi") {
-                        0L
-                    } else {
-                        viewModel.getPlaybackPosition(anime.id, currentEpisode)
-                    }
-
-                    currentQualityOptions = result.qualities
-                    currentQuality = "Auto"
-
-                    // Extract Animekai timestamps from AniwatchStreamResult (PRIMARY)
-                    animekaiIntroStart = result.introStart
-                    animekaiIntroEnd = result.introEnd
-                    animekaiOutroStart = result.outroStart
-                    animekaiOutroEnd = result.outroEnd
-
-                    // Update server index to reflect actual server used
-                    val servers = if (category == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
-                    currentServerIndex = servers?.indexOfFirst { it.name == serverName } ?: 0
-
-                    requestedCategory = category
-                    actualCategory = result.category
-                    isFallbackStream = result.category != category
-                } else {
-                    currentServerIndex = 0
-                    Toast.makeText(context, "Failed to load $serverName", Toast.LENGTH_SHORT).show()
-                }
-                isLoadingStream = false
-                isManualServerChange = false
-            }
-        }
-    }
-
     fun changeQuality(qualityUrl: String, qualityName: String) {
         currentVideoUrl = qualityUrl
         currentQuality = qualityName
@@ -1212,41 +1127,37 @@ fun MainScreen(
             if (servers != null && servers.size > 1) {
                 val nextIndex = (currentServerIndex + 1) % servers.size
                 val nextServer = servers[nextIndex]
-
-                changeServer(nextServer.name, currentCategory)
             }
         }
     }
 
     fun autoTryNextServer() {
         val servers = if (currentCategory == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
-        
+
         if (servers == null || servers.size <= 1) {
             onPlaybackError()
             return
         }
-        
+
         // Try each server in sequence until one works or we've tried all
         var triedIndex = currentServerIndex
         var foundWorking = false
-        
+
         for (i in 1..servers.size) {
             triedIndex = (triedIndex + 1) % servers.size
             val nextServer = servers[triedIndex]
-            
+
             android.util.Log.d("AUTO_SERVER", ">>> Trying server: ${nextServer.name} (index $triedIndex)")
-            
+
             // Update current server index immediately
             currentServerIndex = triedIndex
-            
+
             // Try this server
-            changeServer(nextServer.name, currentCategory)
-            
             // If this is the last server, don't try more
             if (triedIndex == currentServerIndex && i == servers.size - 1) {
                 break
             }
-            
+
             // Return early - changeServer will handle loading and we'll try next on error
             return
         }
@@ -1900,16 +1811,12 @@ fun MainScreen(
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
                 onNextEpisode = if (currentEpisode < released) onNextEpisode else null,
                 isLatestEpisode = currentEpisode >= released && released > 0,
-                onServerChange = { server, category -> changeServer(server, category) },
                 onQualityChange = { qualityUrl, qualityName -> changeQuality(qualityUrl, qualityName) },
                 onPlaybackError = { onPlaybackError() },
                 onTryNextServer = { onPlaybackError() },
                 onUpdateServerIndex = { index -> currentServerIndex = index },
                 onAutoTryNextServer = { autoTryNextServer() },
                 onInvalidateStreamCache = { invalidateCurrentStreamCache() },
-                onPrefetchAdjacent = {
-                    viewModel.prefetchAdjacentEpisodes(getScrapingName(anime), currentEpisode, anime.id, released)
-                },
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,

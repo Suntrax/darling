@@ -11,10 +11,7 @@ import com.blissless.anime.extensions.Extension
 class ParentFirstClassLoader(apkPath: String, dexOutput: String, parent: ClassLoader) :
     DexClassLoader(apkPath, dexOutput, null, parent) {
 
-    private val parentFirstPackages = listOf(
-        "uy.kohesive.injekt",
-        "kotlinx.serialization",
-    )
+    private val parentFirstPackages = emptyList<String>()
 
     override fun loadClass(name: String, resolve: Boolean): Class<*>? {
         for (pkg in parentFirstPackages) {

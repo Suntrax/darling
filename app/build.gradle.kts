@@ -27,25 +27,17 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val aniwatchApiBaseUrl = localProperties.getProperty("ANIWATCH_API_BASE_URL")
-        val zenimeApiBaseUrl = localProperties.getProperty("ZENIME_API_BASE_URL")
-        val animekaiApiBaseUrl = localProperties.getProperty("ANIMEKAI_API_BASE_URL")
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
         val anilistApiKey2 = localProperties.getProperty("CLIENT_ID_ANILIST2")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
         val malClientId = localProperties.getProperty("MAL_CLIENT_ID") ?: ""
-        val miruroApiBaseUrl = localProperties.getProperty("MIRURO_SCRAPER_BASE_URL") ?: ""
 
-        buildConfigField("String", "ANIWATCH_API_BASE_URL", "\"$aniwatchApiBaseUrl\"")
-        buildConfigField("String", "ZENIME_API_BASE_URL", "\"$zenimeApiBaseUrl\"")
-        buildConfigField("String", "ANIMEKAI_API_BASE_URL", "\"$animekaiApiBaseUrl\"")
         buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
         buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey2\"")
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
         val malClientSecret = localProperties.getProperty("MAL_CLIENT_SECRET") ?: ""
         buildConfigField("String", "MAL_CLIENT_SECRET", "\"$malClientSecret\"")
-        buildConfigField("String", "MIRURO_SCRAPER_BASE_URL", "\"$miruroApiBaseUrl\"")
     }
 
     // 1. ADD THIS: Configure your signing keys here
@@ -133,7 +125,6 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.okhttp)
-    implementation(libs.injekt.core)
     implementation(libs.json)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.glance.appwidget)

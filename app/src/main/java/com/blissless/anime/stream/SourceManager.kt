@@ -100,16 +100,36 @@ class SourceManager(private val context: Context) {
         }
     }
 
-    suspend fun getHosters(source: AnimeCatalogueSource, episode: SEpisode): List<Hoster>? {
+    suspend fun getHosters(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Hoster>? {
         return withContext(Dispatchers.IO) {
             Log.d(TAG, "getHosters episode: url=${episode.url} scanlator=${episode.scanlator} name=${episode.name}")
             Log.d(TAG, "getHosters source: ${source.name} class=${source::class.qualifiedName}")
+            if (anime != null && source is AnimeHttpSource) {
+                Log.d(TAG, "getHosters calling prepareNewEpisode")
+                source.prepareNewEpisode(episode, anime)
+            }
             try {
                 source.getHosterList(episode).also {
                     Log.d(TAG, "getHosters returned ${it.size} hosters: ${it.map { h -> h.hosterName }}")
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "getHosters failed", e)
+                // Try to derive hosters from video list as fallback
+                try {
+                    val videos = source.getVideoList(episode)
+                    if (videos.isNotEmpty()) {
+                        Log.d(TAG, "getHosters fallback: deriving from ${videos.size} videos")
+                        val derivedHosters = videos.map { video ->
+                            Hoster(
+                                hosterUrl = video.videoUrl,
+                                hosterName = video.videoTitle.take(50),
+                                videoList = listOf(video),
+                                lazy = false,
+                            )
+                        }
+                        return@withContext derivedHosters.distinctBy { it.hosterName }
+                    }
+                } catch (_: Throwable) {}
                 null
             }
         }
@@ -125,8 +145,11 @@ class SourceManager(private val context: Context) {
         }
     }
 
-    suspend fun getVideosDirect(source: AnimeCatalogueSource, episode: SEpisode): List<Video> {
+    suspend fun getVideosDirect(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Video> {
         return withContext(Dispatchers.IO) {
+            if (anime != null && source is AnimeHttpSource) {
+                source.prepareNewEpisode(episode, anime)
+            }
             try {
                 source.getVideoList(episode).also {
                     Log.d(TAG, "getVideosDirect returned ${it.size} videos")
@@ -138,8 +161,11 @@ class SourceManager(private val context: Context) {
         }
     }
 
-    suspend fun getVideos(source: AnimeCatalogueSource, episode: SEpisode): List<Video> {
+    suspend fun getVideos(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Video> {
         return withContext(Dispatchers.IO) {
+            if (anime != null && source is AnimeHttpSource) {
+                source.prepareNewEpisode(episode, anime)
+            }
             val hosters = try {
                 source.getHosterList(episode).also {
                     Log.d(TAG, "getHosterList returned ${it.size} hosters")

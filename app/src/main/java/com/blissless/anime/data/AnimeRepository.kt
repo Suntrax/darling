@@ -1,9 +1,6 @@
 package com.blissless.anime.data
 
 import com.blissless.anime.BuildConfig
-import com.blissless.anime.api.miruro.MiruroService
-import com.blissless.anime.api.miruro.MiruroEpisodeInfo
-import com.blissless.anime.stream.scrapers.aniwatch.AniwatchService
 import com.blissless.anime.data.models.AiringScheduleEntry
 import com.blissless.anime.data.models.AiringScheduleResponse
 import com.blissless.anime.data.models.AllCharactersResponse
@@ -11,20 +8,17 @@ import com.blissless.anime.data.models.AllStaffResponse
 import com.blissless.anime.data.models.AnimeRelation
 import com.blissless.anime.data.models.AnimeRelationsMedia
 import com.blissless.anime.data.models.AnimeRelationsResponse
-import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.BatchedExploreResponse
 import com.blissless.anime.data.models.CharacterData
 import com.blissless.anime.data.models.CharacterResponse
 import com.blissless.anime.data.models.DetailedAnimeMedia
 import com.blissless.anime.data.models.DetailedAnimeResponse
-import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.ExploreMedia
 import com.blissless.anime.data.models.ExploreResponse
 import com.blissless.anime.data.models.MediaListResponse
 import com.blissless.anime.data.models.SimpleActivityResponse
 import com.blissless.anime.data.models.StaffData
 import com.blissless.anime.data.models.StaffResponse
-import com.blissless.anime.data.models.StreamFetchResult
 import com.blissless.anime.data.models.TmdbEpisode
 import com.blissless.anime.data.models.TmdbSearchResponse
 import com.blissless.anime.data.models.TmdbSearchResult
@@ -253,165 +247,6 @@ class AnimeRepository(
     // ============================================
     // Explore Data
     // ============================================
-
-    suspend fun fetchBatchedExplore(): BatchedExploreResponse? {
-        val query = """
-            query {
-                featured: Page(page: 1, perPage: 10) {
-                    media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                seasonal: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, sort: POPULARITY_DESC, status: RELEASING) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                topSeries: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, format: TV, sort: SCORE_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                topMovies: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, format: MOVIE, sort: SCORE_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                action: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, genre: "Action", sort: POPULARITY_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                romance: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, genre: "Romance", sort: POPULARITY_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                comedy: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, genre: "Comedy", sort: POPULARITY_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                fantasy: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, genre: "Fantasy", sort: POPULARITY_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-                scifi: Page(page: 1, perPage: 20) {
-                    media(type: ANIME, genre: "Sci-Fi", sort: POPULARITY_DESC) {
-                        id
-                        idMal
-                        title { romaji english }
-                        coverImage { extraLarge }
-                        bannerImage
-                        episodes
-                        nextAiringEpisode { episode airingAt }
-                        status
-                        averageScore
-                        genres
-                        seasonYear
-                        startDate { year }
-                    }
-                }
-            }
-        """.trimIndent()
-
-        return publicGraphqlRequest(query, emptyMap())?.let {
-            try {
-                json.decodeFromString<BatchedExploreResponse>(it)
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
 
     data class ExploreResult(val response: BatchedExploreResponse?, val error: String?)
 
@@ -831,32 +666,6 @@ class AnimeRepository(
         }
     }
 
-    suspend fun fetchAnimeRelations(animeId: Int): List<AnimeRelation>? {
-        val query = GraphqlQueries.GET_ANIME_RELATIONS
-
-        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
-            try {
-                val data = json.decodeFromString<AnimeRelationsResponse>(it)
-                data.data.Media.relations?.edges?.mapNotNull { edge ->
-                    edge.node?.let { node ->
-                        AnimeRelation(
-                            id = node.id,
-                            title = node.title?.english ?: node.title?.romaji ?: "Unknown",
-                            cover = node.coverImage?.extraLarge ?: "",
-                            episodes = node.episodes,
-                            latestEpisode = node.nextAiringEpisode?.episode?.let { it - 1 },
-                            averageScore = node.averageScore,
-                            format = node.format,
-                            relationType = edge.relationType ?: "UNKNOWN"
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
     suspend fun fetchAnimeRelationsForOffset(animeId: Int): AnimeRelationsMedia? {
         val query = """
             query (${'$'}id: Int!) {
@@ -1080,176 +889,6 @@ class AnimeRepository(
     // ============================================
     // Stream Operations
     // ============================================
-
-    typealias ServerAttemptCallback = (serverName: String, category: String, isFallback: Boolean, failed: Boolean) -> Unit
-
-    suspend fun tryAllServersWithFallback(
-        animeName: String,
-        episodeNumber: Int,
-        animeId: Int,
-        latestAiredEpisode: Int = Int.MAX_VALUE,
-        preferredCategory: String,
-        englishTitle: String? = null,
-        onServerAttempt: (String, String, Boolean) -> Unit = { _, _, _ -> }
-    ): StreamFetchResult = withContext(Dispatchers.IO) {
-        val key = "${animeId}_$episodeNumber"
-
-        if (latestAiredEpisode > 0 && latestAiredEpisode < Int.MAX_VALUE && episodeNumber > latestAiredEpisode) {
-            return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
-        }
-
-        cacheManager.getCachedStream(key)?.let { cachedStream ->
-            return@withContext StreamFetchResult(
-                cachedStream,
-                cachedStream.category != preferredCategory,
-                preferredCategory,
-                cachedStream.category
-            )
-        }
-
-        val epInfo = AniwatchService.getEpisodeInfo(animeName, episodeNumber) ?: return@withContext StreamFetchResult(null, false, preferredCategory, preferredCategory)
-        cacheManager.cacheEpisodeInfo(key, epInfo)
-
-        val subServers = epInfo.subServers
-        val dubServers = epInfo.dubServers
-
-        // Filter to only priority providers (arc, zoro, kiwi) and sort by priority order
-        val prioritySubServers = subServers
-            .filter { PRIORITY_PROVIDERS.contains(it.name) }
-            .sortedBy { server -> PRIORITY_PROVIDERS.indexOf(server.name).let { if (it >= 0) it else Int.MAX_VALUE } }
-
-        val priorityDubServers = dubServers
-            .filter { PRIORITY_PROVIDERS.contains(it.name) }
-            .sortedBy { server -> PRIORITY_PROVIDERS.indexOf(server.name).let { if (it >= 0) it else Int.MAX_VALUE } }
-
-        // Also get fallback servers (non-priority) for backup
-        val fallbackSubServers = subServers.filter { !PRIORITY_PROVIDERS.contains(it.name) }
-        val fallbackDubServers = dubServers.filter { !PRIORITY_PROVIDERS.contains(it.name) }
-
-        val preferredServers = if (preferredCategory == "dub") priorityDubServers else prioritySubServers
-        val fallbackServers = if (preferredCategory == "dub") prioritySubServers else priorityDubServers
-        val fallbackCategory = if (preferredCategory == "dub") "sub" else "dub"
-
-        android.util.Log.d("REPO_DEBUG", "=== REPO tryAllServersWithFallback (Priority: arc, zoro, kiwi) ===")
-        android.util.Log.d("REPO_DEBUG", "preferredCategory=$preferredCategory")
-        android.util.Log.d("REPO_DEBUG", "prioritySubServers (${prioritySubServers.size}): ${prioritySubServers.joinToString { it.name }}")
-        android.util.Log.d("REPO_DEBUG", "priorityDubServers (${priorityDubServers.size}): ${priorityDubServers.joinToString { it.name }}")
-
-        // Try priority providers first (arc, zoro, kiwi in order)
-        for ((i, server) in prioritySubServers.withIndex()) {
-            android.util.Log.d("REPO_DEBUG", "Trying priority sub server ${i+1}: ${server.name}")
-            onServerAttempt(server.name, "sub", false)
-            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, "sub")
-            if (result != null) {
-                cacheManager.cacheStream(key, result)
-                return@withContext StreamFetchResult(result, false, preferredCategory, "sub")
-            }
-        }
-
-        // Try priority dub servers
-        for ((i, server) in priorityDubServers.withIndex()) {
-            android.util.Log.d("REPO_DEBUG", "Trying priority dub server ${i+1}: ${server.name}")
-            onServerAttempt(server.name, "dub", false)
-            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, "dub")
-            if (result != null) {
-                cacheManager.cacheStream(key, result)
-                return@withContext StreamFetchResult(result, preferredCategory == "dub", preferredCategory, "dub")
-            }
-        }
-
-        // Then try fallback category with priority providers
-        for ((i, server) in fallbackServers.withIndex()) {
-            android.util.Log.d("REPO_DEBUG", "Trying fallback category server ${i+1}: ${server.name}")
-            onServerAttempt(server.name, fallbackCategory, true)
-            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, fallbackCategory)
-            if (result != null) {
-                cacheManager.cacheStream(key, result)
-                return@withContext StreamFetchResult(result, true, preferredCategory, fallbackCategory)
-            }
-        }
-
-        // Try non-priority (fallback) providers as last resort
-        val allFallbackServers = if (preferredCategory == "dub") fallbackDubServers else fallbackSubServers
-        for ((i, server) in allFallbackServers.withIndex()) {
-            android.util.Log.d("REPO_DEBUG", "Trying fallback provider ${i+1}: ${server.name}")
-            onServerAttempt(server.name, preferredCategory, true)
-            val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, server.name, preferredCategory)
-            if (result != null) {
-                cacheManager.cacheStream(key, result)
-                return@withContext StreamFetchResult(result, true, preferredCategory, preferredCategory)
-            }
-        }
-
-        StreamFetchResult(null, false, preferredCategory, preferredCategory)
-    }
-
-    suspend fun getStreamForServer(
-        animeName: String,
-        episodeNumber: Int,
-        serverName: String,
-        category: String,
-        animeId: Int
-    ): AniwatchStreamResult? = withContext(Dispatchers.IO) {
-        val key = "${animeId}_${episodeNumber}_${serverName}_$category"
-        cacheManager.getCachedStream(key)?.let { return@withContext it }
-
-        val result = AniwatchService.getStreamFromServer(animeName, episodeNumber, serverName, category)
-        if (result != null) cacheManager.cacheStream(key, result)
-        result
-    }
-
-    suspend fun getEpisodeInfo(
-        animeName: String,
-        episodeNumber: Int,
-        animeId: Int,
-        latestAiredEpisode: Int = Int.MAX_VALUE
-    ): EpisodeStreams? {
-        val key = "${animeId}_$episodeNumber"
-        cacheManager.getCachedEpisodeInfo(key)?.let { return it }
-
-        val result = AniwatchService.getEpisodeInfo(animeName, episodeNumber)
-        if (result != null) cacheManager.cacheEpisodeInfo(key, result)
-        return result
-    }
-
-    // ============================================
-    // Miruro Operations (Episode Details)
-    // ============================================
-
-    private val miruroService = MiruroService
-
-    suspend fun fetchMiruroEpisodes(
-        animeId: Int,
-        animeTitle: String? = null,
-        animeYear: Int? = null,
-        animeFormat: String? = null,
-        latestAiredEpisode: Int = Int.MAX_VALUE
-    ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
-        try {
-            val miruroEpisodes = miruroService.getAnimeEpisodes(animeId)
-            if (miruroEpisodes != null && miruroEpisodes.episodes.isNotEmpty()) {
-                return@withContext miruroEpisodes.episodes.map { miruroEp: MiruroEpisodeInfo ->
-                    val hasAired = latestAiredEpisode == Int.MAX_VALUE || miruroEp.number <= latestAiredEpisode
-                    TmdbEpisode(
-                        episode = miruroEp.number,
-                        title = miruroEp.title ?: "Episode ${miruroEp.number}",
-                        description = if (hasAired) miruroEp.description ?: "" else "Not yet aired",
-                        image = miruroEp.image
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        if (animeTitle != null) {
-            try {
-                return@withContext fetchTmdbEpisodes(animeTitle, animeId, animeYear, animeFormat, latestAiredEpisode)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-        emptyList()
-    }
 
     // ============================================
     // TMDB Operations

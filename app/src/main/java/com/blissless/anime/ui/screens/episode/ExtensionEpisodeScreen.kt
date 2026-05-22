@@ -250,6 +250,7 @@ fun ExtensionEpisodeScreen(
 
     fun onEpisodeSelect(episode: SEpisode) {
         val source = selectedSource ?: return
+        val currentAnime = selectedAnime
         selectedEpisode = episode
         isLoadingVideos = true
         hosters = null
@@ -258,12 +259,12 @@ fun ExtensionEpisodeScreen(
         scope.launch {
             val sm = effectiveSm ?: return@launch
             val catalogueSource = source.source
-            val hosterList = sm.getHosters(catalogueSource, episode)
+            val hosterList = sm.getHosters(catalogueSource, episode, currentAnime)
             isLoadingVideos = false
             hosters = hosterList
             when {
                 hosterList == null -> {
-                    val videos = sm.getVideosDirect(catalogueSource, episode)
+                    val videos = sm.getVideosDirect(catalogueSource, episode, currentAnime)
                     handleVideos(videos, catalogueSource)
                 }
                 hosterList.size == 1 -> {
@@ -272,7 +273,7 @@ fun ExtensionEpisodeScreen(
                     handleVideos(videos, catalogueSource)
                 }
                 hosterList.isEmpty() -> {
-                    val videos = sm.getVideosDirect(catalogueSource, episode)
+                    val videos = sm.getVideosDirect(catalogueSource, episode, currentAnime)
                     handleVideos(videos, catalogueSource)
                 }
             }
@@ -282,6 +283,7 @@ fun ExtensionEpisodeScreen(
     fun onHosterSelect(hoster: Hoster) {
         val source = selectedSource ?: return
         val episode = selectedEpisode ?: return
+        val currentAnime = selectedAnime
         selectedHoster = hoster
         isLoadingVideos = true
         scope.launch {
@@ -290,7 +292,7 @@ fun ExtensionEpisodeScreen(
             val videos = try {
                 sm.getVideosFromHoster(catalogueSource, hoster)
             } catch (_: Throwable) {
-                sm.getVideosDirect(catalogueSource, episode)
+                sm.getVideosDirect(catalogueSource, episode, currentAnime)
             }
             isLoadingVideos = false
             handleVideos(videos, catalogueSource)
@@ -301,12 +303,13 @@ fun ExtensionEpisodeScreen(
         val videos = pendingVideos ?: return
         val source = selectedSource ?: return
         val episode = selectedEpisode ?: return
+        val currentAnime = selectedAnime
         isLoadingVideos = true
         scope.launch {
             val sm = effectiveSm ?: return@launch
             val catalogueSource = source.source
             try {
-                val freshVideos = sm.getVideosDirect(catalogueSource, episode)
+                val freshVideos = sm.getVideosDirect(catalogueSource, episode, currentAnime)
                 val freshVideo = freshVideos.getOrNull(index)
                 if (freshVideo != null) {
                     playVideo(freshVideo, catalogueSource)
