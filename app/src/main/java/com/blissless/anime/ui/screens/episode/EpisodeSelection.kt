@@ -362,8 +362,19 @@ fun RichEpisodeScreen(
         }
     }
 
+    // Fetch TMDB episodes when screen opens
     LaunchedEffect(anime.id) {
-        viewModel.logExtensionStreamsForAnime(anime)
+        val cached = viewModel.getCachedTmdbEpisodes(anime.id)
+        if (cached != null) {
+            tmdbEpisodes = cached
+            isLoadingEpisodes = false
+        } else {
+            try {
+                val episodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
+                tmdbEpisodes = episodes
+            } catch (_: Exception) {}
+            isLoadingEpisodes = false
+        }
     }
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
