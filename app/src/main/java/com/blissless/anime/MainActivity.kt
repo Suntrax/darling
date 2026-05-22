@@ -735,6 +735,11 @@ fun MainScreen(
         return anime.titleEnglish ?: anime.title
     }
 
+    fun sanitizeEpisodeTitle(title: String?): String? {
+        if (title == null) return null
+        return title.replaceFirst(Regex("^Episode\\s+\\d+[\\s:\\-–—]+", RegexOption.IGNORE_CASE), "").trim()
+    }
+
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
         val video = result.videos.getOrNull(index) ?: return
         streamError = null
@@ -760,6 +765,12 @@ fun MainScreen(
         android.util.Log.d("SubtitleDebug", "=== End subtitles (${sortedTracks.size} tracks) ===")
         currentServerName = "Extension"
         currentCategory = "sub"
+        android.util.Log.d("ServerDebug", "=== Extension hosters ===")
+        result.hosters?.forEachIndexed { i, h ->
+            android.util.Log.d("ServerDebug", "  Hoster[$i]: name='${h.hosterName}' url=${h.hosterUrl}")
+        }
+        android.util.Log.d("ServerDebug", "=== End hosters (${result.hosters?.size ?: 0}) ===")
+        android.util.Log.d("ServerDebug", "extensionServers set to ${extensionServers.size} servers")
         actualCategory = "sub"
         requestedCategory = preferredCategory
         currentQualityOptions = emptyList()
@@ -858,19 +869,15 @@ fun MainScreen(
     }
 
     suspend fun getTmdbEpisodeTitle(anime: AnimeMedia, episode: Int): String {
-        // Try cache first
         val cachedEpisodes = viewModel.getCachedTmdbEpisodes(anime.id)
         if (cachedEpisodes != null) {
             val title = cachedEpisodes.find { it.episode == episode }?.title
-            if (!title.isNullOrEmpty() && !title.startsWith("Episode", ignoreCase = true)) {
-                return title
-            }
+            if (!title.isNullOrEmpty()) return sanitizeEpisodeTitle(title) ?: "Episode $episode"
         }
-        // Fallback to fetching
         return try {
             val tmdbEpisodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
             val title = tmdbEpisodes.find { it.episode == episode }?.title
-            if (!title.isNullOrEmpty() && !title.startsWith("Episode", ignoreCase = true)) title else "Episode $episode"
+            sanitizeEpisodeTitle(title) ?: "Episode $episode"
         } catch (e: Exception) {
             "Episode $episode"
         }
@@ -883,7 +890,7 @@ fun MainScreen(
                 loadAndPlayEpisode(anime, episode)
             }
         } else {
-            currentEpisodeTitle = title
+            currentEpisodeTitle = sanitizeEpisodeTitle(title) ?: "Episode $episode"
             loadAndPlayEpisode(anime, episode)
         }
     }
@@ -934,7 +941,7 @@ fun MainScreen(
             if (cached != null) {
                 android.util.Log.d("NextEp", "Using cached previous episode $prevEp: url=${cached.url.take(50)}")
                 currentEpisode = prevEp
-                currentEpisodeTitle = cached.episode?.name ?: "Episode $prevEp"
+                currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $prevEp"
                 currentVideoUrl = cached.url
                 currentReferer = cached.referer
                 currentSubtitleUrl = cached.subtitleUrl
@@ -967,7 +974,7 @@ fun MainScreen(
                     if (result != null && result.videos.isNotEmpty()) {
                         episodeCache[prevEp] = result
                         currentEpisode = prevEp
-                        currentEpisodeTitle = result.episode?.name ?: "Episode $prevEp"
+                        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $prevEp"
                         currentVideoUrl = result.url
                         currentReferer = result.referer
                         currentSubtitleUrl = result.subtitleUrl
@@ -1007,7 +1014,7 @@ fun MainScreen(
                 android.util.Log.d("NextEp", "Using cached next episode $nextEp")
                 cachedExtensionNext = null
                 currentEpisode = nextEp
-                currentEpisodeTitle = cached.episode?.name ?: "Episode $nextEp"
+                currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $nextEp"
                 currentVideoUrl = cached.url
                 currentReferer = cached.referer
                 currentSubtitleUrl = cached.subtitleUrl
@@ -1041,7 +1048,7 @@ fun MainScreen(
                     if (result != null && result.videos.isNotEmpty()) {
                         episodeCache[nextEp] = result
                         currentEpisode = nextEp
-                        currentEpisodeTitle = result.episode?.name ?: "Episode $nextEp"
+                        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $nextEp"
                         currentVideoUrl = result.url
                         currentReferer = result.referer
                         currentSubtitleUrl = result.subtitleUrl
@@ -1084,7 +1091,7 @@ fun MainScreen(
                 currentReferer = result.referer
                 currentSubtitleUrl = result.subtitleUrl
                 currentServerName = hosterName
-                currentCategory = "sub"
+                currentCategory = if (hosterName.contains("dub", ignoreCase = true)) "dub" else "sub"
                 currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                 currentQuality = result.videoTitle
                 extensionOkHttpClient = result.extensionClient

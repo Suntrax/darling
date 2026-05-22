@@ -1112,6 +1112,11 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                         // Closing Column for text content
                         }
 
+                        fun catFromName(name: String): String = when {
+                            name.contains("dub", ignoreCase = true) -> "DUB"
+                            name.contains("sub", ignoreCase = true) -> "SUB"
+                            else -> "EXT"
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
                             // Server selector
                             if ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty()) {
@@ -1133,8 +1138,9 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
+                                            val serverCat = if (extensionServers.isNotEmpty()) catFromName(currentServerName) else currentCategory.uppercase()
                                             Text(
-                                                text = if (extensionServers.isNotEmpty()) "EXT" else currentCategory.uppercase(),
+                                                text = serverCat,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = Color.Gray
                                             )
@@ -1146,26 +1152,59 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         onDismissRequest = { showServerMenu = false },
                                         modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                     ) {
+                                        val headerCat = if (extensionServers.isNotEmpty()) catFromName(currentServerName) else currentCategory.uppercase()
                                         Text(
-                                            text = "${currentServerName.uppercase()} (${if (extensionServers.isNotEmpty()) "EXT" else currentCategory.uppercase()})",
+                                            text = "${currentServerName.uppercase()} ($headerCat)",
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.labelMedium,
                                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                         )
                                         if (extensionServers.isNotEmpty()) {
-                                            Text("EXT", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                            extensionServers.forEach { server ->
-                                                ServerSelectorButton(
-                                                    serverName = server.name,
-                                                    isSelected = server.name == currentServerName,
-                                                    onClick = {
-                                                        showServerMenu = false
-                                                        onExtensionServerChange?.invoke(server.name)
-                                                    }
-                                                )
+                                            val extSubServers = extensionServers.filter { it.name.contains("sub", ignoreCase = true) || !it.name.contains("dub", ignoreCase = true) }
+                                            val extDubServers = extensionServers.filter { it.name.contains("dub", ignoreCase = true) && !it.name.contains("sub", ignoreCase = true) }
+                                            if (extSubServers.isNotEmpty()) {
+                                                Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                extSubServers.forEach { server ->
+                                                    ServerSelectorButton(
+                                                        serverName = server.name,
+                                                        isSelected = server.name == currentServerName,
+                                                        onClick = {
+                                                            showServerMenu = false
+                                                            onExtensionServerChange?.invoke(server.name)
+                                                        }
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
                                             }
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                            if (extDubServers.isNotEmpty()) {
+                                                Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                extDubServers.forEach { server ->
+                                                    ServerSelectorButton(
+                                                        serverName = server.name,
+                                                        isSelected = server.name == currentServerName,
+                                                        onClick = {
+                                                            showServerMenu = false
+                                                            onExtensionServerChange?.invoke(server.name)
+                                                        }
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                            if (extSubServers.isEmpty() && extDubServers.isEmpty()) {
+                                                Text("EXT", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                extensionServers.forEach { server ->
+                                                    ServerSelectorButton(
+                                                        serverName = server.name,
+                                                        isSelected = server.name == currentServerName,
+                                                        onClick = {
+                                                            showServerMenu = false
+                                                            onExtensionServerChange?.invoke(server.name)
+                                                        }
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
                                         }
                                         if (subServers.isNotEmpty()) {
                                             Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))

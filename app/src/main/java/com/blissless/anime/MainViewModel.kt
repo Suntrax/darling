@@ -2619,7 +2619,15 @@ class MainViewModel : ViewModel() {
                     return@withContext null
                 }
 
-                val hosters = try { source.getHosterList(sEpisode) } catch (_: Throwable) { null }
+                val hosters = try {
+                    val h = source.getHosterList(sEpisode)
+                    Log.d(TAG_EXT, "getHosterList returned ${h?.size ?: 0} hosters")
+                    Log.d(TAG_EXT, "getHosterList hoster names: ${h?.map { it.hosterName }?.joinToString()}")
+                    h
+                } catch (e: Throwable) {
+                    Log.w(TAG_EXT, "getHosterList threw: ${e.message}")
+                    null
+                }
                 val videos = if (hosters != null && hosters.isNotEmpty()) {
                     hosters.flatMap { hoster ->
                         if (hoster.lazy) {
