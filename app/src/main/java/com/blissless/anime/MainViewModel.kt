@@ -593,6 +593,7 @@ class MainViewModel : ViewModel() {
     val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> get() = userPreferences.localAnimeStatus
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
     val defaultExtensionPackage: StateFlow<String> get() = userPreferences.defaultExtensionPackage
+    val defaultSubtitleLang: StateFlow<String> get() = userPreferences.defaultSubtitleLang
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
     val streamProvider: StateFlow<Int> get() = userPreferences.streamProvider
@@ -1567,6 +1568,7 @@ class MainViewModel : ViewModel() {
     fun setEnableThumbnailPreview(enabled: Boolean) = userPreferences.setEnableThumbnailPreview(enabled)
     fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
     fun setDefaultExtensionPackage(packageName: String) = userPreferences.setDefaultExtensionPackage(packageName)
+    fun setDefaultSubtitleLang(lang: String) = userPreferences.setDefaultSubtitleLang(lang)
     fun setStreamProvider(provider: Int) = userPreferences.setStreamProvider(provider)
     fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
     fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
@@ -2540,11 +2542,21 @@ class MainViewModel : ViewModel() {
                 for (query in searchTerms) {
                     try {
                         val page = source.getSearchAnime(1, query, AnimeFilterList())
-                        matchedSAnime = page.animes.firstOrNull { a: SAnime ->
-                            a.title.contains(anime.title ?: "", ignoreCase = true) ||
-                                (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
-                        } ?: page.animes.firstOrNull()
-                        if (matchedSAnime != null) break
+                        val results = page.animes
+                        if (results.isEmpty()) continue
+                        // Score: exact match > startsWith > shortest contains (to avoid sequels/premiums)
+                        val scored = results.map { a ->
+                            val title = a.title
+                            val score = when {
+                                title.equals(query, ignoreCase = true) -> 1000
+                                query.startsWith(title, ignoreCase = true) || title.startsWith(query, ignoreCase = true) -> 500
+                                title.contains(query, ignoreCase = true) -> 300 - (title.length - query.length)  // shorter is better
+                                else -> 0
+                            }
+                            a to score
+                        }
+                        matchedSAnime = scored.maxByOrNull { it.second }?.first
+                        if (matchedSAnime != null && scored.maxByOrNull { it.second }?.second ?: 0 > 0) break
                     } catch (_: Exception) { }
                 }
 

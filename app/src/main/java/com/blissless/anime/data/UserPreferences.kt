@@ -51,6 +51,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LAST_HOME_REFRESH = "last_home_refresh_time"
         private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
         private const val KEY_LOCAL_ANIME_STATUS = "local_anime_status"
+        private const val KEY_DEFAULT_SUBTITLE_LANG = "default_subtitle_lang"
         private const val KEY_MAL_FAVORITES = "mal_favorites"
     }
 
@@ -121,6 +122,10 @@ class UserPreferences(private val context: Context) {
     // Default Extension
     private val _defaultExtensionPackage = MutableStateFlow("")
     val defaultExtensionPackage: StateFlow<String> = _defaultExtensionPackage.asStateFlow()
+
+    // Default Subtitle Language
+    private val _defaultSubtitleLang = MutableStateFlow("English")
+    val defaultSubtitleLang: StateFlow<String> = _defaultSubtitleLang.asStateFlow()
 
     // Hide Adult Content
     private val _hideAdultContent = MutableStateFlow(false)
@@ -231,6 +236,7 @@ class UserPreferences(private val context: Context) {
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _defaultExtensionPackage.value = sharedPreferences.getString(KEY_DEFAULT_EXTENSION, "") ?: ""
+        _defaultSubtitleLang.value = sharedPreferences.getString(KEY_DEFAULT_SUBTITLE_LANG, "English") ?: "English"
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
         _streamProvider.value = sharedPreferences.getInt(KEY_STREAM_PROVIDER, 1)
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
@@ -367,6 +373,11 @@ class UserPreferences(private val context: Context) {
     fun setDefaultExtensionPackage(packageName: String) {
         _defaultExtensionPackage.value = packageName
         sharedPreferences.edit { putString(KEY_DEFAULT_EXTENSION, packageName) }
+    }
+
+    fun setDefaultSubtitleLang(lang: String) {
+        _defaultSubtitleLang.value = lang
+        sharedPreferences.edit { putString(KEY_DEFAULT_SUBTITLE_LANG, lang) }
     }
 
     fun setHideAdultContent(enabled: Boolean) {

@@ -139,6 +139,7 @@ fun PlayerScreen(
     videoUrl: String,
     referer: String,
     subtitleUrl: String? = null,
+    subtitleTracks: List<eu.kanade.tachiyomi.animesource.model.Track> = emptyList(),
     currentEpisode: Int = 1,
     totalEpisodes: Int = 0,
     latestAiredEpisode: Int? = null,
@@ -250,7 +251,7 @@ fun PlayerScreen(
     var showQualityMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
-    var subtitlesEnabled by remember { mutableStateOf(subtitleUrl != null) }
+    var subtitlesEnabled by remember { mutableStateOf(subtitleTracks.isNotEmpty()) }
 
     var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
@@ -497,7 +498,15 @@ fun PlayerScreen(
 
         val startPositionMs = if (savedPosition > 0) savedPosition else 0L
         
-        val subtitleConfigs = if (subtitleUrl != null) {
+        val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
+            subtitleTracks.map { track ->
+                MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage(track.lang)
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .build()
+            }
+        } else if (subtitleUrl != null) {
             listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
                 .setMimeType(MimeTypes.TEXT_VTT)
                 .setLanguage("en")
@@ -799,12 +808,20 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         onPlaybackError?.invoke()
     }
 
-    fun toggleSubtitles() {
-        subtitlesEnabled = !subtitlesEnabled
+    fun rebuildWithSubtitles(enable: Boolean) {
+        subtitlesEnabled = enable
         val position = exoPlayer.currentPosition
         val playWhenReady = exoPlayer.playWhenReady
         val currentItem = exoPlayer.currentMediaItem ?: return
-        val subtitleConfigs = if (subtitlesEnabled && subtitleUrl != null) {
+        val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
+            subtitleTracks.map { track ->
+                MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage(track.lang)
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .build()
+            }
+        } else if (subtitlesEnabled && subtitleUrl != null) {
             listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
                 .setMimeType(MimeTypes.TEXT_VTT)
                 .setLanguage("en")
@@ -1182,7 +1199,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                             }
 
                             // CC/Subtitles button
-                            if (subtitleUrl != null) {
+                            if (subtitleTracks.isNotEmpty() || subtitleUrl != null) {
                                 Box {
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
@@ -1211,19 +1228,24 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         DropdownMenuItem(
                                             text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
                                             onClick = {
-                                                if (subtitlesEnabled) toggleSubtitles()
+                                                if (subtitlesEnabled) rebuildWithSubtitles(false)
                                                 showSubtitleMenu = false
                                             },
                                             leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
                                         )
-                                        DropdownMenuItem(
-                                            text = { Text("English", color = if (subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
-                                            onClick = {
-                                                if (!subtitlesEnabled) toggleSubtitles()
-                                                showSubtitleMenu = false
-                                            },
-                                            leadingIcon = if (subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
-                                        )
+                                        val trackList = subtitleTracks.ifEmpty {
+                                            if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
+                                            else emptyList()
+                                        }
+                                        trackList.forEach { track ->
+                                            DropdownMenuItem(
+                                                text = { Text(track.lang.uppercase(), color = if (subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                                onClick = {
+                                                    rebuildWithSubtitles(true)
+                                                    showSubtitleMenu = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -1243,9 +1243,12 @@ private fun ExtensionsSettingsPage(
     onBack: () -> Unit
 ) {
     val defaultExtPackage by viewModel.defaultExtensionPackage.collectAsState()
+    val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
     val extViewModel: ExtensionsViewModel = viewModel()
     val extUiState by extViewModel.uiState.collectAsState()
     var showExtPicker by remember { mutableStateOf(false) }
+    var showSubtitleLangPicker by remember { mutableStateOf(false) }
+    val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
 
     SettingsPageScaffold(
         title = "Extensions",
@@ -1286,6 +1289,34 @@ private fun ExtensionsSettingsPage(
             }
         }
 
+        // Default subtitle language picker
+        SettingsCard(isOled = isOled) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Default Subtitle Language",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = defaultSubtitleLang,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "Pick subtitle language",
+                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
         if (showExtPicker) {
             AlertDialog(
                 onDismissRequest = { showExtPicker = false },
@@ -1307,6 +1338,35 @@ private fun ExtensionsSettingsPage(
                 },
                 confirmButton = {
                     TextButton(onClick = { showExtPicker = false }) { Text("Cancel") }
+                }
+            )
+        }
+
+        if (showSubtitleLangPicker) {
+            AlertDialog(
+                onDismissRequest = { showSubtitleLangPicker = false },
+                title = { Text("Default Subtitle Language") },
+                text = {
+                    Column {
+                        subtitleLanguages.forEach { lang ->
+                            TextButton(
+                                onClick = {
+                                    viewModel.setDefaultSubtitleLang(lang)
+                                    showSubtitleLangPicker = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = lang,
+                                    color = if (lang == defaultSubtitleLang) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") }
                 }
             )
         }
