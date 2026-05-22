@@ -626,6 +626,7 @@ fun MainScreen(
     var extensionEpisodeNumber by remember { mutableIntStateOf(0) }
     var extensionEpisodeTrigger by remember { mutableIntStateOf(0) }
     var extensionServers by remember { mutableStateOf<List<ServerInfo>>(emptyList<ServerInfo>()) }
+    var extensionName by remember { mutableStateOf("") }
     var currentSubtitleTracks by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Track>>(emptyList()) }
     var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
     var cachedExtensionPrev by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }

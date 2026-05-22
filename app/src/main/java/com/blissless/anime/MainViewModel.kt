@@ -2265,7 +2265,10 @@ class MainViewModel : ViewModel() {
                     }
                     if (videos.isNotEmpty()) {
                         Log.d(TAG_EXT, "Got ${videos.size} videos directly (movie/special)")
-                        return@withContext createResult(source, videos, matchedSAnime.url).copy(hosters = hosters)
+                        val derivedHosters = hosters ?: videos.map { video ->
+                            Hoster(hosterUrl = video.videoUrl, hosterName = video.videoTitle.take(50), videoList = listOf(video), lazy = false)
+                        }.distinctBy { it.hosterName }
+                        return@withContext createResult(source, videos, matchedSAnime.url).copy(hosters = derivedHosters)
                     }
                     Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (no episodes or direct videos)")
                     return@withContext null
@@ -2316,6 +2319,14 @@ class MainViewModel : ViewModel() {
                     return@withContext null
                 }
 
+                val resolvedHosters = if (hosters.isNullOrEmpty()) {
+                    videos.map { video ->
+                        Hoster(hosterUrl = video.videoUrl, hosterName = video.videoTitle.take(50), videoList = listOf(video), lazy = false)
+                    }.distinctBy { it.hosterName }
+                } else {
+                    hosters
+                }
+
                 val bestVideo = videos.maxByOrNull {
                     val res = it.resolution ?: 0
                     if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
@@ -2338,7 +2349,7 @@ class MainViewModel : ViewModel() {
                     subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
                     videoTitle = bestVideo.videoTitle,
                     videos = videos,
-                    hosters = hosters,
+                    hosters = resolvedHosters,
                     extensionClient = extensionClient,
                     videoHeaders = videoHeaders,
                     source = source,
