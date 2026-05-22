@@ -43,6 +43,7 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
 
     protected open fun headersBuilder() = Headers.Builder().apply {
         add("User-Agent", network.defaultUserAgentProvider())
+        add("Accept", "application/json, text/plain, */*")
     }
 
     override fun toString() = "$name (${lang.uppercase()})"
@@ -144,7 +145,10 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
     }
 
     protected open fun hosterListRequest(episode: SEpisode): Request {
-        return GET(resolveUrl(episode.url), headers)
+        val url = resolveUrl(episode.url)
+        return GET(url, headers).newBuilder()
+            .header("Referer", url)
+            .build()
     }
 
     protected open fun hosterListParse(response: Response): List<Hoster> {

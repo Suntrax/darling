@@ -2619,6 +2619,10 @@ class MainViewModel : ViewModel() {
                     return@withContext null
                 }
 
+                Log.d(TAG_EXT, "Episode url=${sEpisode.url} scanlator='${sEpisode.scanlator}' name='${sEpisode.name}' episode_number=${sEpisode.episode_number}")
+                Log.d(TAG_EXT, "Episode scanlator.isNullOrEmpty=${sEpisode.scanlator.isNullOrEmpty()} scanlator.length=${sEpisode.scanlator?.length}")
+                val baseUrl = try { (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.baseUrl } catch (_: Throwable) { null }
+                Log.d(TAG_EXT, "Source baseUrl=$baseUrl")
                 val hosters = try {
                     val h = source.getHosterList(sEpisode)
                     Log.d(TAG_EXT, "getHosterList returned ${h?.size ?: 0} hosters")
@@ -2626,6 +2630,8 @@ class MainViewModel : ViewModel() {
                     h
                 } catch (e: Throwable) {
                     Log.w(TAG_EXT, "getHosterList threw: ${e.message}")
+                    Log.w(TAG_EXT, "getHosterList exception type: ${e::class.qualifiedName}")
+                    e.printStackTrace()
                     null
                 }
                 val videos = if (hosters != null && hosters.isNotEmpty()) {

@@ -28,6 +28,16 @@ class NetworkHelper {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .cookieJar(cookieJar)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val response = chain.proceed(request)
+                if (response.code == 500) {
+                    android.util.Log.e("HTTP_500", "URL: ${request.url}")
+                    android.util.Log.e("HTTP_500", "Headers: ${request.headers}")
+                    android.util.Log.e("HTTP_500", "Body (first 2k): ${response.peekBody(2048).string()}")
+                }
+                response
+            }
 
         client = builder.build()
         cloudflareClient = client

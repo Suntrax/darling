@@ -102,6 +102,8 @@ class SourceManager(private val context: Context) {
 
     suspend fun getHosters(source: AnimeCatalogueSource, episode: SEpisode): List<Hoster>? {
         return withContext(Dispatchers.IO) {
+            Log.d(TAG, "getHosters episode: url=${episode.url} scanlator=${episode.scanlator} name=${episode.name}")
+            Log.d(TAG, "getHosters source: ${source.name} class=${source::class.qualifiedName}")
             try {
                 source.getHosterList(episode).also {
                     Log.d(TAG, "getHosters returned ${it.size} hosters: ${it.map { h -> h.hosterName }}")
