@@ -1074,24 +1074,6 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                     color = Color.White.copy(alpha = 0.8f),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = if (isFallbackStream)
-                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
-                                    else
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                ) {
-                                    Text(
-                                        text = actualCategory.uppercase(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isFallbackStream)
-                                            MaterialTheme.colorScheme.secondary
-                                        else
-                                            MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
                                 if (isFetchingTimestamps) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(14.dp),
