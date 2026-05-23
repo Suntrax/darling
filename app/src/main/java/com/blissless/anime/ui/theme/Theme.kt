@@ -31,7 +31,11 @@ private val MonochromeLightColorScheme = lightColorScheme(
     surfaceVariant = Color(0xFFE0E0E0),
     onSurfaceVariant = Color(0xFF000000),
     outline = Color(0xFF757575),
-    outlineVariant = Color(0xFFBDBDBD)
+    outlineVariant = Color(0xFFBDBDBD),
+    error = Color(0xFF616161),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFF5F5F5),
+    onErrorContainer = Color(0xFF000000)
 )
 
 private val MonochromeDarkColorScheme = darkColorScheme(
@@ -54,7 +58,11 @@ private val MonochromeDarkColorScheme = darkColorScheme(
     surfaceVariant = Color(0xFF2A2A2A),
     onSurfaceVariant = Color(0xFFE0E0E0),
     outline = Color(0xFF757575),
-    outlineVariant = Color(0xFF424242)
+    outlineVariant = Color(0xFF424242),
+    error = Color(0xFF9E9E9E),
+    onError = Color(0xFF000000),
+    errorContainer = Color(0xFF333333),
+    onErrorContainer = Color(0xFFE0E0E0)
 )
 
 private val MonochromeOledColorScheme = darkColorScheme(
@@ -77,7 +85,11 @@ private val MonochromeOledColorScheme = darkColorScheme(
     surfaceVariant = OledBlack,
     onSurfaceVariant = Color(0xFFE0E0E0),
     outline = Color(0xFF616161),
-    outlineVariant = Color(0xFF2A2A2A)
+    outlineVariant = Color(0xFF2A2A2A),
+    error = Color(0xFF9E9E9E),
+    onError = Color(0xFF000000),
+    errorContainer = Color(0xFF1A1A1A),
+    onErrorContainer = Color(0xFFE0E0E0)
 )
 
 @Composable

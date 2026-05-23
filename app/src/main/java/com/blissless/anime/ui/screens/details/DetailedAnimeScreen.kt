@@ -20,7 +20,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -495,7 +494,7 @@ fun DetailedAnimeScreen(
                     this.alpha = alpha
                 }
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
-                .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.background)
                 .nestedScroll(nestedScrollConnection)
         ) {
             if (!displayData.banner.isNullOrEmpty() || displayData.cover.isNotEmpty()) {
@@ -666,10 +665,10 @@ fun DetailedAnimeScreen(
                                 Text(
                                     text = displayData.title, style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold, maxLines = 10, overflow = TextOverflow.Clip,
-                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                     modifier = Modifier.weight(1f)
                                 )
-                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp).padding(start = 4.dp), tint = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp).padding(start = 4.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                             }
                             if (!displayData.titleEnglish.isNullOrEmpty() && displayData.titleEnglish != displayData.title) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
@@ -679,7 +678,7 @@ fun DetailedAnimeScreen(
                                     Text(
                                         text = displayData.titleEnglish!!, style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 10, overflow = TextOverflow.Clip,
-                                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -692,7 +691,7 @@ fun DetailedAnimeScreen(
                                     Text(
                                         text = displayData.titleNative!!, style = MaterialTheme.typography.bodySmall,
                                         maxLines = 10, overflow = TextOverflow.Clip,
-                                        color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -733,7 +732,7 @@ fun DetailedAnimeScreen(
                                             "FINISHED" -> Color(0xFF2196F3)
                                             "NOT_YET_RELEASED" -> Color(0xFFFFC107)
                                             "CANCELLED" -> Color(0xFFF44336)
-                                            else -> if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         },
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
@@ -748,21 +747,21 @@ fun DetailedAnimeScreen(
                                     Text(
                                         displayData.year.toString(),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 if (displayData.year != null && displayData.format != null) {
                                     Text(
                                         "•",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isOled) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )
                                 }
                                 displayData.format?.let { format ->
                                     Text(
                                         formatDisplay,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -776,32 +775,30 @@ fun DetailedAnimeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(8.dp),
+                                .padding(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             val notYetAired = displayData.status == "NOT_YET_RELEASED"
 
                             Button(
-                                onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f).height(52.dp),
-                                shape = RoundedCornerShape(14.dp),
+                                onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f).height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 enabled = !notYetAired,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                                )
                             ) {
-                                Icon(Icons.Default.PlayArrow, null, Modifier.size(22.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text("Watch Now", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                             }
 
@@ -831,8 +828,8 @@ fun DetailedAnimeScreen(
                                         )
                                     }
                                 },
-                                modifier = Modifier.height(52.dp),
-                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
                                     contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
@@ -859,13 +856,12 @@ fun DetailedAnimeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
@@ -885,7 +881,7 @@ fun DetailedAnimeScreen(
                                 Text(
                                     if (isLoggedIn) "Add to List" else "Local List",
                                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (!isLoggedIn) {
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -940,13 +936,13 @@ fun DetailedAnimeScreen(
                                                     text = "$statusProgress",
                                                     style = MaterialTheme.typography.titleLarge,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
                                                     text = " / $totalEps",
                                                     style = MaterialTheme.typography.titleLarge,
                                                     fontWeight = FontWeight.Light,
-                                                    color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                                 )
                                             }
                                         }
@@ -987,7 +983,7 @@ fun DetailedAnimeScreen(
                             .padding(horizontal = 16.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -1008,7 +1004,7 @@ fun DetailedAnimeScreen(
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                    color = MaterialTheme.colorScheme.onBackground)
                             }
                             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1037,40 +1033,40 @@ fun DetailedAnimeScreen(
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
-                            HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
                             Spacer(modifier = Modifier.height(12.dp))
 
                             // Info grid - 2 columns
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     displayData.format?.let { 
-                                        InfoItemRow("Format", it.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, isOled, modifier = Modifier.weight(1f)) 
+                                        InfoItemRow("Format", it.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f)) 
                                     }
                                     displayData.status?.let { 
-                                        InfoItemRow("Status", statusDisplay, isOled, modifier = Modifier.weight(1f)) 
+                                        InfoItemRow("Status", statusDisplay, modifier = Modifier.weight(1f)) 
                                     }
                                 }
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     if (displayData.season != null && displayData.year != null) {
-                                        InfoItemRow("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", isOled, modifier = Modifier.weight(1f))
+                                        InfoItemRow("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", modifier = Modifier.weight(1f))
                                     }
                                     displayData.source?.let { 
-                                        InfoItemRow("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, isOled, modifier = Modifier.weight(1f)) 
+                                        InfoItemRow("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, modifier = Modifier.weight(1f)) 
                                     }
                                 }
                                 if (displayData.studios.isNotEmpty()) {
                                     val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
                                     if (studio.isNotEmpty()) {
-                                        InfoItemRow("Studio", studio, isOled)
+                                        InfoItemRow("Studio", studio)
                                     }
                                 }
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     displayData.startDate?.let { 
-                                        InfoItemRow("Started", formatDate(it), isOled, modifier = Modifier.weight(1f)) 
+                                        InfoItemRow("Started", formatDate(it), modifier = Modifier.weight(1f)) 
                                     }
                                     if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
                                         displayData.endDate?.let { 
-                                            InfoItemRow("Ended", formatDate(it), isOled, modifier = Modifier.weight(1f)) 
+                                            InfoItemRow("Ended", formatDate(it), modifier = Modifier.weight(1f)) 
                                         }
                                     }
                                 }
@@ -1093,7 +1089,7 @@ fun DetailedAnimeScreen(
                                 },
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1114,7 +1110,7 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Trailer", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Box(
@@ -1154,7 +1150,7 @@ fun DetailedAnimeScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text("Watch on YouTube", style = MaterialTheme.typography.bodySmall,
-                                    color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -1169,7 +1165,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1190,7 +1186,7 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Genres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 FlowRow(
@@ -1199,7 +1195,7 @@ fun DetailedAnimeScreen(
                                 ) {
                                     displayData.genres.forEach { genre ->
                                         Surface(
-                                            shape = RoundedCornerShape(20.dp),
+                                            shape = RoundedCornerShape(16.dp),
                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                                         ) {
@@ -1226,7 +1222,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1247,7 +1243,7 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Tags", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 val nonSpoilerTags = displayData.tags.filter { !it.isMediaSpoiler }
@@ -1260,10 +1256,10 @@ fun DetailedAnimeScreen(
                                 ) {
                                     displayedTags.forEach { tag ->
                                         Surface(
-                                            shape = RoundedCornerShape(20.dp),
+                                            shape = RoundedCornerShape(16.dp),
                                             color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
                                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
-                                            modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable {
+                                            modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable {
                                                 selectedTagForDescription = tag
                                             }
                                         ) {
@@ -1311,7 +1307,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1332,13 +1328,13 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Synopsis", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 val cleanDescription = displayData.description.replace("<br>", "\n").replace("<br/>", "\n")
                                     .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
                                 Text(cleanDescription, style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = if (showFullDescription) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
                                     lineHeight = 22.sp)
                                 if (cleanDescription.length > 250) {
@@ -1372,7 +1368,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0E0E0E).copy(alpha = 0.95f) else Color(0xFF151515).copy(alpha = 0.9f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1393,7 +1389,7 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Relations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (filteredRelations.isNotEmpty()) {
                                         android.util.Log.d("DEBUG", ">>> View All Relations clicked for animeId=${displayData.id}, title=${displayData.title}")
@@ -1539,7 +1535,7 @@ fun DetailedAnimeScreen(
                                                 fontWeight = FontWeight.Medium,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                                color = MaterialTheme.colorScheme.onBackground,
                                                 modifier = Modifier.height(32.dp)
                                             )
                                             relation.format?.let { format ->
@@ -1581,7 +1577,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0E0E0E).copy(alpha = 0.95f) else Color(0xFF151515).copy(alpha = 0.9f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1602,7 +1598,7 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Cast", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (castList.isNotEmpty()) {
                                         TextButton(onClick = onViewAllCast) {
@@ -1709,7 +1705,7 @@ fun DetailedAnimeScreen(
                                                 fontWeight = FontWeight.Medium,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                                color = MaterialTheme.colorScheme.onBackground,
                                                 modifier = Modifier.height(28.dp)
                                             )
                                         }
@@ -1731,7 +1727,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF0E0E0E).copy(alpha = 0.95f) else Color(0xFF151515).copy(alpha = 0.9f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -1752,7 +1748,7 @@ fun DetailedAnimeScreen(
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text("Staff", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+                                        color = MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (staffList.isNotEmpty()) {
                                         TextButton(onClick = onViewAllStaff) {
@@ -1857,7 +1853,7 @@ fun DetailedAnimeScreen(
                                                     fontWeight = FontWeight.Medium,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground,
+                                                    color = MaterialTheme.colorScheme.onBackground,
                                                     modifier = Modifier.height(28.dp)
                                                 )
                                                 staffEdge.role?.let { role ->
@@ -1887,7 +1883,7 @@ fun DetailedAnimeScreen(
         ModalBottomSheet(
             onDismissRequest = { selectedTagForDescription = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ) {
             Column(
                 modifier = Modifier
@@ -1907,7 +1903,7 @@ fun DetailedAnimeScreen(
                         tag.name,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 tag.rank?.let { rank ->
@@ -1915,11 +1911,11 @@ fun DetailedAnimeScreen(
                     Text(
                         "Rank: $rank%",
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
                 Spacer(modifier = Modifier.height(16.dp))
                 val description = tag.description ?: "No description available."
                 val cleanDescription = description.replace("<br>", "\n").replace("<br/>", "\n")
@@ -1928,7 +1924,7 @@ fun DetailedAnimeScreen(
                 Text(
                     cleanDescription,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 24.sp
                 )
             }
@@ -2029,35 +2025,6 @@ private fun StatusChip(label: String, icon: ImageVector, color: Color, selected:
 }
 
 @Composable
-private fun InfoSection(isOled: Boolean, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-        Spacer(modifier = Modifier.height(12.dp))
-        content()
-    }
-}
-
-@Composable
-private fun InfoGrid(items: List<Pair<String, String>>, isOled: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items.chunked(2).forEach { rowItems ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                rowItems.forEach { (label, value) ->
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(label, style = MaterialTheme.typography.labelSmall,
-                            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
-                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
-                    }
-                }
-                if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
 private fun InfoStat(label: String, value: String, icon: ImageVector, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
@@ -2070,18 +2037,8 @@ private fun InfoStat(label: String, value: String, icon: ImageVector, color: Col
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String, isOled: Boolean, modifier: Modifier = Modifier) {
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodySmall,
-            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -2111,18 +2068,18 @@ private fun InfoPill(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun InfoItemRow(label: String, value: String, isOled: Boolean, modifier: Modifier = Modifier) {
+private fun InfoItemRow(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(end = 8.dp)) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

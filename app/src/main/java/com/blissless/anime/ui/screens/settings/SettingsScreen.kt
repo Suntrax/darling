@@ -7,6 +7,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,19 +27,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -53,6 +50,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -103,124 +101,47 @@ fun SettingsScreen(
 ) {
     var selectedGroup by remember { mutableStateOf<String?>(null) }
 
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
-    val tertiary = MaterialTheme.colorScheme.tertiary
-    
-    val settingsGroups = remember {
+    val s = MaterialTheme.colorScheme
+    val groups = remember {
         listOf(
-            SettingsGroup(
-                id = "account",
-                title = "Account",
-                description = "Login and manage your anime list",
-                icon = Icons.Default.Person,
-                iconBackgroundColor = if (isOled) Color.White else primary
-            ),
-            SettingsGroup(
-                id = "appearance",
-                title = "Appearance",
-                description = "Theme, colors, and display options",
-                icon = Icons.Default.Palette,
-                iconBackgroundColor = if (isOled) Color.White else secondary
-            ),
-            SettingsGroup(
-                id = "general",
-                title = "General",
-                description = "Startup screen and sync settings",
-                icon = Icons.Default.Settings,
-                iconBackgroundColor = if (isOled) Color.White else tertiary
-            ),
-            SettingsGroup(
-                id = "stream",
-                title = "Stream Settings",
-                description = "Audio preferences and buffering",
-                icon = Icons.Default.PlayArrow,
-                iconBackgroundColor = if (isOled) Color.White else primary
-            ),
-            SettingsGroup(
-                id = "player",
-                title = "Player Settings",
-                description = "Playback controls and skipping",
-                icon = Icons.Default.Subscriptions,
-                iconBackgroundColor = if (isOled) Color.White else secondary
-            ),
-            SettingsGroup(
-                id = "cache",
-                title = "Cache Management",
-                description = "Storage and data cleanup",
-                icon = Icons.Default.Memory,
-                iconBackgroundColor = if (isOled) Color.White else tertiary
-            ),
-            SettingsGroup(
-                id = "extensions",
-                title = "Extensions",
-                description = "Manage source extensions",
-                icon = Icons.Default.Extension,
-                iconBackgroundColor = if (isOled) Color.White else primary
-            )
+            SettingsGroup("account", "Account", "Login and manage your anime list", Icons.Default.Person, s.primary),
+            SettingsGroup("appearance", "Appearance", "Theme, colors, and display options", Icons.Default.Palette, s.secondary),
+            SettingsGroup("general", "General", "Startup screen and sync settings", Icons.Default.Settings, s.tertiary),
+            SettingsGroup("stream", "Stream Settings", "Audio preferences and buffering", Icons.Default.PlayArrow, s.primary),
+            SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions, s.secondary),
+            SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Memory, s.tertiary),
+            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension, s.primary)
         )
     }
 
     AnimatedContent(
         targetState = selectedGroup,
         transitionSpec = {
-            fadeIn(animationSpec = tween(200)) togetherWith fadeOut(animationSpec = tween(200))
+            if (targetState == null) {
+                (fadeIn(animationSpec = tween(220)) + slideInHorizontally(animationSpec = tween(220)) { -it / 8 })
+                    .togetherWith(fadeOut(animationSpec = tween(220)) + slideOutHorizontally(animationSpec = tween(220)) { it / 8 })
+            } else {
+                (fadeIn(animationSpec = tween(220)) + slideInHorizontally(animationSpec = tween(220)))
+                    .togetherWith(fadeOut(animationSpec = tween(220)) + slideOutHorizontally(animationSpec = tween(220)))
+            }
         },
         label = "settingsNavigation"
     ) { targetGroup ->
         if (targetGroup == null) {
             SettingsLandingPage(
-                groups = settingsGroups,
-                onGroupClick = { selectedGroup = it },
-                isOled = isOled
+                groups = groups,
+                onGroupClick = { selectedGroup = it }
             )
         } else {
-            BackHandler {
-                selectedGroup = null
-            }
+            BackHandler { selectedGroup = null }
             when (targetGroup) {
-                "account" -> AccountSettingsPage(
-                    viewModel = viewModel,
-                    isOled = isOled,
-                    onBack = { selectedGroup = null }
-                )
-                "appearance" -> AppearanceSettingsPage(
-                    viewModel = viewModel,
-                    isOled = isOled,
-                    disableMaterialColors = disableMaterialColors,
-                    onBack = { selectedGroup = null }
-                )
-                "general" -> GeneralSettingsPage(
-                    viewModel = viewModel,
-                    isOled = isOled,
-                    onBack = { selectedGroup = null }
-                )
-                "stream" -> StreamSettingsPage(
-                    viewModel = viewModel,
-                    isOled = isOled,
-                    disableMaterialColors = disableMaterialColors,
-                    preferredCategory = preferredCategory,
-                    onBack = { selectedGroup = null }
-                )
-                "player" -> PlayerSettingsPage(
-                    viewModel = viewModel,
-                    isOled = isOled,
-                    autoSkipOpening = autoSkipOpening,
-                    autoSkipEnding = autoSkipEnding,
-                    autoPlayNextEpisode = autoPlayNextEpisode,
-                    onBack = { selectedGroup = null }
-                )
-                "cache" -> CacheSettingsPage(
-                    viewModel = viewModel,
-                    context = LocalContext.current,
-                    isOled = isOled,
-                    onBack = { selectedGroup = null }
-                )
-                "extensions" -> ExtensionsSettingsPage(
-                    viewModel = viewModel,
-                    isOled = isOled,
-                    onBack = { selectedGroup = null }
-                )
+                "account" -> AccountSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "appearance" -> AppearanceSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, onBack = { selectedGroup = null })
+                "general" -> GeneralSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "stream" -> StreamSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, preferredCategory = preferredCategory, onBack = { selectedGroup = null })
+                "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
+                "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
+                "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
             }
         }
     }
@@ -231,117 +152,98 @@ private data class SettingsGroup(
     val title: String,
     val description: String,
     val icon: ImageVector,
-    val iconBackgroundColor: Color
+    val iconColor: Color
 )
 
 @Composable
 private fun SettingsLandingPage(
     groups: List<SettingsGroup>,
-    onGroupClick: (String) -> Unit,
-    isOled: Boolean
+    onGroupClick: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 36.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+            .padding(top = 36.dp, bottom = 100.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             AsyncImage(
                 model = R.mipmap.ic_launcher_round,
                 contentDescription = "App",
-                modifier = Modifier.size(32.dp).clip(CircleShape)
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
             )
-            Text(
-                "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-
-            )
+            Column {
+                Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Customize your experience", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(36.dp))
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 80.dp)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+            shape = RoundedCornerShape(20.dp)
         ) {
-            items(groups) { group ->
-                SettingsGroupCard(
-                    group = group,
-                    onClick = { onGroupClick(group.id) },
-                    isOled = isOled
-                )
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                groups.forEachIndexed { index, group ->
+                    SettingsListItem(group = group, onClick = { onGroupClick(group.id) })
+                    if (index < groups.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 72.dp, end = 20.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            thickness = 0.5.dp
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SettingsGroupCard(
+private fun SettingsListItem(
     group: SettingsGroup,
-    onClick: () -> Unit,
-    isOled: Boolean
+    onClick: () -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
-        ),
-        shape = RoundedCornerShape(16.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(group.iconColor.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(group.iconBackgroundColor.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = group.icon,
-                    contentDescription = null,
-                    tint = group.iconBackgroundColor,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                group.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                group.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+            Icon(
+                imageVector = group.icon,
+                contentDescription = null,
+                tint = group.iconColor,
+                modifier = Modifier.size(22.dp)
             )
         }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(group.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(group.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -349,85 +251,50 @@ private fun SettingsGroupCard(
 @Composable
 private fun SettingsPageScaffold(
     title: String,
-    icon: ImageVector,
-    iconBackgroundColor: Color,
     onBack: () -> Unit,
-    isOled: Boolean,
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 130.dp)
+            .padding(bottom = 130.dp)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable(onClick = onBack)
+            modifier = Modifier
+                .clickable(onClick = onBack)
+                .padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
-                tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                tint = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
             )
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(iconBackgroundColor.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconBackgroundColor,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-            Text(
-                when (title) {
-                    "Account" -> "Login and manage your anime list"
-                    "Appearance" -> "Theme, colors, and display options"
-                    "General" -> "Startup screen and sync settings"
-                    "Stream Settings" -> "Audio preferences and buffering"
-                    "Player Settings" -> "Playback controls and skipping"
-                    "Cache Management" -> "Storage and data cleanup"
-                    "Extensions" -> "Manage source extensions"
-                    else -> ""
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         if (scrollable) {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
                 content = content
             )
         } else {
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+                    .padding(horizontal = 20.dp),
                 content = content
             )
         }
@@ -435,21 +302,134 @@ private fun SettingsPageScaffold(
 }
 
 @Composable
+private fun SectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingsCard(
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun SettingsToggle(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingsSliderRow(
+    title: String,
+    description: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    valueLabel: String,
+    onValueChange: (Float) -> Unit,
+    minLabel: String,
+    maxLabel: String,
+    leadingIcon: ImageVector? = null
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text(valueLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        }
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(8.dp))
+        Slider(value = value, onValueChange = onValueChange, valueRange = valueRange, modifier = Modifier.fillMaxWidth())
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(minLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(maxLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SettingsChoiceChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    FilterChip(
+        selected = isSelected,
+        onClick = onClick,
+        label = {
+            Text(
+                label,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (isSelected) {
+                    if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                } else Color.Unspecified
+            )
+        },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+        ),
+        shape = RoundedCornerShape(10.dp),
+        enabled = enabled
+    )
+}
+
+@Composable
 private fun AccountSettingsPage(
     viewModel: MainViewModel,
-    isOled: Boolean,
     onBack: () -> Unit
 ) {
     var showLogoutConfirmation by remember { mutableStateOf(false) }
     val loginProvider by viewModel.loginProvider.collectAsState(initial = LoginProvider.NONE)
 
-    SettingsPageScaffold(
-        title = "Account",
-        icon = Icons.Default.Person,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-        onBack = onBack,
-        isOled = isOled
-    ) {
+    SettingsPageScaffold(title = "Account", onBack = onBack) {
         if (loginProvider != LoginProvider.NONE) {
             val userName by viewModel.userName.collectAsState()
             val userAvatar by viewModel.userAvatar.collectAsState()
@@ -459,110 +439,73 @@ private fun AccountSettingsPage(
                 LoginProvider.NONE -> ""
             }
 
-            SettingsCard(isOled = isOled) {
+            SettingsCard {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     if (userAvatar != null) {
                         AsyncImage(
                             model = userAvatar,
                             contentDescription = "User Avatar",
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape),
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(48.dp)
-                        )
+                        Box(
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+                        }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(
-                            userName ?: "Logged In",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "via $providerName",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(userName ?: "Logged In", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text("via $providerName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsCard(isOled = isOled) {
-                Button(
-                    onClick = { showLogoutConfirmation = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Log Out")
-                }
+            Button(
+                onClick = { showLogoutConfirmation = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Log Out")
             }
         } else {
-            Text(
-                "Login with AniList",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsCard(isOled = isOled) {
+            SectionHeader("SIGN IN")
+            SettingsCard {
                 Button(
                     onClick = { viewModel.loginWithAniList() },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data("https://anilist.co/img/icons/favicon-32x32.png")
-                            .crossfade(true)
-                            .build(),
+                            .crossfade(true).build(),
                         contentDescription = "AniList",
                         modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text("Login with AniList")
                 }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                "Login with MyAnimeList",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsCard(isOled = isOled) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
                 Button(
                     onClick = { viewModel.loginWithMal() },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data("https://cdn.myanimelist.net/images/favicon.ico")
-                            .crossfade(true)
-                            .build(),
+                            .crossfade(true).build(),
                         contentDescription = "MyAnimeList",
                         modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text("Login with MyAnimeList")
                 }
             }
@@ -580,19 +523,10 @@ private fun AccountSettingsPage(
             title = { Text("Logout") },
             text = { Text("Are you sure you want to logout from $providerName?") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.logout()
-                        showLogoutConfirmation = false
-                    }
-                ) {
-                    Text("Logout")
-                }
+                TextButton(onClick = { viewModel.logout(); showLogoutConfirmation = false }) { Text("Logout") }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutConfirmation = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showLogoutConfirmation = false }) { Text("Cancel") }
             }
         )
     }
@@ -601,7 +535,6 @@ private fun AccountSettingsPage(
 @Composable
 private fun AppearanceSettingsPage(
     viewModel: MainViewModel,
-    isOled: Boolean,
     disableMaterialColors: Boolean,
     onBack: () -> Unit
 ) {
@@ -610,70 +543,60 @@ private fun AppearanceSettingsPage(
     val showAnimeCardButtons by viewModel.showAnimeCardButtons.collectAsState(initial = true)
     val preferEnglishTitles by viewModel.preferEnglishTitles.collectAsState(initial = true)
 
-    SettingsPageScaffold(
-        title = "Appearance",
-        icon = Icons.Default.Palette,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.secondary,
-        onBack = onBack,
-        isOled = isOled
-    ) {
-        SettingsCard(isOled = isOled) {
+    SettingsPageScaffold(title = "Appearance", onBack = onBack) {
+        val isOled by viewModel.isOled.collectAsState()
+
+        SectionHeader("THEME")
+        SettingsCard {
             SettingsToggle(
                 title = "OLED Mode",
                 description = "Pure black background for AMOLED screens",
                 checked = isOled,
-                onCheckedChange = { viewModel.setOledMode(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setOledMode(it) }
             )
         }
-
-        SettingsCard(isOled = isOled) {
+        SettingsCard {
             SettingsToggle(
                 title = "Monochrome Theme",
-                description = "Disable Material3 colors for neutral appearance",
+                description = "Disable Material You colors for neutral appearance",
                 checked = disableMaterialColors,
-                onCheckedChange = { viewModel.setDisableMaterialColors(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setDisableMaterialColors(it) }
             )
         }
 
-        SettingsCard(isOled = isOled) {
+        SectionHeader("DISPLAY")
+        SettingsCard {
             SettingsToggle(
                 title = "Status Color Indicators",
                 description = "Show colored status bars on anime cards",
                 checked = showStatusColorsState,
-                onCheckedChange = { viewModel.setShowStatusColors(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setShowStatusColors(it) }
             )
         }
-
-        SettingsCard(isOled = isOled) {
-            SettingsToggle(
-                title = "Simple Episode Menu",
-                description = "Use compact episode grid (disable for detailed cards)",
-                checked = simplifyEpisodeMenuState,
-                onCheckedChange = { viewModel.setSimplifyEpisodeMenu(it) },
-                isOled = isOled
-            )
-        }
-
-        SettingsCard(isOled = isOled) {
+        SettingsCard {
             SettingsToggle(
                 title = "Show Card Buttons",
-                description = "Show bookmark and play buttons on anime cards in Explore",
+                description = "Bookmark and play buttons on anime cards in Explore",
                 checked = showAnimeCardButtons,
-                onCheckedChange = { viewModel.setShowAnimeCardButtons(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setShowAnimeCardButtons(it) }
             )
         }
-
-        SettingsCard(isOled = isOled) {
+        SettingsCard {
             SettingsToggle(
                 title = "English Titles",
                 description = "Show English titles instead of Romaji",
                 checked = preferEnglishTitles,
-                onCheckedChange = { viewModel.setPreferEnglishTitles(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setPreferEnglishTitles(it) }
+            )
+        }
+
+        SectionHeader("EPISODES")
+        SettingsCard {
+            SettingsToggle(
+                title = "Simple Episode Menu",
+                description = "Use compact episode grid instead of detailed cards",
+                checked = simplifyEpisodeMenuState,
+                onCheckedChange = { viewModel.setSimplifyEpisodeMenu(it) }
             )
         }
     }
@@ -682,73 +605,49 @@ private fun AppearanceSettingsPage(
 @Composable
 private fun GeneralSettingsPage(
     viewModel: MainViewModel,
-    isOled: Boolean,
     onBack: () -> Unit
 ) {
     val startupScreenState by viewModel.startupScreen.collectAsState()
     val preventScheduleSync by viewModel.preventScheduleSync.collectAsState()
     val hideAdultContentState by viewModel.hideAdultContent.collectAsState(initial = false)
 
-    SettingsPageScaffold(
-        title = "General",
-        icon = Icons.Default.Settings,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.tertiary,
-        onBack = onBack,
-        isOled = isOled
-    ) {
-        SettingsCard(isOled = isOled) {
-            Column {
-                Text(
-                    "Startup Screen",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "Choose the default screen when opening the app",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    listOf(
-                        0 to "Schedule",
-                        1 to "Explore",
-                        2 to "Home"
-                    ).forEach { (index, label) ->
-                        CategoryChip(
-                            label = label,
-                            isSelected = startupScreenState == index,
-                            onClick = { viewModel.setStartupScreen(index) },
-                            isOled = isOled
-                        )
-                    }
+    SettingsPageScaffold(title = "General", onBack = onBack) {
+        SectionHeader("LAUNCH")
+        SettingsCard {
+            Text("Startup Screen", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text("Choose the default screen when opening the app", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                listOf(0 to "Schedule", 1 to "Explore", 2 to "Home").forEach { (index, label) ->
+                    SettingsChoiceChip(
+                        label = label,
+                        isSelected = startupScreenState == index,
+                        onClick = { viewModel.setStartupScreen(index) }
+                    )
                 }
             }
         }
 
-        SettingsCard(isOled = isOled) {
+        SectionHeader("SYNC")
+        SettingsCard {
             SettingsToggle(
-                title = "Auto Sync in Airing Schedule",
+                title = "Auto Sync Schedule",
                 description = "Automatically sync airing schedule when opening",
                 checked = !preventScheduleSync,
-                onCheckedChange = { viewModel.setPreventScheduleSync(!it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setPreventScheduleSync(!it) }
             )
         }
 
-        SettingsCard(isOled = isOled) {
+        SectionHeader("CONTENT")
+        SettingsCard {
             SettingsToggle(
                 title = "Hide Adult Content",
                 description = "Exclude 18+ anime from showing up",
                 checked = hideAdultContentState,
-                onCheckedChange = { viewModel.setHideAdultContent(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setHideAdultContent(it) }
             )
         }
     }
@@ -757,7 +656,6 @@ private fun GeneralSettingsPage(
 @Composable
 private fun StreamSettingsPage(
     viewModel: MainViewModel,
-    isOled: Boolean,
     disableMaterialColors: Boolean,
     preferredCategory: String,
     onBack: () -> Unit
@@ -766,121 +664,54 @@ private fun StreamSettingsPage(
     val bufferSizeMb by viewModel.bufferSizeMb.collectAsState(initial = 100)
     val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
 
-    SettingsPageScaffold(
-        title = "Stream Settings",
-        icon = Icons.Default.PlayArrow,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-        onBack = onBack,
-        isOled = isOled
-    ) {
-        SettingsCard(isOled = isOled) {
-            Column {
-                Text(
-                    "Preferred Audio Category",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "Try servers from this category first when playing",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CategoryChip(
-                        label = "SUB",
-                        isSelected = preferredCategory == "sub",
-                        onClick = { viewModel.setPreferredCategory("sub") },
-                        isOled = isOled,
-                        enabled = true,
-                        disableMaterialColors = disableMaterialColors
-                    )
-                    CategoryChip(
-                        label = "DUB",
-                        isSelected = preferredCategory == "dub",
-                        onClick = { viewModel.setPreferredCategory("dub") },
-                        isOled = isOled,
-                        enabled = true,
-                        disableMaterialColors = disableMaterialColors
-                    )
-                }
+    SettingsPageScaffold(title = "Stream Settings", onBack = onBack) {
+        SectionHeader("AUDIO")
+        SettingsCard {
+            Text("Preferred Audio Category", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text("Try servers from this category first when playing", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsChoiceChip(label = "SUB", isSelected = preferredCategory == "sub", onClick = { viewModel.setPreferredCategory("sub") })
+                SettingsChoiceChip(label = "DUB", isSelected = preferredCategory == "dub", onClick = { viewModel.setPreferredCategory("dub") })
             }
         }
 
-        SettingsCard(isOled = isOled) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Memory,
-                    contentDescription = null,
-                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    "Buffer Settings",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Text(
-                "Control video buffering behavior",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsSlider(
+        SectionHeader("BUFFER")
+        SettingsCard {
+            SettingsSliderRow(
                 title = "Buffer Ahead",
                 description = "Amount of video to buffer ahead of playback",
                 value = bufferAheadSeconds.toFloat(),
                 valueRange = 0f..300f,
                 valueLabel = "${bufferAheadSeconds}s",
-                onValueChange = { newValue ->
-                    val snapped = round(newValue / 10f) * 10f
-                    viewModel.setBufferAheadSeconds(snapped.toInt())
-                },
-                isOled = isOled,
+                onValueChange = { viewModel.setBufferAheadSeconds((round(it / 10f) * 10f).toInt()) },
                 minLabel = "0s",
                 maxLabel = "300s",
                 leadingIcon = Icons.Default.PlayArrow
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsSlider(
+        }
+        SettingsCard {
+            SettingsSliderRow(
                 title = "Max Buffer Size",
-                description = "Maximum amount of data to buffer (approximate)",
+                description = "Maximum amount of data to buffer",
                 value = bufferSizeMb.toFloat(),
                 valueRange = 50f..500f,
                 valueLabel = "${bufferSizeMb}MB",
-                onValueChange = { newValue ->
-                    val snapped = round(newValue / 25f) * 25f
-                    viewModel.setBufferSizeMb(snapped.toInt())
-                },
-                isOled = isOled,
+                onValueChange = { viewModel.setBufferSizeMb((round(it / 25f) * 25f).toInt()) },
                 minLabel = "50MB",
                 maxLabel = "500MB",
-                leadingIcon = Icons.Default.Settings
+                leadingIcon = Icons.Default.Memory
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
+        }
+        SettingsCard {
             SettingsToggle(
                 title = "Show Buffer Indicator",
                 description = "Display buffered amount on the progress bar",
                 checked = showBufferIndicator,
-                onCheckedChange = { viewModel.setShowBufferIndicator(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setShowBufferIndicator(it) }
             )
         }
     }
@@ -889,7 +720,6 @@ private fun StreamSettingsPage(
 @Composable
 private fun PlayerSettingsPage(
     viewModel: MainViewModel,
-    isOled: Boolean,
     autoSkipOpening: Boolean,
     autoSkipEnding: Boolean,
     autoPlayNextEpisode: Boolean,
@@ -899,93 +729,72 @@ private fun PlayerSettingsPage(
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
 
-    SettingsPageScaffold(
-        title = "Player Settings",
-        icon = Icons.Default.Subscriptions,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-        onBack = onBack,
-        isOled = isOled
-    ) {
-        SettingsCard(isOled = isOled) {
-            SettingsSlider(
+    SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
+        SectionHeader("TRACKING")
+        SettingsCard {
+            SettingsSliderRow(
                 title = "Episode Tracking",
-                description = "Auto-update Episode progress when you've watched this percentage",
+                description = "Auto-update progress when you've watched this percentage",
                 value = trackingPercentage.toFloat(),
                 valueRange = 50f..100f,
                 valueLabel = "${trackingPercentage}%",
-                onValueChange = { newValue ->
-                    val snapped = round(newValue / 5f) * 5f
-                    viewModel.setTrackingPercentage(snapped.toInt())
-                },
-                isOled = isOled,
+                onValueChange = { viewModel.setTrackingPercentage((round(it / 5f) * 5f).toInt()) },
                 minLabel = "50%",
                 maxLabel = "100%"
             )
         }
 
-        SettingsCard(isOled = isOled) {
-            SettingsSlider(
+        SectionHeader("SKIP CONTROLS")
+        SettingsCard {
+            SettingsSliderRow(
                 title = "Skip Forward",
                 description = "Double-tap right side to skip forward",
                 value = forwardSkipSeconds.toFloat(),
                 valueRange = 5f..30f,
                 valueLabel = "${forwardSkipSeconds}s",
-                onValueChange = { newValue ->
-                    val snapped = round(newValue / 5f) * 5f
-                    viewModel.setForwardSkipSeconds(snapped.toInt())
-                },
-                isOled = isOled,
+                onValueChange = { viewModel.setForwardSkipSeconds((round(it / 5f) * 5f).toInt()) },
                 minLabel = "5s",
                 maxLabel = "30s",
                 leadingIcon = Icons.Default.FastForward
             )
         }
-
-        SettingsCard(isOled = isOled) {
-            SettingsSlider(
+        SettingsCard {
+            SettingsSliderRow(
                 title = "Skip Backward",
                 description = "Double-tap left side to skip backward",
                 value = backwardSkipSeconds.toFloat(),
                 valueRange = 5f..30f,
                 valueLabel = "${backwardSkipSeconds}s",
-                onValueChange = { newValue ->
-                    val snapped = round(newValue / 5f) * 5f
-                    viewModel.setBackwardSkipSeconds(snapped.toInt())
-                },
-                isOled = isOled,
+                onValueChange = { viewModel.setBackwardSkipSeconds((round(it / 5f) * 5f).toInt()) },
                 minLabel = "5s",
                 maxLabel = "30s",
                 leadingIcon = Icons.Default.FastRewind
             )
         }
 
-        SettingsCard(isOled = isOled) {
+        SectionHeader("AUTOMATION")
+        SettingsCard {
             SettingsToggle(
                 title = "Auto Skip Opening",
                 description = "Automatically skip anime openings",
                 checked = autoSkipOpening,
-                onCheckedChange = { viewModel.setAutoSkipOpening(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setAutoSkipOpening(it) }
             )
         }
-
-        SettingsCard(isOled = isOled) {
+        SettingsCard {
             SettingsToggle(
                 title = "Auto Skip Ending",
                 description = "Automatically skip anime endings",
                 checked = autoSkipEnding,
-                onCheckedChange = { viewModel.setAutoSkipEnding(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setAutoSkipEnding(it) }
             )
         }
-
-        SettingsCard(isOled = isOled) {
+        SettingsCard {
             SettingsToggle(
                 title = "Auto Play Next Episode",
-                description = "Automatically play the next episode when current one ends",
+                description = "Automatically play the next episode when current ends",
                 checked = autoPlayNextEpisode,
-                onCheckedChange = { viewModel.setAutoPlayNextEpisode(it) },
-                isOled = isOled
+                onCheckedChange = { viewModel.setAutoPlayNextEpisode(it) }
             )
         }
     }
@@ -995,51 +804,35 @@ private fun PlayerSettingsPage(
 private fun CacheSettingsPage(
     viewModel: MainViewModel,
     context: Context,
-    isOled: Boolean,
     onBack: () -> Unit
 ) {
     var cacheSize by remember { mutableLongStateOf(0L) }
     var showClearCacheConfirmation by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        cacheSize = viewModel.getVideoCacheSize(context)
-    }
+    LaunchedEffect(Unit) { cacheSize = viewModel.getVideoCacheSize(context) }
 
-    SettingsPageScaffold(
-        title = "Cache Management",
-        icon = Icons.Default.Memory,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.secondary,
-        onBack = onBack,
-        isOled = isOled
-    ) {
-        SettingsCard(isOled = isOled) {
+    SettingsPageScaffold(title = "Cache Management", onBack = onBack) {
+        SettingsCard {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column {
-                    Text(
-                        "Video Cache",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        formatFileSize(cacheSize),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Box(
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Video Cache", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(formatFileSize(cacheSize), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Button(
                     onClick = { showClearCacheConfirmation = true },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
-                    )
-                ) {
-                    Text("Clear")
-                }
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(10.dp)
+                ) { Text("Clear") }
             }
         }
     }
@@ -1057,189 +850,17 @@ private fun CacheSettingsPage(
                         showClearCacheConfirmation = false
                         Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Clear")
-                }
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Clear") }
             },
-            dismissButton = {
-                TextButton(onClick = { showClearCacheConfirmation = false }) {
-                    Text("Cancel")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showClearCacheConfirmation = false }) { Text("Cancel") } }
         )
-    }
-}
-
-@Composable
-private fun SettingsCard(
-    isOled: Boolean,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
-        ),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            content = content
-        )
-    }
-}
-
-@Composable
-private fun SettingsToggle(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    isOled: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
-    }
-}
-
-@Composable
-private fun SettingsSlider(
-    title: String,
-    description: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    valueLabel: String,
-    onValueChange: (Float) -> Unit,
-    isOled: Boolean,
-    minLabel: String,
-    maxLabel: String,
-    leadingIcon: ImageVector? = null
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (leadingIcon != null) {
-                    Icon(
-                        imageVector = leadingIcon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Text(
-                valueLabel,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Text(
-            description,
-            style = MaterialTheme.typography.bodySmall,
-            color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(minLabel, style = MaterialTheme.typography.labelSmall)
-            Text(maxLabel, style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
-@Composable
-private fun CategoryChip(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    isOled: Boolean,
-    enabled: Boolean = true,
-    disableMaterialColors: Boolean = false
-) {
-    FilterChip(
-        selected = isSelected,
-        onClick = onClick,
-        label = {
-            Text(
-                label,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    !enabled -> if (isOled) Color.White.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    isSelected -> Color.Black
-                    else -> Color.Unspecified
-                }
-            )
-        },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
-            selectedContainerColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-            labelColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
-            selectedLabelColor = Color.Black
-        )
-    )
-}
-
-private fun formatFileSize(bytes: Long): String {
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }
 
 @Composable
 private fun ExtensionsSettingsPage(
     viewModel: MainViewModel,
-    isOled: Boolean,
     onBack: () -> Unit
 ) {
     val defaultExtPackage by viewModel.defaultExtensionPackage.collectAsState()
@@ -1250,72 +871,53 @@ private fun ExtensionsSettingsPage(
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
 
-    SettingsPageScaffold(
-        title = "Extensions",
-        icon = Icons.Default.Extension,
-        iconBackgroundColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary,
-        onBack = onBack,
-        isOled = isOled,
-        scrollable = false
-    ) {
-        // Default extension picker
-        SettingsCard(isOled = isOled) {
+    SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false) {
+        SectionHeader("PREFERENCES")
+        SettingsCard {
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { showExtPicker = true },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
                 Column(modifier = Modifier.weight(1f)) {
+                    Text("Default Extension", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     Text(
-                        "Default Extension",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (defaultExtPackage.isNotEmpty()) {
-                            extUiState.extensions.find { it.packageName == defaultExtPackage }?.name
-                                ?: defaultExtPackage
-                        } else "None",
+                        if (defaultExtPackage.isNotEmpty()) extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage else "None",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    Icons.Default.ArrowDropDown,
-                    contentDescription = "Pick extension",
-                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
             }
         }
 
-        // Default subtitle language picker
-        SettingsCard(isOled = isOled) {
+        SettingsCard {
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Default Subtitle Language",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = defaultSubtitleLang,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Subscriptions, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
                 }
-                Icon(
-                    Icons.Default.ArrowDropDown,
-                    contentDescription = "Pick subtitle language",
-                    tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Default Subtitle Language", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(defaultSubtitleLang, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
             }
         }
+
+        ExtensionsScreen(viewModel = extViewModel)
 
         if (showExtPicker) {
             AlertDialog(
@@ -1324,21 +926,13 @@ private fun ExtensionsSettingsPage(
                 text = {
                     Column {
                         extUiState.extensions.forEach { ext ->
-                            TextButton(
-                                onClick = {
-                                    viewModel.setDefaultExtensionPackage(ext.packageName)
-                                    showExtPicker = false
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            TextButton(onClick = { viewModel.setDefaultExtensionPackage(ext.packageName); showExtPicker = false }, modifier = Modifier.fillMaxWidth()) {
                                 Text(ext.name, modifier = Modifier.fillMaxWidth())
                             }
                         }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { showExtPicker = false }) { Text("Cancel") }
-                }
+                confirmButton = { TextButton(onClick = { showExtPicker = false }) { Text("Cancel") } }
             )
         }
 
@@ -1349,15 +943,9 @@ private fun ExtensionsSettingsPage(
                 text = {
                     Column {
                         subtitleLanguages.forEach { lang ->
-                            TextButton(
-                                onClick = {
-                                    viewModel.setDefaultSubtitleLang(lang)
-                                    showSubtitleLangPicker = false
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            TextButton(onClick = { viewModel.setDefaultSubtitleLang(lang); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = lang,
+                                    lang,
                                     color = if (lang == defaultSubtitleLang) MaterialTheme.colorScheme.primary else Color.Unspecified,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1365,14 +953,17 @@ private fun ExtensionsSettingsPage(
                         }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") }
-                }
+                confirmButton = { TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") } }
             )
         }
+    }
+}
 
-        ExtensionsScreen(
-            viewModel = extViewModel,
-        )
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }

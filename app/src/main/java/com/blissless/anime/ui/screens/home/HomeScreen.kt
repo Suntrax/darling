@@ -7,6 +7,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -61,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -700,31 +703,32 @@ fun HomeScreen(
             )
         }
 
-        // Search overlay
+        // Search overlay - smooth expanding animation from search button position
         AnimatedVisibility(
             visible = showSearchOverlay,
-            enter = slideInVertically(
+            enter = scaleIn(
                 animationSpec = tween(
                     durationMillis = 300,
                     easing = FastOutSlowInEasing
                 ),
-                initialOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+                initialScale = 0.92f,
+                transformOrigin = TransformOrigin(0.5f, 0f)
             ) + fadeIn(
                 animationSpec = tween(
-                    durationMillis = 300,
-                    delayMillis = 0,
+                    durationMillis = 200,
                     easing = FastOutSlowInEasing
                 )
             ),
-            exit = slideOutVertically(
+            exit = scaleOut(
                 animationSpec = tween(
                     durationMillis = 250,
                     easing = FastOutSlowInEasing
                 ),
-                targetOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
+                targetScale = 0.92f,
+                transformOrigin = TransformOrigin(0.5f, 0f)
             ) + fadeOut(
                 animationSpec = tween(
-                    durationMillis = 250,
+                    durationMillis = 200,
                     easing = FastOutSlowInEasing
                 )
             )
