@@ -191,6 +191,7 @@ fun PlayerScreen(
     extensionOkHttpClient: okhttp3.OkHttpClient? = null,
     extensionVideoHeaders: Map<String, String> = emptyMap(),
     extensionServers: List<ServerInfo> = emptyList(),
+    extensionName: String = "",
     onExtensionServerChange: ((hosterName: String) -> Unit)? = null,
     onPrefetchNextExtensionEpisode: (() -> Unit)? = null,
 ) {
@@ -252,6 +253,7 @@ fun PlayerScreen(
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var subtitlesEnabled by remember { mutableStateOf(subtitleTracks.isNotEmpty()) }
+    var selectedSubtitleIndex by remember { mutableIntStateOf(0) }
 
     var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
@@ -499,11 +501,12 @@ fun PlayerScreen(
         val startPositionMs = if (savedPosition > 0) savedPosition else 0L
         
         val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
-            subtitleTracks.map { track ->
+            subtitleTracks.mapIndexed { index, track ->
+                val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
                 MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
                     .setMimeType(MimeTypes.TEXT_VTT)
                     .setLanguage(track.lang)
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .setSelectionFlags(flags)
                     .build()
             }
         } else if (subtitleUrl != null) {
@@ -814,11 +817,12 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         val playWhenReady = exoPlayer.playWhenReady
         val currentItem = exoPlayer.currentMediaItem ?: return
         val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
-            subtitleTracks.map { track ->
+            subtitleTracks.mapIndexed { index, track ->
+                val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
                 MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
                     .setMimeType(MimeTypes.TEXT_VTT)
                     .setLanguage(track.lang)
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .setSelectionFlags(flags)
                     .build()
             }
         } else if (subtitlesEnabled && subtitleUrl != null) {
@@ -1097,6 +1101,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                         fun catFromName(name: String): String = when {
                             name.contains("dub", ignoreCase = true) -> "DUB"
                             name.contains("sub", ignoreCase = true) -> "SUB"
+                            extensionServers.isNotEmpty() -> extensionName.ifEmpty { "EXT" }
                             else -> "EXT"
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
@@ -1174,7 +1179,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                                 Spacer(modifier = Modifier.height(8.dp))
                                             }
                                             if (extSubServers.isEmpty() && extDubServers.isEmpty()) {
-                                                Text("EXT", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                Text(extensionName.ifEmpty { "EXT" }, color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
                                                 extensionServers.forEach { server ->
                                                     ServerSelectorButton(
                                                         serverName = server.name,
@@ -1258,13 +1263,16 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                             if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
                                             else emptyList()
                                         }
-                                        trackList.forEach { track ->
+                                        trackList.forEachIndexed { index, track ->
+                                            val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
                                             DropdownMenuItem(
-                                                text = { Text(track.lang.uppercase(), color = if (subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                                text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
                                                 onClick = {
+                                                    selectedSubtitleIndex = index
                                                     rebuildWithSubtitles(true)
                                                     showSubtitleMenu = false
-                                                }
+                                                },
+                                                leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
                                             )
                                         }
                                     }

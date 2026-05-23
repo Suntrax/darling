@@ -2123,30 +2123,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun createResult(source: eu.kanade.tachiyomi.animesource.AnimeCatalogueSource, videos: List<Video>, videoUrl: String): ExtensionStreamResult {
-        val bestVideo = videos.maxByOrNull {
-            val res = it.resolution ?: 0
-            if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
-        } ?: videos.last()
-        val referer = bestVideo.headers?.let { h ->
-            (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                ?.let { h.value(it) }
-        } ?: ""
-        val videoHeaders = bestVideo.headers?.let { h ->
-            (0 until h.size).associate { h.name(it) to h.value(it) }
-        } ?: emptyMap()
-        return ExtensionStreamResult(
-            url = bestVideo.videoUrl,
-            referer = referer,
-            subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
-            videoTitle = bestVideo.videoTitle,
-            videos = videos,
-            videoHeaders = videoHeaders,
-            extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client,
-            source = source,
-        )
-    }
-
     data class ExtensionStreamResult(
         val url: String,
         val referer: String,
@@ -2244,95 +2220,90 @@ class MainViewModel : ViewModel() {
                     }
                 }
 
-                if (sEpisodes.isEmpty()) {
-                    Log.d(TAG_EXT, "No episodes found, trying direct video/hoster fetch")
-                    val syntheticEpisode = SEpisode.create().apply {
+                val sEpisode = if (sEpisodes.isEmpty()) {
+                    Log.d(TAG_EXT, "No episodes found, trying direct video fetch for movie/special")
+                    SEpisode.create().apply {
                         url = matchedSAnime.url
                         name = matchedSAnime.title
                         episode_number = 1.0f
                     }
-                    val hosters = try { source.getHosterList(syntheticEpisode) } catch (_: Throwable) { null }
-                    val videos = if (hosters != null && hosters.isNotEmpty()) {
-                        hosters.flatMap { hoster ->
-                            if (hoster.lazy) {
-                                try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                            } else {
-                                hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                            }
+                } else {
+                    sEpisodes.find { it.episode_number.toInt() == episodeNumber }
+                        ?: sEpisodes.firstOrNull { it.name?.contains("Episode $episodeNumber", ignoreCase = true) == true }
+                        ?: sEpisodes.firstOrNull { it.name?.contains("$episodeNumber", ignoreCase = true) == true }
+                        ?: sEpisodes.getOrNull(episodeNumber - 1)
+                        ?: run {
+                            Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (${sEpisodes.size} episodes available)")
+                            return@withContext null
                         }
-                    } else {
-                        try { source.getVideoList(syntheticEpisode) } catch (_: Throwable) { emptyList() }
-                    }
-                    if (videos.isNotEmpty()) {
-                        Log.d(TAG_EXT, "Got ${videos.size} videos directly (movie/special)")
-                        val derivedHosters = hosters ?: videos.map { video ->
-                            Hoster(hosterUrl = video.videoUrl, hosterName = video.videoTitle.take(50), videoList = listOf(video), lazy = false)
-                        }.distinctBy { it.hosterName }
-                        return@withContext createResult(source, videos, matchedSAnime.url).copy(hosters = derivedHosters)
-                    }
-                    Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (no episodes or direct videos)")
-                    return@withContext null
                 }
 
-                val sEpisode = sEpisodes.find { it.episode_number.toInt() == episodeNumber }
-                    ?: sEpisodes.firstOrNull { it.name?.contains("Episode $episodeNumber", ignoreCase = true) == true }
-                    ?: sEpisodes.firstOrNull { it.name?.contains("$episodeNumber", ignoreCase = true) == true }
-                    ?: sEpisodes.getOrNull(episodeNumber - 1)
-
-                if (sEpisode == null) {
-                    Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (${sEpisodes.size} episodes available)")
-                    return@withContext null
-                }
-
-                Log.d(TAG_EXT, "Episode url=${sEpisode.url} scanlator='${sEpisode.scanlator}' name='${sEpisode.name}' episode_number=${sEpisode.episode_number}")
-                Log.d(TAG_EXT, "Episode scanlator.isNullOrEmpty=${sEpisode.scanlator.isNullOrEmpty()} scanlator.length=${sEpisode.scanlator?.length}")
-                val baseUrl = try { (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.baseUrl } catch (_: Throwable) { null }
-                Log.d(TAG_EXT, "Source baseUrl=$baseUrl")
+                Log.d(TAG_EXT, "Episode url=${sEpisode.url} name='${sEpisode.name}' episode_number=${sEpisode.episode_number}")
                 if (source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
                     source.prepareNewEpisode(sEpisode, matchedSAnime)
                 }
+
+                // Fast path: fetch hosters first (much faster than episode-level getVideoList)
+                data class VideoWithHoster(val video: Video, val hosterName: String)
+                val allVideos = mutableListOf<VideoWithHoster>()
+                var resolvedHosters: List<Hoster>? = null
+
                 val hosters = try {
                     val h = source.getHosterList(sEpisode)
-                    Log.d(TAG_EXT, "getHosterList returned ${h?.size ?: 0} hosters")
-                    Log.d(TAG_EXT, "getHosterList hoster names: ${h?.map { it.hosterName }?.joinToString()}")
+                    Log.d(TAG_EXT, "getHosterList returned ${h.size} hosters")
                     h
-                } catch (e: Throwable) {
-                    Log.w(TAG_EXT, "getHosterList threw: ${e.message}")
-                    Log.w(TAG_EXT, "getHosterList exception type: ${e::class.qualifiedName}")
-                    e.printStackTrace()
-                    null
-                }
-                val videos = if (hosters != null && hosters.isNotEmpty()) {
-                    hosters.flatMap { hoster ->
-                        if (hoster.lazy) {
-                            try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                        } else {
-                            hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                        }
+                } catch (_: Throwable) { null }
+
+                if (hosters != null && hosters.isNotEmpty()) {
+                    resolvedHosters = hosters
+                    for (hoster in hosters) {
+                        val hosterVideos = try {
+                            if (hoster.lazy) source.getVideoList(hoster) else hoster.videoList ?: source.getVideoList(hoster)
+                        } catch (_: Throwable) { emptyList() }
+                        hosterVideos.forEach { allVideos.add(VideoWithHoster(it, hoster.hosterName)) }
                     }
                 } else {
-                    try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
+                    val directVideos = try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
+                    directVideos.forEach { allVideos.add(VideoWithHoster(it, "")) }
                 }
 
-                if (videos.isEmpty()) {
+                if (allVideos.isEmpty()) {
                     Log.e(TAG_EXT, "No videos found for episode $episodeNumber")
                     return@withContext null
                 }
 
-                val resolvedHosters = if (hosters.isNullOrEmpty()) {
-                    videos.map { video ->
-                        Hoster(hosterUrl = video.videoUrl, hosterName = video.videoTitle.take(50), videoList = listOf(video), lazy = false)
-                    }.distinctBy { it.hosterName }
-                } else {
-                    hosters
+                Log.d(TAG_EXT, "All ${allVideos.size} videos:")
+                allVideos.forEachIndexed { i, v ->
+                    Log.d(TAG_EXT, "  [$i] hoster='${v.hosterName}' title='${v.video.videoTitle}' url=${v.video.videoUrl.take(60)}")
                 }
 
-                val bestVideo = videos.maxByOrNull {
-                    val res = it.resolution ?: 0
-                    if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
-                } ?: videos.last()
+                val dubVideos = allVideos.filter {
+                    it.hosterName.contains("dub", ignoreCase = true) || it.video.videoTitle.contains("dub", ignoreCase = true)
+                }
+                val subVideos = allVideos.filter { v ->
+                    !v.hosterName.contains("dub", ignoreCase = true) && !v.video.videoTitle.contains("dub", ignoreCase = true) &&
+                    (v.hosterName.contains("sub", ignoreCase = true) || v.video.videoTitle.contains("sub", ignoreCase = true))
+                }
 
-                val videoUrl = bestVideo.videoUrl
+                Log.d(TAG_EXT, "dubVideos=${dubVideos.size} subVideos=${subVideos.size} other=${allVideos.size - dubVideos.size - subVideos.size}")
+
+                val preferDub = preferredCategory.value == "dub"
+                val preferSub = preferredCategory.value == "sub"
+                Log.d(TAG_EXT, "preferredCategory='${preferredCategory.value}' preferDub=$preferDub preferSub=$preferSub")
+                val candidates = when {
+                    preferDub && dubVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: dubVideos (preferDub)"); dubVideos }
+                    preferSub && subVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: subVideos (preferSub)"); subVideos }
+                    dubVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: dubVideos (fallback)"); dubVideos }
+                    subVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: subVideos (fallback)"); subVideos }
+                    else -> { Log.d(TAG_EXT, "Selected: allVideos (no match)"); allVideos }
+                }
+
+                val bestVideo = candidates.maxByOrNull {
+                    val res = it.video.resolution ?: 0
+                    if (res == 0) it.video.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
+                }?.video ?: allVideos.last().video
+                Log.d(TAG_EXT, "bestVideo.title='${bestVideo.videoTitle}' url=${bestVideo.videoUrl.take(60)}")
+
                 val referer = bestVideo.headers?.let { h ->
                     (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
                         ?.let { h.value(it) }
@@ -2341,15 +2312,37 @@ class MainViewModel : ViewModel() {
                     (0 until h.size).associate { h.name(it) to h.value(it) }
                 } ?: emptyMap()
 
-                Log.d(TAG_EXT, "Extension stream ready: $videoUrl")
+                val bestVideoHost = allVideos.find { it.video.videoUrl == bestVideo.videoUrl }
+                val derivedHosters = if (resolvedHosters != null) {
+                    val selectedName = bestVideoHost?.hosterName
+                    val reordered = resolvedHosters.toMutableList()
+                    val idx = selectedName?.let { n -> reordered.indexOfFirst { it.hosterName == n } } ?: -1
+                    if (idx > 0) {
+                        val item = reordered.removeAt(idx)
+                        reordered.add(0, item)
+                    }
+                    reordered
+                } else {
+                    val hosterForSelected = bestVideoHost?.let {
+                        Hoster(hosterUrl = it.video.videoUrl, hosterName = it.video.videoTitle.take(50), videoList = listOf(it.video), lazy = false)
+                    }
+                    val rest = allVideos.filter { it.video.videoUrl != bestVideo.videoUrl }.map {
+                        Hoster(hosterUrl = it.video.videoUrl, hosterName = it.video.videoTitle.take(50), videoList = listOf(it.video), lazy = false)
+                    }.distinctBy { it.hosterName }
+                    listOfNotNull(hosterForSelected) + rest
+                }
+
+                val videos = allVideos.map { it.video }
+
+                Log.d(TAG_EXT, "Extension stream ready: ${bestVideo.videoUrl}")
 
                 ExtensionStreamResult(
-                    url = videoUrl,
+                    url = bestVideo.videoUrl,
                     referer = referer,
                     subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
                     videoTitle = bestVideo.videoTitle,
                     videos = videos,
-                    hosters = resolvedHosters,
+                    hosters = derivedHosters,
                     extensionClient = extensionClient,
                     videoHeaders = videoHeaders,
                     source = source,

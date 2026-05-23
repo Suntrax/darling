@@ -73,6 +73,7 @@ data class ExtensionStreamParams(
     val allVideos: List<Video> = emptyList(),
     val sourcePackageName: String = "",
     val episodeUrl: String = "",
+    val extensionName: String = "",
 )
 
 private data class SearchResult(
@@ -154,6 +155,7 @@ fun ExtensionEpisodeScreen(
 
     fun playVideo(video: Video, source: AnimeCatalogueSource) {
         val referer = extractReferer(video)
+        val sourceName = source.name.ifEmpty { activeSource?.extension?.name?.removePrefix("Aniyomi: ") ?: "" }
         onPlayVideo(
             ExtensionStreamParams(
                 videoUrl = video.videoUrl,
@@ -163,6 +165,7 @@ fun ExtensionEpisodeScreen(
                 episodeNumber = selectedEpisode?.episode_number?.toInt() ?: 1,
                 extensionClient = (source as? AnimeHttpSource)?.client,
                 extensionHeaders = extractHeaders(video),
+                extensionName = sourceName,
             )
         )
     }

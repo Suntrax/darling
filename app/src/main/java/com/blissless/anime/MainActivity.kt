@@ -65,7 +65,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -481,6 +483,8 @@ fun MainScreen(
 
     var screenNavigationStack by remember { mutableStateOf<List<Int>>(emptyList()) }
 
+    var overlayOpen by remember { mutableStateOf(false) }
+
     val onNavigateBack: () -> Unit = {
         val stack = screenNavigationStack.toMutableList()
         if (stack.isNotEmpty()) {
@@ -742,7 +746,14 @@ fun MainScreen(
     }
 
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
-        val video = result.videos.getOrNull(index) ?: return
+        android.util.Log.d("PlayExtVideo", "result.url=${result.url.take(60)} result.videoTitle='${result.videoTitle}' videos.size=${result.videos.size}")
+        result.videos.forEachIndexed { i, v ->
+            android.util.Log.d("PlayExtVideo", "  videos[$i]: title='${v.videoTitle}' url=${v.videoUrl.take(60)}")
+        }
+        val video = result.videos.find { it.videoUrl == result.url }
+            ?: result.videos.getOrNull(index)
+            ?: return
+        android.util.Log.d("PlayExtVideo", "Selected: title='${video.videoTitle}' url=${video.videoUrl.take(60)}")
         streamError = null
         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode ${currentEpisode}"
         currentVideoUrl = video.videoUrl
@@ -765,15 +776,11 @@ fun MainScreen(
             android.util.Log.d("SubtitleDebug", "  Track[$i]: url=${t.url.take(100)} lang='${t.lang}'")
         }
         android.util.Log.d("SubtitleDebug", "=== End subtitles (${sortedTracks.size} tracks) ===")
-        currentServerName = "Extension"
-        currentCategory = "sub"
-        android.util.Log.d("ServerDebug", "=== Extension hosters ===")
-        result.hosters?.forEachIndexed { i, h ->
-            android.util.Log.d("ServerDebug", "  Hoster[$i]: name='${h.hosterName}' url=${h.hosterUrl}")
-        }
-        android.util.Log.d("ServerDebug", "=== End hosters (${result.hosters?.size ?: 0}) ===")
-        android.util.Log.d("ServerDebug", "extensionServers set to ${extensionServers.size} servers")
-        actualCategory = "sub"
+        extensionName = result.source?.name ?: ""
+        currentServerName = result.hosters?.firstOrNull()?.hosterName ?: extensionName.ifEmpty { "Extension" }
+        val hasDubHoster = result.hosters?.any { it.hosterName.contains("dub", ignoreCase = true) } == true
+        currentCategory = if (hasDubHoster || result.videoTitle.contains("dub", ignoreCase = true)) "dub" else "sub"
+        actualCategory = currentCategory
         requestedCategory = preferredCategory
         currentQualityOptions = emptyList()
         currentQuality = "Auto"
@@ -785,6 +792,31 @@ fun MainScreen(
             ServerInfo(name = hoster.hosterName, url = hoster.hosterUrl)
         }
         showPlayer = true
+        // After starting DUB playback, fetch SUB subtitles in background
+        if (currentCategory == "dub" && result.source != null && result.episode != null) {
+            val src = result.source!!
+            val ep = result.episode!!
+            scope.launch {
+                val episodeVideos = withContext(Dispatchers.IO) {
+                    try { src.getVideoList(ep) } catch (_: Throwable) { emptyList() }
+                }
+                val subVideo = episodeVideos.find {
+                    it.videoTitle.contains("sub", ignoreCase = true) && !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
+                } ?: episodeVideos.find {
+                    !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
+                }
+                if (subVideo != null) {
+                    android.util.Log.d("SubtitleDebug", "Background: merging ${subVideo.subtitleTracks.size} subtitle tracks from SUB '${subVideo.videoTitle}'")
+                    subVideo.subtitleTracks.forEachIndexed { i, t ->
+                        android.util.Log.d("SubtitleDebug", "  SUB track[$i]: lang='${t.lang}' url=${t.url.take(80)}")
+                    }
+                    currentSubtitleTracks = currentSubtitleTracks + subVideo.subtitleTracks
+                    if (currentSubtitleUrl == null) {
+                        currentSubtitleUrl = currentSubtitleTracks.firstOrNull()?.url
+                    }
+                }
+            }
+        }
     }
 
     fun playFromExtensionSearch(params: ExtensionStreamParams) {
@@ -793,9 +825,10 @@ fun MainScreen(
         currentVideoUrl = params.videoUrl
         currentReferer = params.referer
         currentSubtitleUrl = params.subtitleUrl
-        currentServerName = if (params.allHosters.isNotEmpty()) params.allHosters.first().hosterName else "Extension"
-        currentCategory = "sub"
-        actualCategory = "sub"
+        extensionName = params.extensionName.ifEmpty { params.allHosters.firstOrNull()?.hosterName ?: "Extension" }
+        currentServerName = if (params.allHosters.isNotEmpty()) params.allHosters.first().hosterName else extensionName
+        currentCategory = if (params.allVideos.firstOrNull()?.videoTitle?.contains("dub", ignoreCase = true) == true) "dub" else "sub"
+        actualCategory = currentCategory
         requestedCategory = preferredCategory
         currentQualityOptions = emptyList()
         currentQuality = "Auto"
@@ -1094,7 +1127,7 @@ fun MainScreen(
                 currentReferer = result.referer
                 currentSubtitleUrl = result.subtitleUrl
                 currentServerName = hosterName
-                currentCategory = if (hosterName.contains("dub", ignoreCase = true)) "dub" else "sub"
+                currentCategory = if (hosterName.contains("dub", ignoreCase = true) || result.videoTitle.contains("dub", ignoreCase = true)) "dub" else "sub"
                 currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                 currentQuality = result.videoTitle
                 extensionOkHttpClient = result.extensionClient
@@ -1841,6 +1874,7 @@ fun MainScreen(
                 extensionOkHttpClient = extensionOkHttpClient,
                 extensionVideoHeaders = extensionVideoHeaders,
                 extensionServers = extensionServers,
+                extensionName = extensionName,
                 onExtensionServerChange = { hosterName -> handleExtensionServerChange(hosterName) },
                 onPrefetchNextExtensionEpisode = { prefetchExtensionNextEpisode() },
             )
@@ -1876,6 +1910,7 @@ fun MainScreen(
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 HorizontalPager(
                     state = pagerState,
+                    userScrollEnabled = !overlayOpen,
                     beyondViewportPageCount = 2,
                     flingBehavior = PagerDefaults.flingBehavior(
                         state = pagerState,
@@ -1988,6 +2023,7 @@ fun MainScreen(
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
+                            onOverlayOpenChange = { overlayOpen = it },
                             favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onToggleFavorite = { anime -> 

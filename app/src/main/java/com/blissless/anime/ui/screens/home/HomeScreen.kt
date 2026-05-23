@@ -113,6 +113,7 @@ fun HomeScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onOverlayOpenChange: (Boolean) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap()
 ) {
@@ -146,6 +147,9 @@ fun HomeScreen(
 
     // Status list screen state
     var showStatusListScreen by remember { mutableStateOf(false) }
+    LaunchedEffect(showStatusListScreen) {
+        onOverlayOpenChange(showStatusListScreen)
+    }
     var statusListTitle by remember { mutableStateOf("") }
     var statusListIcon by remember { mutableStateOf(Icons.Default.PlayArrow) }
     var statusListType by remember { mutableStateOf("") }
