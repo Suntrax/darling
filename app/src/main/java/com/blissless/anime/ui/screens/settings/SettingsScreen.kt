@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Memory
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -83,6 +85,7 @@ import com.blissless.anime.R
 import com.blissless.anime.api.myanimelist.LoginProvider
 import com.blissless.anime.extensions.ExtensionsScreen
 import com.blissless.anime.extensions.ExtensionsViewModel
+import com.blissless.anime.update.UpdateViewModel
 import kotlin.math.round
 
 @Composable
@@ -110,7 +113,8 @@ fun SettingsScreen(
             SettingsGroup("stream", "Stream Settings", "Audio preferences and buffering", Icons.Default.PlayArrow, s.primary),
             SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions, s.secondary),
             SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Memory, s.tertiary),
-            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension, s.primary)
+            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension, s.primary),
+            SettingsGroup("about", "About", "Version and updates", Icons.Default.Info, s.secondary)
         )
     }
 
@@ -142,6 +146,7 @@ fun SettingsScreen(
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
                 "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "about" -> AboutSettingsPage(onBack = { selectedGroup = null })
             }
         }
     }
@@ -960,6 +965,110 @@ private fun ExtensionsSettingsPage(
             )
         }
     }
+}
+
+@Composable
+private fun AboutSettingsPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val updateViewModel: UpdateViewModel = viewModel()
+    val updateState by updateViewModel.uiState.collectAsState()
+    val packageInfo = remember {
+        context.packageManager.getPackageInfo(context.packageName, 0)
+    }
+    val currentVersion = packageInfo.versionName ?: ""
+
+    SettingsPageScaffold(title = "About", onBack = onBack) {
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Darling", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text("v$currentVersion (${packageInfo.versionCode})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        SectionHeader("UPDATES")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                val release = updateState.release
+                val isChecking = updateState.isChecking
+                val isDownloading = updateState.isDownloading
+                val error = updateState.error
+                val statusText = when {
+                    isChecking -> "Checking..."
+                    isDownloading -> "Downloading..."
+                    error != null -> error
+                    release != null -> {
+                        val tag = release.tagName.removePrefix("v")
+                        if (compareVersions(tag, currentVersion) > 0) "Update available: v$tag"
+                        else "Up to date (v$currentVersion)"
+                    }
+                    else -> "Tap to check for updates"
+                }
+                val hasUpdate = release != null && compareVersions(
+                    release.tagName.removePrefix("v"), currentVersion
+                ) > 0
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Check for Updates", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(statusText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (isChecking || isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Button(
+                        onClick = {
+                            if (hasUpdate) updateViewModel.downloadUpdate()
+                            else updateViewModel.checkForUpdates()
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            if (hasUpdate) "Update" else "Check",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun compareVersions(v1: String, v2: String): Int {
+    val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
+    val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
+    val maxLen = maxOf(parts1.size, parts2.size)
+    for (i in 0 until maxLen) {
+        val p1 = parts1.getOrElse(i) { 0 }
+        val p2 = parts2.getOrElse(i) { 0 }
+        if (p1 != p2) return p1 - p2
+    }
+    return 0
 }
 
 private fun formatFileSize(bytes: Long): String {
