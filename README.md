@@ -29,31 +29,12 @@ Download the APK from [Releases](https://github.com/Suntrax/darling/releases) an
 - AniList GraphQL API
 - MVVM Architecture
 
-## Project Structure
-
-```
-app/src/main/java/com/blissless/anime/
-├── api/          # API clients
-├── data/         # Repositories and data sources
-├── dialogs/      # Dialog components
-├── network/      # Network utilities
-├── player/       # Video player helpers
-├── ui/
-│   ├── components/  # Reusable UI components
-│   ├── screens/      # App screens
-│   └── theme/        # Material theming
-├── DarlingApplication.kt
-├── MainActivity.kt
-├── MainViewModel.kt
-└── OverlayState.kt
-```
-
 ## Forking the repository
 
 local.properties file with the following keys needed:
 
-ANIMEKAI_API_BASE_URL (can be adjusted to other providers)  
-CLIENT_ID_ANILIST  
+CLIENT_ID_ANILIST
+CLIENT_ID_ANILIST2
 TMDB_API_KEY  
 MAL_CLIENT_ID  
 
