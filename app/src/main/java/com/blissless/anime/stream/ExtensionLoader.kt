@@ -1,7 +1,6 @@
 package com.blissless.anime.stream
 
 import android.content.Context
-import android.util.Log
 import dalvik.system.DexClassLoader
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -29,10 +28,6 @@ class ParentFirstClassLoader(apkPath: String, dexOutput: String, parent: ClassLo
 
 class ExtensionLoader(private val context: Context) {
 
-    companion object {
-        private const val TAG = "ExtensionLoader"
-    }
-
     fun loadSources(extension: Extension): List<AnimeCatalogueSource> {
         val pm = context.packageManager
         val ai = pm.getApplicationInfo(extension.packageName, 0)
@@ -47,7 +42,6 @@ class ExtensionLoader(private val context: Context) {
 
         val sourceClass = extension.sourceClass
         if (sourceClass == null) {
-            Log.e(TAG, "sourceClass is null for ${extension.packageName}")
             return emptyList()
         }
 
@@ -57,8 +51,6 @@ class ExtensionLoader(private val context: Context) {
         } else {
             sourceClass
         }
-
-        Log.d(TAG, "Loading source class: $sourceClassName from ${extension.packageName}")
 
         return try {
             val clazz = loader.loadClass(sourceClassName)
@@ -72,12 +64,10 @@ class ExtensionLoader(private val context: Context) {
                     listOf(source)
                 }
                 else -> {
-                    Log.e(TAG, "Class $sourceClassName does not implement AnimeCatalogueSource or AnimeSourceFactory")
                     emptyList()
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load source class $sourceClassName from ${extension.packageName}", e)
             emptyList()
         }
     }

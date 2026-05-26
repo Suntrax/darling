@@ -1,8 +1,13 @@
 package com.blissless.anime.extensions
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,8 +16,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,20 +26,59 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExtensionsScreen(
-    viewModel: ExtensionsViewModel = viewModel()
+    viewModel: ExtensionsViewModel = viewModel(),
+    onBrowseChanged: ((Boolean) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
+    var selectedRepoUrl by remember { mutableStateOf<String?>(null) }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadExtensions()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(selectedRepoUrl) {
+        onBrowseChanged?.invoke(selectedRepoUrl != null)
+    }
+
+    BackHandler(enabled = selectedRepoUrl != null) {
+        selectedRepoUrl = null
+    }
+
+    val selectedRepoState = selectedRepoUrl?.let { url ->
+        uiState.repos.find { it.url == url }
+    }
+
+    if (selectedRepoState != null) {
+        ExtensionBrowserScreen(
+            repoState = selectedRepoState,
+            installedPackages = installedPackages,
+            onInstall = { viewModel.installExtension(it) },
+            onBack = { selectedRepoUrl = null },
+            onRemoveRepo = { url -> viewModel.removeRepo(url) }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -41,18 +86,22 @@ fun ExtensionsScreen(
                 title = { Text("Extensions") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
-                )
+                ),
+                actions = {
+                    IconButton(onClick = { viewModel.loadExtensions() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) {
-            item {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = repoUrl,
                     onValueChange = { repoUrl = it },
@@ -60,6 +109,13 @@ fun ExtensionsScreen(
                     placeholder = { Text("https://example.com/index.json") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    ),
                     trailingIcon = {
                         IconButton(
                             onClick = {
@@ -75,81 +131,96 @@ fun ExtensionsScreen(
                 )
             }
 
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+            if (uiState.repos.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "My Repos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
             items(uiState.repos, key = { it.url }) { repoState ->
-                RepoSection(
+                RepoCard(
                     repoState = repoState,
-                    installedPackages = installedPackages,
-                    onInstall = { viewModel.installExtension(it) },
+                    onClick = { selectedRepoUrl = repoState.url },
                     onRemoveRepo = { viewModel.removeRepo(repoState.url) }
                 )
             }
 
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Installed",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            when {
-                uiState.isLoading -> {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Installed",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-                uiState.error != null -> {
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = uiState.error!!,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.loadExtensions() }) {
-                                Text("Retry")
+
+                when {
+                    uiState.isLoading -> {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
                             }
                         }
                     }
-                }
-                uiState.extensions.isEmpty() && uiState.repos.isEmpty() -> {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "No extensions found",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Add a repo above to browse extensions,\nor install Aniyomi/Tachiyomi extension APKs",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    uiState.error != null -> {
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = uiState.error!!,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = { viewModel.loadExtensions() }) {
+                                    Text("Retry")
+                                }
+                            }
                         }
                     }
-                }
-                else -> {
-                    items(uiState.extensions, key = { it.packageName }) { ext ->
-                        val ctx = LocalContext.current
-                        InstalledExtensionCard(
-                            extension = ext,
-                            onSettings = { openAppSettings(ctx, ext.packageName) },
-                        )
+                    uiState.extensions.isEmpty() && uiState.repos.isEmpty() -> {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "No extensions found",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Add a repo above to browse extensions,\nor install Aniyomi/Tachiyomi extension APKs",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        items(uiState.extensions, key = { it.packageName }) { ext ->
+                            val ctx = LocalContext.current
+                            InstalledExtensionCard(
+                                extension = ext,
+                                onSettings = { openAppSettings(ctx, ext.packageName) },
+                            )
+                        }
                     }
                 }
             }
@@ -158,30 +229,88 @@ fun ExtensionsScreen(
 }
 
 @Composable
-private fun RepoSection(
+private fun RepoCard(
     repoState: RepoState,
-    installedPackages: Set<String>,
-    onInstall: (RepoExtension) -> Unit,
+    onClick: () -> Unit,
     onRemoveRepo: () -> Unit
 ) {
+    var showRemoveDialog by remember { mutableStateOf(false) }
+
+    if (showRemoveDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemoveDialog = false },
+            title = { Text("Remove repo?") },
+            text = {
+                Text("This will remove ${repoState.repo?.name ?: repoState.url} from your repos.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRemoveDialog = false
+                        onRemoveRepo()
+                    }
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = repoState.repo != null) { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = repoState.repo?.name ?: repoState.url,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                IconButton(onClick = onRemoveRepo) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = repoState.repo?.name ?: repoState.url,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val repo = repoState.repo
+                    if (!repo?.description.isNullOrBlank()) {
+                        Text(
+                            text = repo.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                val ctx = LocalContext.current
+                IconButton(
+                    onClick = {
+                        val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Repo URL", repoState.url))
+                        Toast.makeText(ctx, "URL copied", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy URL",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = { showRemoveDialog = true }) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Remove repo",
@@ -202,84 +331,23 @@ private fun RepoSection(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            repoState.repo?.extensions?.forEach { repoExt ->
-                HorizontalDivider()
-                ExtensionItem(
-                    repoExtension = repoExt,
-                    isInstalled = repoExt.packageName in installedPackages,
-                    onInstall = { onInstall(repoExt) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExtensionItem(
-    repoExtension: RepoExtension,
-    isInstalled: Boolean,
-    onInstall: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = repoExtension.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = repoExtension.lang.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                if (repoExtension.version.isNotBlank()) {
+            if (repoState.repo != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "v${repoExtension.version}",
+                        text = "${repoState.repo.extensions.size} extension(s)",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "Browse →",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-                if (repoExtension.nsfw) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text(
-                            text = "NSFW",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        if (isInstalled) {
-            Text(
-                text = "Installed",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-        } else {
-            FilledTonalIconButton(onClick = onInstall) {
-                Icon(
-                    Icons.Default.Download,
-                    contentDescription = "Install ${repoExtension.name}",
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
     }
@@ -300,7 +368,11 @@ private fun InstalledExtensionCard(
     onSettings: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier

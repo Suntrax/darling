@@ -869,55 +869,58 @@ private fun ExtensionsSettingsPage(
     val extUiState by extViewModel.uiState.collectAsState()
     var showExtPicker by remember { mutableStateOf(false) }
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
+    var browsingRepo by remember { mutableStateOf(false) }
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
 
     SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false) {
-        SectionHeader("PREFERENCES")
-        SettingsCard {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { showExtPicker = true },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
+        if (!browsingRepo) {
+            SectionHeader("PREFERENCES")
+            SettingsCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { showExtPicker = true },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Default Extension", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (defaultExtPackage.isNotEmpty()) extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage else "None",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Default Extension", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(
-                        if (defaultExtPackage.isNotEmpty()) extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage else "None",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            }
+
+            SettingsCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Subscriptions, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Default Subtitle Language", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(defaultSubtitleLang, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
                 }
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
             }
         }
 
-        SettingsCard {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Subscriptions, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Default Subtitle Language", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(defaultSubtitleLang, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
-            }
-        }
-
-        ExtensionsScreen(viewModel = extViewModel)
+        ExtensionsScreen(viewModel = extViewModel, onBrowseChanged = { browsingRepo = it })
 
         if (showExtPicker) {
             AlertDialog(

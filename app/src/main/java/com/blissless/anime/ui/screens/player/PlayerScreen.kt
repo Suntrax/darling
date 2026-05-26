@@ -375,19 +375,13 @@ fun PlayerScreen(
 
     val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders) {
         val bufferAheadMs = bufferAheadSeconds * 1000
-        // Use a higher max buffer to ensure more content is cached for offline viewing
-        val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000) // At least 3 minutes, or buffer ahead + 1 minute
+        val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                bufferAheadMs, // minBufferMs - buffer this much before playing
-                maxBufferMs, // maxBufferMs - buffer more for caching
-                1500, // bufferForPlaybackMs - start playing after this much
-                3000  // bufferForPlaybackAfterRebufferMs - resume after rebuffer
-            )
+            .setBufferDurationsMs(bufferAheadMs, maxBufferMs, 1500, 3000)
             .build()
         
-        // Get data source factory - use cache if available
         val cacheDataSourceFactory = onGetCacheDataSourceFactory(referer)
+        
         val upstreamFactory = if (extensionOkHttpClient != null && extensionVideoHeaders.isNotEmpty()) {
             val okHttpFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
             okHttpFactory.setDefaultRequestProperties(extensionVideoHeaders)
@@ -424,24 +418,22 @@ fun PlayerScreen(
                     }
 
                     override fun onPlaybackSuppressionReasonChanged(reason: Int) {
-                        // When playback is suppressed, player is likely waiting for buffer
                         isBuffering = isPlaying && reason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        // Ignore errors during server change - new player will handle playback
-                        if (isChangingServer) return
+                        if (isChangingServer) {
+                            return
+                        }
                         
-                        // Check if offline - if so, keep buffering state instead of showing error
                         if (!isNetworkAvailable()) {
                             isOffline = true
                             isBuffering = true
                             hasError = false
                             playbackError = null
-                            // Don't show controls, keep playing state
                         } else {
                             hasError = true
-                            playbackError = error.message ?: "Unknown playback error"
+                            playbackError = "${error.errorCode}: ${error.message ?: "Unknown"}"
                             showControls = true
                         }
                     }
@@ -461,12 +453,10 @@ fun PlayerScreen(
                             }
                         }
                         if (playbackState == Player.STATE_ENDED) {
-                            android.util.Log.d("NextEp", "STATE_ENDED autoPlayNextEpisode=$autoPlayNextEpisode onNextEpisode=${onNextEpisode != null} isChangingServer=$isChangingServer isLatestEpisode=$isLatestEpisode")
                             if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
                                 if (isLatestEpisode) {
                                     Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    android.util.Log.d("NextEp", "Invoking onNextEpisode from STATE_ENDED")
                                     onNextEpisode.invoke()
                                 }
                             }
@@ -489,13 +479,8 @@ fun PlayerScreen(
         maxBufferedPosition = 0L
         isOffline = false
 
-        // Stop any current playback before setting new media
         exoPlayer.stop()
-        
-        // Small delay to ensure player is fully stopped
         delay(100)
-        
-        // Clear any existing media items
         exoPlayer.clearMediaItems()
 
         val startPositionMs = if (savedPosition > 0) savedPosition else 0L
@@ -519,21 +504,24 @@ fun PlayerScreen(
             emptyList()
         }
         
+        val mimeType = if (videoUrl.contains(".m3u8")) MimeTypes.APPLICATION_M3U8
+            else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
+            else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
+            else MimeTypes.APPLICATION_M3U8
+        
         val mediaItem = MediaItem.Builder()
             .setUri(videoUrl)
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
+            .setMimeType(mimeType)
             .setSubtitleConfigurations(subtitleConfigs)
             .build()
         
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         
-        // Seek to saved position after prepare but before playback starts
         if (savedPosition > 0) {
             exoPlayer.seekTo(savedPosition)
         }
         
-        // Mark that playback has started
         hasPlaybackStarted = true
 
         hasTriggeredProgressUpdate = false
@@ -1343,7 +1331,6 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
 
                             IconButton(
                                 onClick = {
-                                    android.util.Log.d("NextEp", "SkipNext button clicked: onNextEpisode=${onNextEpisode != null} isLatestEpisode=$isLatestEpisode isLoadingStream=$isLoadingStream isChangingServer=$isChangingServer")
                                     onNextEpisode?.invoke()
                                 },
                                 modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),

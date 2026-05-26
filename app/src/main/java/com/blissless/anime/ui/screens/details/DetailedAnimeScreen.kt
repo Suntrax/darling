@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -330,12 +329,10 @@ fun DetailedAnimeScreen(
             detailedData = viewModel.fetchDetailedAnimeData(anime.id, anime.malId)
             // If fetch returns null (not found or error), keep using original anime data
             if (detailedData == null) {
-                android.util.Log.d("AniListFavorite", "DetailedScreen: fetch failed, using original data for id=${anime.id}")
                 detailedData = anime
             }
             relations = detailedData?.relations ?: anime.relations
         } catch (e: Exception) {
-            android.util.Log.e("AniListFavorite", "DetailedScreen: fetch error: ${e.message}")
             detailedData = anime
         } finally {
             isLoadingDetails = false
@@ -533,18 +530,6 @@ fun DetailedAnimeScreen(
             }
 
             IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, end = 16.dp)
-                    .align(Alignment.TopEnd)
-                    .size(40.dp)
-                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                    .zIndex(10f)
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
-            }
-
-            IconButton(
                 onClick = {
                     val shareText = buildString {
                         displayData.title?.let { append(it) }
@@ -560,13 +545,25 @@ fun DetailedAnimeScreen(
                     context.startActivity(shareIntent)
                 },
                 modifier = Modifier
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, end = 16.dp)
+                    .align(Alignment.TopEnd)
+                    .size(40.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .zIndex(10f)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
                     .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 16.dp)
                     .align(Alignment.TopStart)
                     .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
             Box(
@@ -1357,7 +1354,6 @@ fun DetailedAnimeScreen(
                 val filteredRelations = displayData.relations.filter { relation ->
                     relation.format != "MANGA" && relation.format != "NOVEL" && relation.format != "ONE_SHOT"
                 }
-                android.util.Log.d("DEBUG", ">>> Relations section: count=${filteredRelations.size}, isNotEmpty=${filteredRelations.isNotEmpty()}")
 
                 if (filteredRelations.isNotEmpty()) {
                     item {
@@ -1392,9 +1388,7 @@ fun DetailedAnimeScreen(
                                         color = MaterialTheme.colorScheme.onBackground)
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (filteredRelations.isNotEmpty()) {
-                                        android.util.Log.d("DEBUG", ">>> View All Relations clicked for animeId=${displayData.id}, title=${displayData.title}")
                                         TextButton(onClick = { 
-                                            android.util.Log.d("DETAILED_ANIME", "View All Relations clicked for animeId=${displayData.id}, title=${displayData.title}")
                                             onViewAllRelations(displayData.id, displayData.title ?: "") 
                                         }) {
                                             Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)

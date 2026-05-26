@@ -86,7 +86,6 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectAnime(source: SourceWithExt, anime: SAnime) {
-        android.util.Log.d("StreamVM", "selectAnime called: source=${source.extension.name} anime=${anime.title} url=${anime.url}")
         _uiState.value = _uiState.value.copy(
             selectedAnime = anime,
             selectedSource = source,
@@ -95,9 +94,7 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
             selectedEpisode = null,
         )
         viewModelScope.launch {
-            android.util.Log.d("StreamVM", "calling manager.getEpisodes...")
             val episodes = manager.getEpisodes(source.source, anime)
-            android.util.Log.d("StreamVM", "manager.getEpisodes returned ${episodes.size} episodes")
             _uiState.value = _uiState.value.copy(
                 episodes = episodes,
                 isLoadingEpisodes = false,
@@ -119,26 +116,21 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
         )
         viewModelScope.launch {
             val hosters = manager.getHosters(source.source, episode, anime)
-            android.util.Log.d("StreamVM", "hosters = $hosters (${hosters?.size})")
             _uiState.value = _uiState.value.copy(
                 isLoadingVideos = false,
                 hosters = hosters,
             )
             when {
                 hosters == null -> {
-                    android.util.Log.d("StreamVM", "getHosters threw, falling back to getVideosDirect")
                     launchPlayer(source.source, episode, anime)
                 }
                 hosters.size == 1 -> {
-                    android.util.Log.d("StreamVM", "Single hoster, getting videos")
                     loadAndPlay(source.source, hosters.first(), episode, anime)
                 }
                 hosters.isEmpty() -> {
-                    android.util.Log.d("StreamVM", "No hosters, trying direct video list")
                     launchPlayer(source.source, episode, anime)
                 }
                 else -> {
-                    android.util.Log.d("StreamVM", "${hosters.size} hosters available, auto-selecting first: ${hosters.first().hosterName}")
                     loadAndPlay(source.source, hosters.first(), episode, anime)
                 }
             }
@@ -161,11 +153,9 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
             val v = manager.getVideosFromHoster(source, hoster)
             if (source is AnimeHttpSource) {
                 PlayerData.extensionClient = source.client
-                android.util.Log.d("StreamVM", "Got extension OkHttpClient: ${PlayerData.extensionClient}")
             }
             v
         } catch (e: Throwable) {
-            android.util.Log.e("StreamVM", "getVideosFromHoster failed, trying fallback", e)
             try {
                 val v = manager.getVideosDirect(source, episode, anime)
                 if (source is AnimeHttpSource) {
@@ -173,14 +163,9 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 v
             } catch (e2: Throwable) {
-                android.util.Log.e("StreamVM", "fallback also failed", e2)
                 _uiState.value = _uiState.value.copy(error = "Failed to load videos: ${e2.message}")
                 emptyList()
             }
-        }
-        android.util.Log.d("StreamVM", "getVideosFromHoster returned ${videos.size} videos")
-        videos.forEach { v ->
-            android.util.Log.d("StreamVM", "  video: title='${v.videoTitle}' url='${v.videoUrl}' res=${v.resolution}")
         }
         _uiState.value = _uiState.value.copy(isLoadingVideos = false)
         launchPlayerWithVideos(videos)
@@ -194,13 +179,8 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
             }
             v
         } catch (e: Throwable) {
-            android.util.Log.e("StreamVM", "getVideosDirect failed", e)
             _uiState.value = _uiState.value.copy(error = "Failed to load videos: ${e.message}")
             emptyList()
-        }
-        android.util.Log.d("StreamVM", "launchPlayer returned ${videos.size} videos")
-        videos.forEach { v ->
-            android.util.Log.d("StreamVM", "  video: title='${v.videoTitle}' url='${v.videoUrl}' res=${v.resolution}")
         }
         _uiState.value = _uiState.value.copy(isLoadingVideos = false)
         launchPlayerWithVideos(videos)
@@ -208,7 +188,6 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun launchPlayerWithVideos(videos: List<Video>) {
         if (videos.isEmpty()) {
-            android.util.Log.e("StreamVM", "No videos found, cannot launch player")
             return
         }
         _uiState.value = _uiState.value.copy(pendingVideos = videos)
@@ -228,18 +207,13 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
             } else res > 0
         }.let { if (it < 0) oldVideos.indices.last else it }
 
-        android.util.Log.d("StreamVM", "Selected video index: $index, best: $bestIndex, oldVideos: ${oldVideos.size}")
-        android.util.Log.d("StreamVM", "Original videoUrl=${oldVideos[index].videoUrl}")
-
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingVideos = true)
             try {
                 // Re-fetch fresh video list just before playing (URL tokens expire)
                     val freshVideos = manager.getVideosDirect(source.source, episode, anime)
                 if (freshVideos.isNotEmpty()) {
-                    android.util.Log.d("StreamVM", "Fresh videos: ${freshVideos.size}, using index $index")
                     val freshVideo = freshVideos.getOrNull(index) ?: freshVideos.first()
-                    android.util.Log.d("StreamVM", "Fresh videoUrl=${freshVideo.videoUrl}")
                     val ctx = getApplication<Application>()
                     PlayerData.videos = freshVideos
                     PlayerData.animeTitle = source.extension.name.removePrefix("Aniyomi: ")
@@ -250,11 +224,8 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                     ctx.startActivity(Intent(ctx, PlayerActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     })
-                } else {
-                    android.util.Log.e("StreamVM", "Fresh video list is empty")
                 }
             } catch (e: Throwable) {
-                android.util.Log.e("StreamVM", "Failed to re-fetch videos, using stale URLs", e)
                 val ctx = getApplication<Application>()
                 PlayerData.videos = oldVideos
                 PlayerData.animeTitle = source.extension.name.removePrefix("Aniyomi: ")

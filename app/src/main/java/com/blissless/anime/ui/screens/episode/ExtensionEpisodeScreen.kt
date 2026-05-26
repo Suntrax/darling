@@ -225,18 +225,12 @@ fun ExtensionEpisodeScreen(
                 }
                 val source = result.source.source
                 var currentAnime = result.anime
-                android.util.Log.d("ExtEpisode", "Getting episodes for: ${currentAnime.title} url=${currentAnime.url}")
-                android.util.Log.d("ExtEpisode", "Source class: ${source::class.qualifiedName}")
                 var episodeList = sm.getEpisodes(source, currentAnime)
-                android.util.Log.d("ExtEpisode", "getEpisodes returned ${episodeList.size} episodes")
                 if (episodeList.isEmpty()) {
                     try {
                         currentAnime = sm.getAnimeDetails(source, currentAnime)
-                        android.util.Log.d("ExtEpisode", "getAnimeDetails returned url=${currentAnime.url}")
                         episodeList = sm.getEpisodes(source, currentAnime)
-                        android.util.Log.d("ExtEpisode", "getEpisodes after details returned ${episodeList.size} episodes")
                     } catch (e: Exception) {
-                        android.util.Log.e("ExtEpisode", "getAnimeDetails failed", e)
                     }
                 }
                 if (episodeList.isEmpty()) {
@@ -244,7 +238,6 @@ fun ExtensionEpisodeScreen(
                 }
                 episodes = episodeList
             } catch (e: Exception) {
-                android.util.Log.e("ExtEpisode", "onAnimeSelect failed", e)
                 error = "Failed to load episodes: ${e.message}"
             }
             isLoadingEpisodes = false

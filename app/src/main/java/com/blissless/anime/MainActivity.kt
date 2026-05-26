@@ -1,4 +1,4 @@
-package com.blissless.anime
+﻿package com.blissless.anime
 
 import android.content.Intent
 import android.os.Build
@@ -742,18 +742,15 @@ fun MainScreen(
 
     fun sanitizeEpisodeTitle(title: String?): String? {
         if (title == null) return null
-        return title.replaceFirst(Regex("^Episode\\s+\\d+[\\s:\\-–—]+", RegexOption.IGNORE_CASE), "").trim()
+        return title.replaceFirst(Regex("^Ep\\.?(?:isode)?\\s*\\d+[\\s:\\-â€“â€”]+", RegexOption.IGNORE_CASE), "").trim()
     }
 
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
-        android.util.Log.d("PlayExtVideo", "result.url=${result.url.take(60)} result.videoTitle='${result.videoTitle}' videos.size=${result.videos.size}")
         result.videos.forEachIndexed { i, v ->
-            android.util.Log.d("PlayExtVideo", "  videos[$i]: title='${v.videoTitle}' url=${v.videoUrl.take(60)}")
         }
         val video = result.videos.find { it.videoUrl == result.url }
             ?: result.videos.getOrNull(index)
             ?: return
-        android.util.Log.d("PlayExtVideo", "Selected: title='${video.videoTitle}' url=${video.videoUrl.take(60)}")
         streamError = null
         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode ${currentEpisode}"
         currentVideoUrl = video.videoUrl
@@ -771,11 +768,8 @@ fun MainScreen(
         }
         currentSubtitleTracks = sortedTracks
         currentSubtitleUrl = sortedTracks.firstOrNull()?.url
-        android.util.Log.d("SubtitleDebug", "=== Subtitles from extension (preferred=$preferredLang) ===")
         sortedTracks.forEachIndexed { i, t ->
-            android.util.Log.d("SubtitleDebug", "  Track[$i]: url=${t.url.take(100)} lang='${t.lang}'")
         }
-        android.util.Log.d("SubtitleDebug", "=== End subtitles (${sortedTracks.size} tracks) ===")
         extensionName = result.source?.name ?: ""
         currentServerName = result.hosters?.firstOrNull()?.hosterName ?: extensionName.ifEmpty { "Extension" }
         val hasDubHoster = result.hosters?.any { it.hosterName.contains("dub", ignoreCase = true) } == true
@@ -806,9 +800,7 @@ fun MainScreen(
                     !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
                 }
                 if (subVideo != null) {
-                    android.util.Log.d("SubtitleDebug", "Background: merging ${subVideo.subtitleTracks.size} subtitle tracks from SUB '${subVideo.videoTitle}'")
                     subVideo.subtitleTracks.forEachIndexed { i, t ->
-                        android.util.Log.d("SubtitleDebug", "  SUB track[$i]: lang='${t.lang}' url=${t.url.take(80)}")
                     }
                     currentSubtitleTracks = currentSubtitleTracks + subVideo.subtitleTracks
                     if (currentSubtitleUrl == null) {
@@ -864,11 +856,8 @@ fun MainScreen(
         streamError = null
         showPlayer = false
 
-        // Check if extension streaming should be used
         val extPackage = viewModel.defaultExtensionPackage.value
-        android.util.Log.d("ExtensionPlay", "loadAndPlayEpisode extPackage='$extPackage'")
         if (extPackage.isNotEmpty()) {
-            android.util.Log.d("ExtensionPlay", "Using extension flow for ep $episode")
             isExtensionFlow = true
             isLoadingStream = true
             extensionVideos = null
@@ -876,9 +865,10 @@ fun MainScreen(
             pendingExtResult = null
             showExtHosterDialog = false
             showExtVideoDialog = false
+            val fetchStartTime = System.currentTimeMillis()
             scope.launch {
                 val result = viewModel.playEpisodeWithExtension(anime, episode, extPackage)
-                android.util.Log.d("ExtensionPlay", "Extension result: ${result != null}")
+                val fetchDuration = System.currentTimeMillis() - fetchStartTime
                 pendingExtResult = result
                 if (result != null && result.videos.isNotEmpty()) {
                     extensionVideos = result.videos
@@ -899,7 +889,6 @@ fun MainScreen(
             return
         }
 
-        android.util.Log.d("ExtensionPlay", "No extension set, showing dialog")
         showNoExtDialog = true
         return
     }
@@ -937,13 +926,10 @@ fun MainScreen(
         if (pkg.isEmpty()) return
         scope.launch {
             if (episodeCache.containsKey(ep)) return@launch
-            android.util.Log.d("ExtensionPlay", "Fetching and caching episode $ep from $pkg")
             val result = viewModel.playEpisodeWithExtension(currentAnime!!, ep, pkg)
             if (result != null) {
                 episodeCache[ep] = result
-                android.util.Log.d("ExtensionPlay", "Episode $ep cached: ${result.url.take(50)}")
             } else {
-                android.util.Log.d("ExtensionPlay", "Episode $ep fetch failed")
             }
         }
     }
@@ -954,20 +940,16 @@ fun MainScreen(
             val nextEp = currentEpisode + 1
             val pkg = extensionSourcePackage
             if (pkg.isEmpty()) return@launch
-            android.util.Log.d("ExtensionPlay", "Prefetching next episode $nextEp from $pkg")
             val result = viewModel.playEpisodeWithExtension(currentAnime!!, nextEp, pkg)
             if (result != null) {
                 cachedExtensionNext = result
                 episodeCache[nextEp] = result
-                android.util.Log.d("ExtensionPlay", "Next episode $nextEp prefetched: ${result.url}")
             } else {
-                android.util.Log.d("ExtensionPlay", "Next episode $nextEp prefetch failed")
             }
         }
     }
 
     val onPreviousEpisode: () -> Unit = {
-        android.util.Log.d("NextEp", "onPreviousEpisode called: isChangingEpisode=$isChangingEpisode currentEpisode=$currentEpisode episodeCache[prevEp]=${episodeCache[currentEpisode - 1] != null}")
         if (!isChangingEpisode && currentAnime != null && currentEpisode > 1) {
             isChangingEpisode = true
 
@@ -975,7 +957,6 @@ fun MainScreen(
             val cached = episodeCache[prevEp]
 
             if (cached != null) {
-                android.util.Log.d("NextEp", "Using cached previous episode $prevEp: url=${cached.url.take(50)}")
                 currentEpisode = prevEp
                 currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $prevEp"
                 currentVideoUrl = cached.url
@@ -994,9 +975,7 @@ fun MainScreen(
                 isChangingEpisode = false
                 prefetchExtensionNextEpisode()
                 fetchAndCacheEpisode(prevEp - 1)
-                android.util.Log.d("NextEp", "Extension previous episode done, triggering playback")
             } else {
-                android.util.Log.d("NextEp", "Previous episode $prevEp not cached, fetching now")
                 isLoadingStream = true
                 scope.launch {
                     val pkg = extensionSourcePackage
@@ -1039,7 +1018,6 @@ fun MainScreen(
     }
 
     val onNextEpisode: () -> Unit = {
-        android.util.Log.d("NextEp", "onNextEpisode: isChangingEpisode=$isChangingEpisode currentAnime=${currentAnime != null} cachedExtensionNext=${cachedExtensionNext != null} epCache=${episodeCache[currentEpisode + 1] != null}")
         if (!isChangingEpisode && currentAnime != null) {
             isChangingEpisode = true
 
@@ -1047,7 +1025,6 @@ fun MainScreen(
             val cached = cachedExtensionNext ?: episodeCache[nextEp]
 
             if (cached != null) {
-                android.util.Log.d("NextEp", "Using cached next episode $nextEp")
                 cachedExtensionNext = null
                 currentEpisode = nextEp
                 currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $nextEp"
@@ -1068,9 +1045,7 @@ fun MainScreen(
                 isChangingEpisode = false
                 prefetchExtensionNextEpisode()
                 fetchAndCacheEpisode(nextEp - 1)
-                android.util.Log.d("NextEp", "Next episode done, triggering playback")
             } else {
-                android.util.Log.d("NextEp", "Next episode $nextEp not cached, fetching now")
                 isLoadingStream = true
                 scope.launch {
                     val pkg = extensionSourcePackage
@@ -1181,7 +1156,6 @@ fun MainScreen(
             triedIndex = (triedIndex + 1) % servers.size
             val nextServer = servers[triedIndex]
 
-            android.util.Log.d("AUTO_SERVER", ">>> Trying server: ${nextServer.name} (index $triedIndex)")
 
             // Update current server index immediately
             currentServerIndex = triedIndex
@@ -1389,8 +1363,6 @@ fun MainScreen(
                 )
             },
             onViewAllRelations = { animeId, title ->
-                android.util.Log.d("DEBUG", ">>> MainActivity onViewAllRelations lambda triggered: animeId=$animeId, title=$title")
-                android.util.Log.d("ALL_RELATIONS", ">>> onViewAllRelations called with animeId=$animeId, title=$title")
                 overlayState = OverlayState.AllRelationsDialog(
                     animeId = animeId, 
                     animeTitle = title,
@@ -1398,7 +1370,6 @@ fun MainScreen(
                     previousFirstAnime = exploreDialog.firstAnime,
                     previousIsFirstOpen = exploreDialog.isFirstOpen
                 )
-                android.util.Log.d("DEBUG", ">>> overlayState is now: $overlayState")
             }
         )
     }
@@ -1571,6 +1542,24 @@ fun MainScreen(
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
                 }
+            },
+            onCharacterClick = { id ->
+                overlayState = OverlayState.CharacterDialog(
+                    characterId = id,
+                    animeId = 0,
+                    previousAnime = characterDialog.previousAnime,
+                    previousFirstAnime = characterDialog.previousFirstAnime,
+                    previousIsFirstOpen = characterDialog.previousIsFirstOpen
+                )
+            },
+            onStaffClick = { id ->
+                overlayState = OverlayState.StaffDialog(
+                    staffId = id,
+                    animeId = 0,
+                    previousAnime = characterDialog.previousAnime,
+                    previousFirstAnime = characterDialog.previousFirstAnime,
+                    previousIsFirstOpen = characterDialog.previousIsFirstOpen
+                )
             }
         )
     }
@@ -1616,6 +1605,24 @@ fun MainScreen(
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
                 }
+            },
+            onCharacterClick = { id ->
+                overlayState = OverlayState.CharacterDialog(
+                    characterId = id,
+                    animeId = 0,
+                    previousAnime = staffDialog.previousAnime,
+                    previousFirstAnime = staffDialog.previousFirstAnime,
+                    previousIsFirstOpen = staffDialog.previousIsFirstOpen
+                )
+            },
+            onStaffClick = { id ->
+                overlayState = OverlayState.StaffDialog(
+                    staffId = id,
+                    animeId = 0,
+                    previousAnime = staffDialog.previousAnime,
+                    previousFirstAnime = staffDialog.previousFirstAnime,
+                    previousIsFirstOpen = staffDialog.previousIsFirstOpen
+                )
             }
         )
     }
@@ -1623,7 +1630,6 @@ fun MainScreen(
     // All Cast Screen
     val allCastDialog = overlayState as? OverlayState.AllCastDialog
     if (allCastDialog != null) {
-        android.util.Log.d("MAIN_DEBUG", "Showing AllCastScreen for animeId=${allCastDialog.animeId}")
         AllCastScreen(
             animeId = allCastDialog.animeId,
             animeTitle = allCastDialog.animeTitle,
@@ -1680,7 +1686,6 @@ fun MainScreen(
     // All Staff Screen
     val allStaffDialog = overlayState as? OverlayState.AllStaffDialog
     if (allStaffDialog != null) {
-        android.util.Log.d("MAIN_DEBUG", "Showing AllStaffScreen for animeId=${allStaffDialog.animeId}")
         AllStaffScreen(
             animeId = allStaffDialog.animeId,
             animeTitle = allStaffDialog.animeTitle,
@@ -1737,8 +1742,6 @@ fun MainScreen(
     // All Relations Screen
     val allRelationsDialog = overlayState as? OverlayState.AllRelationsDialog
     if (allRelationsDialog != null) {
-        android.util.Log.d("MAIN_DEBUG", "Showing AllRelationsScreen for animeId=${allRelationsDialog.animeId}")
-        android.util.Log.d("MAIN_DEBUG", ">>> About to call AllRelationsScreen")
         AllRelationsScreen(
             animeId = allRelationsDialog.animeId,
             animeTitle = allRelationsDialog.animeTitle,
@@ -1787,7 +1790,7 @@ fun MainScreen(
             onDismissRequest = { showNoExtDialog = false },
             title = { Text("No Default Extension") },
             text = {
-                Text("Go to Settings → Extensions to set a default extension for streaming.")
+                Text("Go to Settings â†’ Extensions to set a default extension for streaming.")
             },
             confirmButton = {
                 TextButton(onClick = { showNoExtDialog = false }) {
@@ -2010,7 +2013,6 @@ fun MainScreen(
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             },
                             onViewAllRelations = { animeId, animeTitle ->
-                                android.util.Log.d("DEBUG", ">>> MainActivity ExploreScreen onViewAllRelations: animeId=$animeId")
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             },
                             localAnimeStatus = localAnimeStatus
@@ -2037,6 +2039,29 @@ fun MainScreen(
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
                             onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
+                            onShowDetailedAnimeFromAniList = { aniListId ->
+                                scope.launch {
+                                    val detailedData = viewModel.fetchDetailedAnimeData(aniListId)
+                                    if (detailedData != null) {
+                                        val newAnime = ExploreAnime(
+                                            id = detailedData.id,
+                                            title = detailedData.title,
+                                            titleEnglish = detailedData.titleEnglish,
+                                            cover = detailedData.cover,
+                                            banner = detailedData.banner,
+                                            episodes = detailedData.episodes,
+                                            latestEpisode = detailedData.latestEpisode,
+                                            averageScore = detailedData.averageScore,
+                                            genres = detailedData.genres,
+                                            year = detailedData.year,
+                                            format = detailedData.format
+                                        )
+                                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                                    } else {
+                                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
                             onCharacterClick = { characterId ->
                                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
                             },
@@ -2050,7 +2075,6 @@ fun MainScreen(
                                 overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onViewAllRelations = { animeId, animeTitle ->
-                                android.util.Log.d("DEBUG", ">>> MainActivity HomeScreen onViewAllRelations: animeId=$animeId")
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             playbackPositions = playbackPositions

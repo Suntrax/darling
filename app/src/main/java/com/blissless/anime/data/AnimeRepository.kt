@@ -129,13 +129,6 @@ class AnimeRepository(
             parser = { it }
         )
 
-        if (result.error != null) {
-            android.util.Log.e("REPO_DEBUG", "GraphQL error: ${result.error}")
-        }
-        if (result.data == null) {
-            android.util.Log.e("REPO_DEBUG", "GraphQL returned no data")
-        }
-        
         return result.data
     }
 
@@ -568,7 +561,6 @@ class AnimeRepository(
                 val data = json.decodeFromString<ExploreResponse>(it)
                 data.data.Page.media.firstOrNull()
             } catch (e: Exception) {
-                android.util.Log.e("ANILIST_DEBUG", "Error finding anime by MAL ID: ${e.message}")
                 null
             }
         }
@@ -650,17 +642,11 @@ class AnimeRepository(
             }
         """.trimIndent()
 
-        android.util.Log.d("REPO_DEBUG", "Executing fetchDetailedAnime for id=$animeId")
-        
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
-            android.util.Log.d("REPO_DEBUG", "Raw response length: ${response.length}, preview: ${response.take(200)}")
             try {
                 val data = json.decodeFromString<DetailedAnimeResponse>(response)
-                android.util.Log.d("REPO_DEBUG", "Parsed detailed anime: id=${data.data.Media?.id}, title=${data.data.Media?.title?.romaji}")
                 data.data.Media
             } catch (e: Exception) {
-                android.util.Log.e("REPO_DEBUG", "Failed to parse detailed anime: ${e.message}")
-                android.util.Log.e("REPO_DEBUG", "Response preview: ${response.take(500)}")
                 null
             }
         }
@@ -727,7 +713,6 @@ class AnimeRepository(
                 val data = json.decodeFromString<CharacterResponse>(response)
                 data.data.Character
             } catch (e: Exception) {
-                android.util.Log.e("REPO_DEBUG", "Failed to parse character: ${e.message}")
                 null
             }
         }
@@ -741,25 +726,29 @@ class AnimeRepository(
                     name { full native }
                     image { large medium }
                     description(asHtml: false)
-                    anime: staffMedia(perPage: 10, sort: POPULARITY_DESC) {
-                        nodes {
-                            id
-                            title { romaji english }
-                            coverImage { extraLarge }
+                    anime: staffMedia(perPage: 15, sort: POPULARITY_DESC) {
+                        edges {
+                            node {
+                                id
+                                title { romaji english }
+                                coverImage { extraLarge }
+                            }
+                            staffRole
                         }
                     }
                 }
             }
         """.trimIndent()
 
-        return publicGraphqlRequest(query, mapOf("id" to staffId))?.let { response ->
-            try {
-                val data = json.decodeFromString<StaffResponse>(response)
-                data.data.Staff
-            } catch (e: Exception) {
-                android.util.Log.e("REPO_DEBUG", "Failed to parse staff: ${e.message}")
-                null
-            }
+        val response = publicGraphqlRequest(query, mapOf("id" to staffId))
+        if (response == null) {
+            return null
+        }
+        return try {
+            val data = json.decodeFromString<StaffResponse>(response)
+            data.data.Staff
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -782,10 +771,8 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<AllCharactersResponse>(response)
                 val characters = data.data.Media?.characters?.nodes
-                android.util.Log.d("REPO_DEBUG", "fetchAllCharacters: got ${characters?.size ?: 0} characters")
                 characters?.distinctBy { it.id }
             } catch (e: Exception) {
-                android.util.Log.e("REPO_DEBUG", "Failed to parse all characters: ${e.message}")
                 null
             }
         }
@@ -814,7 +801,6 @@ class AnimeRepository(
                 val staff = data.data.Media?.staff?.nodes
                 staff?.distinctBy { it.id }
             } catch (e: Exception) {
-                android.util.Log.e("REPO_DEBUG", "Failed to parse all staff: ${e.message}")
                 null
             }
         }
@@ -1512,6 +1498,8 @@ class AnimeRepository(
                                 averageScore
                                 genres
                                 seasonYear
+                                format
+                                status
                             }
                         }
                     }
@@ -1522,10 +1510,8 @@ class AnimeRepository(
         return graphqlRequest(query, mapOf("userId" to userId))?.let {
             try {
                 val response = json.decodeFromString<UserFavoritesResponse>(it)
-                android.util.Log.d("REPO_DEBUG", "UserFavorites response: ${response.data.User.favourites.anime.nodes.size} items")
                 response
             } catch (e: Exception) {
-                android.util.Log.e("REPO_DEBUG", "Failed to parse user favorites: ${e.message}")
                 null
             }
         }
@@ -1547,8 +1533,6 @@ class AnimeRepository(
     }
     
     suspend fun addAniListFavorite(mediaId: Int): Boolean {
-        android.util.Log.d("AniListFavorite", "addAniListFavorite called: mediaId=$mediaId")
-        
         val mutation = """
             mutation (${'$'}mediaId: Int) {
                 ToggleFavourite(animeId: ${'$'}mediaId) {
@@ -1569,19 +1553,14 @@ class AnimeRepository(
         
         val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
         if (result?.contains("\"isFavourite\":true") == true || result?.contains("\"isFavourite\": true") == true) {
-            android.util.Log.d("AniListFavorite", "  Already favorited, skipping")
             return true // Already favorited
         }
         
-        android.util.Log.d("AniListFavorite", "  Executing ToggleFavourite mutation")
         val success = graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
-        android.util.Log.d("AniListFavorite", "  Mutation result: $success")
         return success
     }
     
     suspend fun removeAniListFavorite(mediaId: Int): Boolean {
-        android.util.Log.d("AniListFavorite", "removeAniListFavorite called: mediaId=$mediaId")
-        
         val mutation = """
             mutation (${'$'}mediaId: Int) {
                 ToggleFavourite(animeId: ${'$'}mediaId) {
@@ -1602,19 +1581,14 @@ class AnimeRepository(
         
         val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
         if (result?.contains("\"isFavourite\":false") == true || result?.contains("\"isFavourite\": false") == true) {
-            android.util.Log.d("AniListFavorite", "  Already not favorited, skipping")
             return true // Already not favorited
         }
         
-        android.util.Log.d("AniListFavorite", "  Executing ToggleFavourite mutation")
         val success = graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
-        android.util.Log.d("AniListFavorite", "  Mutation result: $success")
         return success
     }
     
     suspend fun toggleAniListFavorite(mediaId: Int, addFavorite: Boolean): Boolean {
-        android.util.Log.d("AniListFavorite", "toggleAniListFavorite called: mediaId=$mediaId, addFavorite=$addFavorite")
-        
         if (addFavorite) {
             // Check if already favorited
             val checkQuery = """
@@ -1627,10 +1601,8 @@ class AnimeRepository(
             """.trimIndent()
             
             val result = graphqlRequest(checkQuery, mapOf("mediaId" to mediaId))
-            android.util.Log.d("AniListFavorite", "Check result: $result")
             
             if (result?.contains("\"isFavourite\":true") == true || result?.contains("\"isFavourite\": true") == true) {
-                android.util.Log.d("AniListFavorite", "Already favorited, skipping")
                 return true // Already favorited
             }
         }
@@ -1643,9 +1615,7 @@ class AnimeRepository(
             }
         """.trimIndent()
         
-        android.util.Log.d("AniListFavorite", "Executing toggle mutation for mediaId=$mediaId")
         val success = graphqlMutation(mutation, mapOf("mediaId" to mediaId)) != null
-        android.util.Log.d("AniListFavorite", "Toggle result: $success")
         return success
     }
 }

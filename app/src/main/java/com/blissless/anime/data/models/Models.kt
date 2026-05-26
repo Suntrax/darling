@@ -580,7 +580,9 @@ data class UserFavoriteAnime(
     val episodes: Int?,
     val averageScore: Int?,
     val genres: List<String>?,
-    val seasonYear: Int? = null
+    val seasonYear: Int? = null,
+    val format: String? = null,
+    val status: String? = null
 )
 
 @Serializable
@@ -965,7 +967,13 @@ data class StaffData(
 
 @Serializable
 data class StaffAnimeConnection(
-    val nodes: List<CharacterAnimeNode> = emptyList()
+    val edges: List<StaffAnimeEdge> = emptyList()
+)
+
+@Serializable
+data class StaffAnimeEdge(
+    val node: CharacterAnimeNode? = null,
+    val staffRole: String? = null
 )
 
 @Serializable

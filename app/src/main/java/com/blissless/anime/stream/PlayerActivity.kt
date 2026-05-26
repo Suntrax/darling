@@ -3,7 +3,6 @@ package com.blissless.anime.stream
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.TextureView
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
@@ -52,8 +51,6 @@ import java.util.concurrent.TimeUnit
 
 class PlayerActivity : ComponentActivity() {
 
-    companion object { private const val TAG = "PlayerActivity" }
-
     private var player: ExoPlayer? = null
     private var videoContainer: AspectRatioFrameLayout? = null
     private var subtitleView: SubtitleView? = null
@@ -62,14 +59,7 @@ class PlayerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val videos = PlayerData.videos.toList()
-        Log.d(TAG, "Received ${videos.size} videos")
-        videos.forEachIndexed { i, v ->
-            Log.d(TAG, "  Video[$i]: title='${v.videoTitle}' url='${v.videoUrl}' res=${v.resolution}")
-            Log.d(TAG, "    subtitleTracks: ${v.subtitleTracks.map { "${it.lang}:${it.url}" }}")
-            Log.d(TAG, "    audioTracks: ${v.audioTracks.map { "${it.lang}:${it.url}" }}")
-        }
         val startQuality = PlayerData.currentQualityIndex.coerceIn(0, videos.lastIndex)
-        Log.d(TAG, "Start quality index: $startQuality")
         var currentVideo by mutableStateOf(videos.getOrNull(startQuality))
         var showOverlay by mutableStateOf(true)
         var showQualitySheet by mutableStateOf(false)
@@ -96,14 +86,8 @@ class PlayerActivity : ComponentActivity() {
         }
 
         fun buildMediaItem(video: Video, subtitle: Track?): MediaItem {
-            Log.d(TAG, "buildMediaItem: videoUrl=${video.videoUrl}")
             val builder = MediaItem.Builder()
                 .setUri(android.net.Uri.parse(video.videoUrl))
-            video.headers?.let { h: okhttp3.Headers ->
-                val sb = StringBuilder("Video headers:")
-                for (i in 0 until h.size) sb.append(" ${h.name(i)}=${h.value(i)}")
-                Log.d(TAG, sb.toString())
-            }
             builder.setMediaMetadata(
                     androidx.media3.common.MediaMetadata.Builder()
                         .setTitle(PlayerData.animeTitle)
@@ -116,7 +100,6 @@ class PlayerActivity : ComponentActivity() {
                     track.url.contains(".srt") -> "application/x-subrip"
                     else -> "text/vtt"
                 }
-                Log.d(TAG, "  Adding subtitle: url=${track.url} lang=${track.lang} mime=$mime")
                 builder.setSubtitleConfigurations(
                     listOf(
                         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(track.url))
@@ -126,7 +109,7 @@ class PlayerActivity : ComponentActivity() {
                             .build()
                     )
                 )
-            } ?: Log.d(TAG, "  No subtitle selected")
+            }
             return builder.build()
         }
 
@@ -134,13 +117,6 @@ class PlayerActivity : ComponentActivity() {
             currentVideo = video
             val mediaItem = buildMediaItem(video, selectedSubtitle)
             val pos = player?.currentPosition ?: 0L
-            Log.d(TAG, "playVideo: switching at pos=$pos, subs=${selectedSubtitle?.lang}")
-            mediaItem.localConfiguration?.let { lc ->
-                Log.d(TAG, "  mediaItem subtitleConfigs: ${lc.subtitleConfigurations.size}")
-                lc.subtitleConfigurations.forEach { sc ->
-                    Log.d(TAG, "    config: uri=${sc.uri} mime=${sc.mimeType} lang=${sc.language} flags=${sc.selectionFlags}")
-                }
-            }
             player?.let { p ->
                 p.stop()
                 p.clearMediaItems()
@@ -153,18 +129,12 @@ class PlayerActivity : ComponentActivity() {
         }
 
         val extClient = PlayerData.extensionClient
-        Log.d(TAG, "extensionClient = $extClient")
         val firstVideo = videos.getOrNull(startQuality)
-        Log.d(TAG, "firstVideo: url=${firstVideo?.videoUrl} headers=${firstVideo?.headers} title=${firstVideo?.videoTitle}")
-        firstVideo?.headers?.let { h ->
-            for (i in 0 until h.size) Log.d(TAG, "  header: ${h.name(i)}=${h.value(i)}")
-        }
 
         player = if (extClient != null) {
             val dsFactory = OkHttpDataSource.Factory(extClient)
             firstVideo?.headers?.let { h ->
                 val props = (0 until h.size).associate { h.name(it) to h.value(it) }
-                Log.d(TAG, "Setting OkHttpDataSource default properties: $props")
                 dsFactory.setDefaultRequestProperties(props)
             }
             val msFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(dsFactory)
@@ -174,7 +144,6 @@ class PlayerActivity : ComponentActivity() {
         }.also { exo ->
             val first = videos.getOrNull(startQuality)
             if (first != null) {
-                Log.d(TAG, "Creating mediaSource for url=${first.videoUrl}")
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(android.net.Uri.parse(first.videoUrl))
 
@@ -203,28 +172,14 @@ class PlayerActivity : ComponentActivity() {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_READY) {
                         isPlaying = exo.playWhenReady
-                        val tracks = exo.currentTracks
-                        Log.d(TAG, "STATE_READY: groups=${tracks.groups.size}")
-                        tracks.groups.forEachIndexed { gi, g ->
-                            Log.d(TAG, "  Group[$gi]: type=${g.type} tracks=${g.length}")
-                            for (ti in 0 until g.length) {
-                                val t = g.getTrackFormat(ti)
-                                Log.d(TAG, "    Track[$ti]: id=${t.id} lang=${t.language} mime=${t.sampleMimeType}")
-                            }
-                        }
                     }
                 }
                 override fun onIsPlayingChanged(it: Boolean) {
                     isPlaying = it
                 }
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Log.e(TAG, "Player error: errorCode=${error.errorCode} msg=${error.message}")
-                    Log.e(TAG, "  cause=${error.cause}")
-                    error.cause?.let { Log.e(TAG, "  causeStackTrace:", it) }
                 }
                 override fun onPlayerErrorChanged(error: androidx.media3.common.PlaybackException?) {
-                    Log.e(TAG, "Player error changed: ${error?.message}")
-                    error?.cause?.let { Log.e(TAG, "  cause=${it}") }
                 }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     val ratio = if (videoSize.width == 0 || videoSize.height == 0) 0f
@@ -238,13 +193,9 @@ class PlayerActivity : ComponentActivity() {
                     videoContainer?.setAspectRatio(ratio)
                 }
                 override fun onCues(cues: List<Cue>) {
-                    Log.d(TAG, "onCues(List) called, cues=${cues.size}")
-                    cues.forEachIndexed { i, c -> Log.d(TAG, "  Cue[$i]: text='${c.text}'") }
                     subtitleView?.setCues(cues)
                 }
                 override fun onCues(cueGroup: CueGroup) {
-                    Log.d(TAG, "onCues(CueGroup) called, cues=${cueGroup.cues.size} timeUs=${cueGroup.presentationTimeUs}")
-                    cueGroup.cues.forEachIndexed { i, c -> Log.d(TAG, "  Cue[$i]: text='${c.text}'") }
                     subtitleView?.setCues(cueGroup.cues)
                 }
             })

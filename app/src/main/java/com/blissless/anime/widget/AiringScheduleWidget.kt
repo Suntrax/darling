@@ -8,7 +8,6 @@ import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
-import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -69,7 +68,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-private const val TAG = "AiringWidget"
 private const val PREFS_NAME = "airing_schedule_widget"
 private const val ANILIST_PREFS = "anilist_prefs"
 private const val KEY_DATA = "schedule_data"
@@ -130,7 +128,6 @@ object AiringScheduleWidget : GlanceAppWidget() {
                     data = fresh
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Initial quick fetch failed: ${e.message}")
             }
         }
 
@@ -163,11 +160,8 @@ object AiringScheduleWidget : GlanceAppWidget() {
     private fun loadData(prefs: android.content.SharedPreferences): WidgetScheduleData {
         val s = prefs.getString(KEY_DATA, null) ?: return WidgetScheduleData(emptyList())
         return try {
-            val data = json.decodeFromString<WidgetScheduleData>(s)
-            Log.d(TAG, "Loaded ${data.entries.size} entries from cache, lastUpdate=${data.lastUpdateTime}")
-            data
+            json.decodeFromString<WidgetScheduleData>(s)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to decode cached data", e)
             WidgetScheduleData(emptyList())
         }
     }
@@ -179,7 +173,6 @@ object AiringScheduleWidget : GlanceAppWidget() {
         val now = System.currentTimeMillis()
         val last = prefs.getLong(KEY_REFRESH_TIME, 0)
         if (!bypassCooldown && last != 0L && now - last < COOLDOWN_MS) {
-            Log.d(TAG, "Refresh skipped (cooldown)")
             return
         }
         prefs.edit().putLong(KEY_REFRESH_TIME, now).apply()
@@ -411,7 +404,6 @@ private fun saveWidgetData(context: Context, data: WidgetScheduleData) {
         .putString(KEY_DATA, saved)
         .putLong(KEY_UPD, System.currentTimeMillis())
         .commit()
-    Log.d(TAG, "Saved ${data.entries.size} entries to cache")
 }
 
 private fun roundCorners(bitmap: Bitmap, radiusPx: Float): Bitmap {
@@ -432,14 +424,11 @@ private suspend fun updateWidget(context: Context) {
         val glanceIds = glanceManager.getGlanceIds(AiringScheduleWidget::class.java)
         if (glanceIds.isNotEmpty()) {
             glanceIds.forEach { id -> AiringScheduleWidget.update(context, id) }
-            Log.d(TAG, "Updated ${glanceIds.size} glance IDs directly")
             return
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Glance direct update failed", e)
     }
     try { AiringScheduleWidget.updateAll(context) } catch (e: Exception) {
-        Log.e(TAG, "updateAll fallback failed", e)
     }
 }
 
@@ -465,10 +454,8 @@ private fun cacheCovers(context: Context, entries: List<WidgetAiringEntry>) {
                 val rounded = roundCorners(scaled, 8f)
                 FileOutputStream(file).use { rounded.compress(Bitmap.CompressFormat.JPEG, 80, it) }
                 rounded.recycle()
-                Log.d(TAG, "Cached cover ${entry.id} (${sw}x$sh)")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Cover cache failed for ${entry.id}", e)
         }
     }
 }
@@ -477,17 +464,14 @@ class AiringScheduleWorker(context: Context, params: WorkerParameters) : Corouti
 
     override suspend fun doWork(): Result {
         return try {
-            Log.d(TAG, "Fetching schedule")
             val token = applicationContext.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
                 .getString("auth_token", null)
             val data = WidgetScheduleFetcher.fetch(applicationContext, token)
             cacheCovers(applicationContext, data.entries)
             saveWidgetData(applicationContext, data)
             updateWidget(applicationContext)
-            Log.d(TAG, "Updated ${data.entries.size} entries")
             Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed", e)
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
@@ -505,7 +489,6 @@ object WidgetScheduleFetcher {
         }
         val resp = execute(body.toString(), authToken, shortTimeout = true)
         val parsed = parse(resp)
-        Log.d(TAG, "Quick fetch got ${parsed.size} entries")
         return WidgetScheduleData(parsed, System.currentTimeMillis())
     }
 
@@ -522,18 +505,15 @@ object WidgetScheduleFetcher {
                 }
                 val resp = execute(body.toString(), authToken)
                 val parsed = parse(resp)
-                if (parsed.isEmpty()) { Log.d(TAG, "Page $page returned empty"); break }
+                if (parsed.isEmpty()) { break }
                 entries.addAll(parsed)
-                Log.d(TAG, "Page $page fetched ${parsed.size} entries")
                 if (parsed.size < 50) break
                 page++
             } catch (e: Exception) {
-                Log.e(TAG, "Fetch page $page failed: ${e.message}")
                 break
             }
         }
 
-        // Merge with cached past entries so today's already-aired anime persist
         val cached = loadCached(context)
         if (cached != null) {
             val newIds = entries.map { it.id }.toSet()
@@ -545,14 +525,11 @@ object WidgetScheduleFetcher {
             }
             if (cachedPast.isNotEmpty()) {
                 entries.addAll(cachedPast)
-                Log.d(TAG, "Merged ${cachedPast.size} cached past entries")
             }
             entries.sortBy { it.airingAt }
         }
 
-        Log.d(TAG, "Total entries after merge: ${entries.size}")
         if (entries.isEmpty()) {
-            Log.w(TAG, "No entries fetched, falling back to cache")
             loadCached(context)?.let { return it }
         }
         return WidgetScheduleData(entries, System.currentTimeMillis())

@@ -111,6 +111,7 @@ fun HomeScreen(
     onLoginClick: () -> Unit = {},
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
     onShowDetailedAnimeFromMal: (Int) -> Unit = {},
+    onShowDetailedAnimeFromAniList: (Int) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
@@ -920,7 +921,6 @@ fun HomeScreen(
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllRelations = { animeId, title ->
-                android.util.Log.d("DEBUG", ">>> HomeScreen DetailedAnimeScreen onViewAllRelations: animeId=$animeId")
                 onViewAllRelations(animeId, title)
             }
         )
@@ -943,7 +943,8 @@ fun HomeScreen(
             preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showUserProfileDialog = false },
             onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) },
-            onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal
+            onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
+            onShowDetailedAnimeFromAniList = onShowDetailedAnimeFromAniList
         )
     }
 

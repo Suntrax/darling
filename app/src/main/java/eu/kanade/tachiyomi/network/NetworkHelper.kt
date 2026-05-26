@@ -42,9 +42,7 @@ class NetworkHelper {
                 }
                 val response = chain.proceed(newRequest)
                 if (response.code == 500) {
-                    android.util.Log.e("HTTP_500", "URL: ${request.url}")
-                    android.util.Log.e("HTTP_500", "Headers: ${request.headers}")
-                    android.util.Log.e("HTTP_500", "Body (first 2k): ${response.peekBody(2048).string()}")
+                    // HTTP 500 logged silently
                 }
                 response
             }

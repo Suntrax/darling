@@ -53,67 +53,48 @@ fun OfflineFavoritesDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.85f),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isOled) Color.Black else Color(0xFF1A1A1A)
-            )
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AsyncImage(
-                        model = R.mipmap.ic_launcher_round,
-                        contentDescription = "Darling",
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
                             "My Favorites",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
                             "${favorites.size} anime (offline)",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, "Close", tint = Color.White)
+                        Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
+                Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     if (favorites.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    Icons.Default.FavoriteBorder,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.5f),
+                                    Icons.Default.FavoriteBorder, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                     modifier = Modifier.size(48.dp)
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                Text("No favorites yet", color = Color.White.copy(alpha = 0.7f))
+                                Text("No favorites yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     "Tap the heart icon on anime to add them",
-                                    color = Color.White.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -122,19 +103,12 @@ fun OfflineFavoritesDialog(
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(favorites.values.toList()) { fav ->
                                 OfflineFavoriteItem(
-                                    favorite = fav,
-                                    isOled = isOled,
+                                    favorite = fav, isOled = isOled,
                                     onClick = {
                                         val exploreAnime = ExploreAnime(
-                                            id = fav.id,
-                                            title = fav.title,
-                                            cover = fav.cover,
-                                            banner = fav.banner,
-                                            episodes = 0,
-                                            latestEpisode = null,
-                                            averageScore = fav.averageScore,
-                                            genres = emptyList(),
-                                            year = fav.year
+                                            id = fav.id, title = fav.title, cover = fav.cover,
+                                            banner = fav.banner, episodes = 0, latestEpisode = null,
+                                            averageScore = fav.averageScore, genres = emptyList(), year = fav.year
                                         )
                                         onAnimeClick(exploreAnime)
                                     },
@@ -151,20 +125,13 @@ fun OfflineFavoritesDialog(
 
 @Composable
 private fun OfflineFavoriteItem(
-    favorite: StoredFavorite,
-    isOled: Boolean,
-    onClick: () -> Unit,
-    onRemove: () -> Unit
+    favorite: StoredFavorite, isOled: Boolean,
+    onClick: () -> Unit, onRemove: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -172,17 +139,14 @@ private fun OfflineFavoriteItem(
         ) {
             Box(
                 modifier = Modifier
-                    .width(50.dp)
-                    .height(70.dp)
+                    .width(50.dp).height(70.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Gray.copy(alpha = 0.3f))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             ) {
                 if (favorite.cover.isNotEmpty()) {
                     AsyncImage(
-                        model = favorite.cover,
-                        contentDescription = favorite.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        model = favorite.cover, contentDescription = favorite.title,
+                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                     )
                 }
             }
@@ -192,24 +156,17 @@ private fun OfflineFavoriteItem(
                     favorite.title.ifEmpty { "Anime" },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
                 favorite.year?.let { year ->
-                    Text(
-                        "$year",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
+                    Text("$year", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             IconButton(onClick = onRemove) {
                 Icon(
-                    Icons.Filled.Favorite,
-                    contentDescription = "Remove from favorites",
-                    tint = Color(0xFFFF1744),
-                    modifier = Modifier.size(28.dp)
+                    Icons.Filled.Favorite, "Remove from favorites",
+                    tint = Color(0xFFFF1744), modifier = Modifier.size(24.dp)
                 )
             }
         }

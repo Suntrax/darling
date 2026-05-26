@@ -1,7 +1,6 @@
 package com.blissless.anime.stream
 
 import android.content.Context
-import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -16,11 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class SourceManager(private val context: Context) {
-
-    companion object {
-        private const val TAG = "SourceManager"
-    }
-
     private val detector = ExtensionDetector(context)
     private val loader = ExtensionLoader(context)
     private var sources: List<SourceWithExt> = emptyList()
@@ -39,18 +33,14 @@ class SourceManager(private val context: Context) {
     suspend fun loadSources() {
         withContext(Dispatchers.IO) {
             val extensions = detector.detectInstalledExtensions()
-            Log.d(TAG, "Detected ${extensions.size} extensions: ${extensions.map { "${it.name} (${it.packageName}) sourceClass=${it.sourceClass}" }}")
             sources = extensions.flatMap { ext ->
                 try {
                     val loaded = loader.loadSources(ext)
-                    Log.d(TAG, "Loaded ${loaded.size} sources from ${ext.packageName}")
                     loaded.map { SourceWithExt(it, ext) }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to load sources from ${ext.packageName}", e)
                     emptyList()
                 }
             }
-            Log.d(TAG, "Total loaded sources: ${sources.size}")
         }
     }
 
@@ -68,7 +58,6 @@ class SourceManager(private val context: Context) {
                         onProgress(sw, page.animes)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Search failed for ${sw.extension.packageName}", e)
                 }
             }
         }
@@ -76,19 +65,9 @@ class SourceManager(private val context: Context) {
 
     suspend fun getEpisodes(source: AnimeCatalogueSource, anime: SAnime): List<SEpisode> {
         return withContext(Dispatchers.IO) {
-            Log.d(TAG, "getEpisodes: source=${source.name} sourceClass=${source::class.qualifiedName} anime.title=${anime.title} anime.url=${anime.url}")
-            Log.d(TAG, "  source.javaClass=${source.javaClass}")
-            Log.d(TAG, "  getEpisodeList method exists: ${source.javaClass.methods.any { it.name == "getEpisodeList" }}")
-            Log.d(TAG, "  super class: ${source.javaClass.superclass?.name}")
             try {
-                val result = source.getEpisodeList(anime)
-                Log.d(TAG, "getEpisodes OK: returned ${result.size} episodes")
-                result.forEachIndexed { i, ep ->
-                    Log.d(TAG, "  episode[$i]: name=${ep.name} url=${ep.url} ep_num=${ep.episode_number}")
-                }
-                result
+                source.getEpisodeList(anime)
             } catch (e: Exception) {
-                Log.e(TAG, "getEpisodeList EXCEPTION", e)
                 throw e
             }
         }
@@ -96,29 +75,25 @@ class SourceManager(private val context: Context) {
 
     suspend fun getAnimeDetails(source: AnimeCatalogueSource, anime: SAnime): SAnime {
         return withContext(Dispatchers.IO) {
-            source.getAnimeDetails(anime)
+            try {
+                source.getAnimeDetails(anime)
+            } catch (e: Exception) {
+                throw e
+            }
         }
     }
 
     suspend fun getHosters(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Hoster>? {
         return withContext(Dispatchers.IO) {
-            Log.d(TAG, "getHosters episode: url=${episode.url} scanlator=${episode.scanlator} name=${episode.name}")
-            Log.d(TAG, "getHosters source: ${source.name} class=${source::class.qualifiedName}")
             if (anime != null && source is AnimeHttpSource) {
-                Log.d(TAG, "getHosters calling prepareNewEpisode")
                 source.prepareNewEpisode(episode, anime)
             }
             try {
-                source.getHosterList(episode).also {
-                    Log.d(TAG, "getHosters returned ${it.size} hosters: ${it.map { h -> h.hosterName }}")
-                }
+                source.getHosterList(episode)
             } catch (e: Throwable) {
-                Log.e(TAG, "getHosters failed", e)
-                // Try to derive hosters from video list as fallback
                 try {
                     val videos = source.getVideoList(episode)
                     if (videos.isNotEmpty()) {
-                        Log.d(TAG, "getHosters fallback: deriving from ${videos.size} videos")
                         val derivedHosters = videos.map { video ->
                             Hoster(
                                 hosterUrl = video.videoUrl,
@@ -151,11 +126,8 @@ class SourceManager(private val context: Context) {
                 source.prepareNewEpisode(episode, anime)
             }
             try {
-                source.getVideoList(episode).also {
-                    Log.d(TAG, "getVideosDirect returned ${it.size} videos")
-                }
+                source.getVideoList(episode)
             } catch (e: Throwable) {
-                Log.e(TAG, "getVideosDirect failed", e)
                 emptyList()
             }
         }
@@ -167,31 +139,22 @@ class SourceManager(private val context: Context) {
                 source.prepareNewEpisode(episode, anime)
             }
             val hosters = try {
-                source.getHosterList(episode).also {
-                    Log.d(TAG, "getHosterList returned ${it.size} hosters")
-                }
+                source.getHosterList(episode)
             } catch (e: Throwable) {
-                Log.e(TAG, "getHosterList failed", e)
                 null
             }
             if (hosters != null && hosters.isNotEmpty()) {
                 hosters.flatMap { hoster ->
                     if (hoster.lazy) {
-                        if (hoster.hosterUrl.isNotEmpty()) {
-                            source.getVideoList(hoster)
-                        } else {
-                            source.getVideoList(hoster)
-                        }
+                        source.getVideoList(hoster)
                     } else {
                         hoster.videoList ?: source.getVideoList(hoster)
                     }
                 }
             } else {
-                Log.d(TAG, "No hosters, trying getVideoList(episode) directly")
                 try {
                     source.getVideoList(episode)
                 } catch (e: Throwable) {
-                    Log.e(TAG, "getVideoList(episode) also failed", e)
                     emptyList()
                 }
             }
@@ -203,7 +166,6 @@ class SourceManager(private val context: Context) {
             try {
                 (source as? AnimeHttpSource)?.getVideoUrl(video) ?: video.videoUrl
             } catch (e: Throwable) {
-                Log.e(TAG, "resolveVideoUrl failed", e)
                 video.videoUrl
             }
         }

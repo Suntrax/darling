@@ -49,7 +49,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
-import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -61,8 +60,6 @@ import okhttp3.OkHttpClient
 class MainViewModel : ViewModel() {
 
     companion object {
-        private const val TAG = "MainViewModel"
-        private const val TAG_EXT = "ExtensionStream"
         private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
         private const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
         private const val SYNC_DEBOUNCE_MS = 2000L // 2 seconds debounce for API sync
@@ -117,8 +114,6 @@ class MainViewModel : ViewModel() {
         val existingSync = pendingSyncs[mediaId]
         val resolvedMalId = malId ?: existingSync?.malId ?: cacheManager.detailedAnimeCache.value[mediaId]?.malId
 
-        android.util.Log.d("MAL_DEBUG", "queueSync called: mediaId=$mediaId, type=$type, malId=$malId, resolvedMalId=$resolvedMalId, status=$status")
-
         pendingSyncs[mediaId] = PendingSync(type, mediaId, resolvedMalId, status ?: existingSync?.status, progress ?: existingSync?.progress, score ?: existingSync?.score, entryId ?: existingSync?.entryId, favoriteAdded ?: existingSync?.favoriteAdded)
 
         if (type == "favorite") {
@@ -145,17 +140,13 @@ class MainViewModel : ViewModel() {
 
         for ((_, sync) in favoriteSyncs) {
             val shouldBeFavorited = sync.favoriteAdded == true
-            android.util.Log.d("AniListFavorite", "executeFavoriteSyncs: mediaId=${sync.mediaId}, shouldBeFavorited=$shouldBeFavorited")
             try {
                 if (shouldBeFavorited) {
-                    android.util.Log.d("AniListFavorite", "  Calling addAniListFavorite API")
                     repository.addAniListFavorite(sync.mediaId)
                 } else {
-                    android.util.Log.d("AniListFavorite", "  Calling removeAniListFavorite API")
                     repository.removeAniListFavorite(sync.mediaId)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AniListFavorite", "  API call failed: ${e.message}", e)
                 // Re-queue the failed sync so it retries
                 pendingSyncs[sync.mediaId] = sync
             }
@@ -173,16 +164,11 @@ class MainViewModel : ViewModel() {
                     sync.status?.let {
                         if (_loginProvider.value == LoginProvider.MAL) {
                             val malId = sync.malId
-                            android.util.Log.d("MAL_DEBUG", "MAL status sync: mediaId=${sync.mediaId}, malId=$malId, status=$it")
                             if (malId != null) {
                                 val malStatus = mapToMalStatus(it)
-                                android.util.Log.d("MAL_DEBUG", "MAL status mapped: $malStatus")
                                 if (malStatus != null) {
-                                    val result = malApiService.updateAnimeStatus(malId, malStatus, sync.score, sync.progress)
-                                    android.util.Log.d("MAL_DEBUG", "MAL API update result: $result")
+                                    malApiService.updateAnimeStatus(malId, malStatus, sync.score, sync.progress)
                                 }
-                            } else {
-                                android.util.Log.d("MAL_DEBUG", "MAL ID is null, cannot update!")
                             }
                         } else {
                             repository.updateStatus(sync.mediaId, it, sync.progress)
@@ -193,11 +179,8 @@ class MainViewModel : ViewModel() {
                     sync.progress?.let {
                         if (_loginProvider.value == LoginProvider.MAL) {
                             val malId = sync.malId
-                            android.util.Log.d("MAL_DEBUG", "MAL progress sync: mediaId=${sync.mediaId}, malId=$malId, progress=$it")
                             if (malId != null) {
                                 malApiService.updateAnimeStatus(malId, null, null, it)
-                            } else {
-                                android.util.Log.d("MAL_DEBUG", "MAL ID is null, cannot update progress!")
                             }
                         } else {
                             repository.updateProgress(sync.mediaId, it)
@@ -208,7 +191,6 @@ class MainViewModel : ViewModel() {
                     sync.score?.let {
                         if (_loginProvider.value == LoginProvider.MAL) {
                             val malId = sync.malId
-                            android.util.Log.d("MAL_DEBUG", "MAL score sync: mediaId=${sync.mediaId}, malId=$malId, score=$it")
                             if (malId != null) {
                                 malApiService.updateAnimeStatus(malId, null, it, null)
                             }
@@ -221,7 +203,6 @@ class MainViewModel : ViewModel() {
                     sync.entryId?.let {
                         if (_loginProvider.value == LoginProvider.MAL) {
                             val malId = sync.malId
-                            android.util.Log.d("MAL_DEBUG", "MAL delete sync: mediaId=${sync.mediaId}, malId=$malId")
                             if (malId != null) {
                                 malApiService.deleteAnimeFromList(malId)
                             }
@@ -794,7 +775,6 @@ class MainViewModel : ViewModel() {
             connectivityCallback = networkCallback
             connectivityManager?.registerNetworkCallback(networkRequest, networkCallback)
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to register connectivity callback: ${e.message}")
         }
     }
 
@@ -811,30 +791,21 @@ class MainViewModel : ViewModel() {
     }
 
     fun fetchJikanUserData() {
-        android.util.Log.d("JIKAN_DEBUG", "fetchJikanUserData called")
         val username = malUsername
-        android.util.Log.d("JIKAN_DEBUG", "malUsername: $username, jikanService: ${jikanService != null}")
         if (username == null) {
-            android.util.Log.e("JIKAN_DEBUG", "malUsername is null, cannot fetch Jikan data")
             return
         }
         viewModelScope.launch {
-            android.util.Log.d("JIKAN_DEBUG", "Fetching Jikan data for username: $username")
             _jikanFavorites.value = jikanService?.getUserFavorites(username)
-            android.util.Log.d("JIKAN_DEBUG", "Favorites fetched: ${_jikanFavorites.value?.anime?.size ?: 0} anime")
             _jikanHistory.value = jikanService?.getUserHistory(username)
-            android.util.Log.d("JIKAN_DEBUG", "History fetched: ${_jikanHistory.value?.anime?.size ?: 0} entries")
         }
     }
 
     fun loginWithMal() {
-        android.util.Log.d("MAL_LOGIN", "loginWithMal called")
         if (BuildConfig.MAL_CLIENT_ID.isBlank()) {
-            android.util.Log.e("MAL_LOGIN", "MAL_CLIENT_ID is blank!")
             return
         }
         val uri = malApiService.getAuthUrl(BuildConfig.MAL_CLIENT_ID)
-        android.util.Log.d("MAL_LOGIN", "Generated auth URL: $uri")
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
@@ -842,37 +813,28 @@ class MainViewModel : ViewModel() {
     }
 
     fun handleMalAuthRedirect(intent: Intent?) {
-        android.util.Log.d("MAL_LOGIN", "handleMalAuthRedirect called, data: ${intent?.dataString}")
         handleMalAuthAuthCode(intent?.dataString ?: "")
     }
 
     fun handleMalAuthAuthCode(uriString: String) {
-        android.util.Log.d("MAL_LOGIN", "handleMalAuthAuthCode called with: $uriString")
-
         if (uriString.isEmpty()) {
-            android.util.Log.e("MAL_LOGIN", "URI string is empty!")
             return
         }
 
         if (!uriString.startsWith("animescraper://success?code=") && !uriString.startsWith("animescraper://success")) {
-            android.util.Log.e("MAL_LOGIN", "URI doesn't match expected format!")
             return
         }
 
         val code = uriString.substringAfter("code=").substringBefore("&")
-        android.util.Log.d("MAL_LOGIN", "Extracted code: ${code.take(20)}...")
 
         if (code.isEmpty()) {
-            android.util.Log.e("MAL_LOGIN", "Code is empty!")
             viewModelScope.launch { _toastMessage.emit("MAL login failed: No auth code received") }
             return
         }
 
         viewModelScope.launch {
             _toastMessage.emit("Completing MAL login...")
-            android.util.Log.d("MAL_LOGIN", "Calling exchangeCodeForToken...")
             val success = malApiService.exchangeCodeForToken(code, BuildConfig.MAL_CLIENT_ID, null)
-            android.util.Log.d("MAL_LOGIN", "exchangeCodeForToken result: $success")
             if (success) {
                 userPreferences.clearToken()
                 _loginProvider.value = LoginProvider.MAL
@@ -1099,7 +1061,6 @@ class MainViewModel : ViewModel() {
             _userName.value = it.data.Viewer.name
             _userAvatar.value = it.data.Viewer.avatar?.large ?: it.data.Viewer.avatar?.medium
             _userBanner.value = it.data.Viewer.bannerImage
-            android.util.Log.d("UserProfile", "API returned banner: ${it.data.Viewer.bannerImage}")
             _userBio.value = it.data.Viewer.about
             _userSiteUrl.value = it.data.Viewer.siteUrl
             _userCreatedAt.value = it.data.Viewer.createdAt
@@ -1235,13 +1196,6 @@ class MainViewModel : ViewModel() {
                 val titleEnglish = media.title.english
                 val episodes = media.episodes ?: 0
 
-                if (title.contains("JoJo", ignoreCase = true) || title.contains("jojo", ignoreCase = true)) {
-                    android.util.Log.d("JOJO_DEBUG", "JoJo in airing schedule: $title")
-                    android.util.Log.d("JOJO_DEBUG", "  - episodes: $episodes")
-                    android.util.Log.d("JOJO_DEBUG", "  - airingEpisode: ${schedule.episode}")
-                    android.util.Log.d("JOJO_DEBUG", "  - status: ${media.status}")
-                }
-
                 val isAdultByTags = media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true
                 AiringScheduleAnime(
                     id = media.id,
@@ -1288,19 +1242,16 @@ class MainViewModel : ViewModel() {
         val malId = cachedAnime?.malId
 
         if (_loginProvider.value == LoginProvider.MAL && malId == null) {
-            android.util.Log.d("MAL_DEBUG", "MAL ID not in cache for progress update, fetching anime details for mediaId=$mediaId")
             viewModelScope.launch {
                 cacheManager.clearDetailedAnimeCache(mediaId)
                 val details = fetchDetailedAnimeData(mediaId)
                 var resolvedMalId = details?.malId
-                android.util.Log.d("MAL_DEBUG", "Fetched from AniList: malId=$resolvedMalId")
 
                 if (resolvedMalId == null && details == null) {
                     val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
                     val animeFromList = allAnime.find { it.id == mediaId }
                     if (animeFromList != null) {
                         resolvedMalId = jikanService?.searchAnimeByTitle(animeFromList.title)
-                        android.util.Log.d("MAL_DEBUG", "Jikan search by list title returned: malId=$resolvedMalId")
                     }
                 }
 
@@ -1332,29 +1283,19 @@ class MainViewModel : ViewModel() {
         val malId = cachedAnime?.malId
 
         if (_loginProvider.value == LoginProvider.MAL && malId == null) {
-            android.util.Log.d("MAL_DEBUG", "MAL ID not in cache, fetching fresh anime details for mediaId=$mediaId")
             viewModelScope.launch {
                 cacheManager.clearDetailedAnimeCache(mediaId)
                 val details = fetchDetailedAnimeData(mediaId)
                 var resolvedMalId = details?.malId
-                android.util.Log.d("MAL_DEBUG", "Fetched from AniList: malId=$resolvedMalId, details=${if(details != null) details.title else "null"}")
 
                 if (resolvedMalId == null && details == null) {
                     val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
                     val animeFromList = allAnime.find { it.id == mediaId }
                     if (animeFromList != null) {
-                        android.util.Log.d("MAL_DEBUG", "Found anime in user's list: ${animeFromList.title}")
                         resolvedMalId = jikanService?.searchAnimeByTitle(animeFromList.title)
-                        android.util.Log.d("MAL_DEBUG", "Jikan search by list title returned: malId=$resolvedMalId")
                     }
                 } else if (resolvedMalId == null && details != null) {
-                    android.util.Log.d("MAL_DEBUG", "Trying Jikan API fallback for: ${details.title}")
                     resolvedMalId = jikanService?.searchAnimeByTitle(details.title)
-                    android.util.Log.d("MAL_DEBUG", "Jikan returned: malId=$resolvedMalId")
-                }
-
-                if (resolvedMalId == null) {
-                    android.util.Log.d("MAL_DEBUG", "Could not find MAL ID for this anime!")
                 }
 
                 setLocalAnimeStatus(
@@ -1647,24 +1588,19 @@ class MainViewModel : ViewModel() {
      */
 
     suspend fun fetchDetailedAnimeData(animeId: Int, malId: Int? = null): DetailedAnimeData? {
-        android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeData called for animeId=$animeId, malId=$malId")
         var media = repository.fetchDetailedAnime(animeId)
         
         // If not found and have MAL ID, try finding by MAL ID
         if (media == null && malId != null && malId > 0) {
-            android.util.Log.d("ANILIST_DEBUG", "Not found by animeId=$animeId, trying malId=$malId")
             val foundMedia = repository.findAnimeByMalId(malId)
             if (foundMedia != null) {
-                android.util.Log.d("ANILIST_DEBUG", "Found anime via MAL ID: anilistId=${foundMedia.id}")
                 media = repository.fetchDetailedAnime(foundMedia.id)
             }
         }
         
         if (media == null) {
-            android.util.Log.e("ANILIST_DEBUG", "AniList API returned null for animeId=$animeId (malId=$malId)")
             return null
         }
-        android.util.Log.d("ANILIST_DEBUG", "AniList API returned: id=${media.id}, idMal=${media.idMal}, title=${media.title?.romaji}, isAdult=${media.isAdult}, hasCharacters=${media.characters != null}, hasStaff=${media.staff != null}")
         val relationsList = media.relations?.edges?.mapNotNull { edge ->
             edge.node?.let { node ->
                 AnimeRelation(
@@ -1718,13 +1654,10 @@ class MainViewModel : ViewModel() {
     }
 
     suspend fun fetchDetailedAnimeDataByMalId(malId: Int): DetailedAnimeData? {
-        android.util.Log.d("ANILIST_DEBUG", "fetchDetailedAnimeDataByMalId called for malId=$malId")
         val media = repository.findAnimeByMalId(malId)
         if (media == null) {
-            android.util.Log.e("ANILIST_DEBUG", "Could not find anime with MAL ID=$malId on AniList")
             return null
         }
-        android.util.Log.d("ANILIST_DEBUG", "Found anime on AniList: id=${media.id}, title=${media.title?.romaji ?: media.title?.english}")
         return fetchDetailedAnimeData(media.id)
     }
 
@@ -1754,9 +1687,7 @@ class MainViewModel : ViewModel() {
     fun fetchAniListFavorites() {
         val userId = _userId.value ?: return
         viewModelScope.launch {
-            android.util.Log.d("AniListFavorite", "fetchAniListFavorites: fetching for userId=$userId")
             repository.fetchUserFavorites(userId)?.let { response ->
-                android.util.Log.d("AniListFavorite", "fetchAniListFavorites: got ${response.data.User.favourites.anime.nodes.size} favorites")
                 val apiFavorites = response.data.User.favourites.anime.nodes
                 // Merge API favorites with locally stored favorites to preserve offline additions
                 val localFavoriteIds = userPreferences.aniListFavorites.value
@@ -1782,8 +1713,6 @@ class MainViewModel : ViewModel() {
                 }
 
                 _aniListFavorites.value = mergedFavorites
-            } ?: run {
-                android.util.Log.d("AniListFavorite", "fetchAniListFavorites: API returned null, keeping local favorites")
             }
         }
     }
@@ -1791,8 +1720,6 @@ class MainViewModel : ViewModel() {
     fun loadAniListFavoritesFromStorage() {
         // Load favorites from UserPreferences (IDs only)
         val favoriteIds = userPreferences.aniListFavorites.value
-        android.util.Log.d("AniListFavorite", "loadAniListFavoritesFromStorage: found ${favoriteIds.size} favorites")
-        android.util.Log.d("AniListFavorite", "  detailedAnimeCache keys: ${cacheManager.detailedAnimeCache.value.keys.take(10)}")
 
         if (favoriteIds.isEmpty()) {
             _aniListFavorites.value = emptyList()
@@ -1801,10 +1728,8 @@ class MainViewModel : ViewModel() {
 
         // Convert IDs to UserFavoriteAnime placeholders (will be enriched by detailedAnimeCache if available)
         val favorites = favoriteIds.mapNotNull { id ->
-            android.util.Log.d("AniListFavorite", "  Processing favorite id: $id")
             val cached = cacheManager.detailedAnimeCache.value[id]
             if (cached != null) {
-                android.util.Log.d("AniListFavorite", "    Found in detailedAnimeCache: ${cached.title}")
                 UserFavoriteAnime(
                     id = cached.id,
                     title = MediaTitle(romaji = cached.title, english = cached.titleEnglish),
@@ -1817,10 +1742,8 @@ class MainViewModel : ViewModel() {
             } else {
                 // Try to find in currently watching lists
                 val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
-                android.util.Log.d("AniListFavorite", "    Not in cache, searching lists among ${allAnime.size} items")
                 val anime = allAnime.find { it.id == id }
                 if (anime != null) {
-                    android.util.Log.d("AniListFavorite", "    Found in list: ${anime.title}")
                     UserFavoriteAnime(
                         id = anime.id,
                         title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
@@ -1831,8 +1754,6 @@ class MainViewModel : ViewModel() {
                         seasonYear = anime.year
                     )
                 } else {
-                    android.util.Log.d("AniListFavorite", "    No anime found for id $id, showing placeholder")
-                    // Just use ID as placeholder
                     UserFavoriteAnime(
                         id = id,
                         title = MediaTitle(romaji = "Loading...", english = null),
@@ -1846,12 +1767,8 @@ class MainViewModel : ViewModel() {
             }
         }
         _aniListFavorites.value = favorites
-        android.util.Log.d("AniListFavorite", "Loaded ${favorites.size} favorites into UI")
     }
     fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null): Boolean {
-        android.util.Log.d("AniListFavorite", "toggleAniListFavorite called: mediaId=$mediaId, anime=${anime?.title}, loginProvider=${_loginProvider.value}")
-        android.util.Log.d("AniListFavorite", "  Current favorites count: ${_aniListFavorites.value.size}, contains id: ${_aniListFavorites.value.any { it.id == mediaId }}")
-
         if (_loginProvider.value == LoginProvider.MAL) {
             // Toggle MAL favorite using the ID-based method
             toggleMalFavoriteById(mediaId)
@@ -1863,17 +1780,13 @@ class MainViewModel : ViewModel() {
             val isFavorite = isFavoriteInMemory || isFavoriteInStorage
             val willBeAdded = !isFavorite
 
-            android.util.Log.d("AniListFavorite", "  isFavoriteInMemory=$isFavoriteInMemory, isFavoriteInStorage=$isFavoriteInStorage, isFavorite=$isFavorite, willBeAdded=$willBeAdded")
-
             // Update persisted storage
             userPreferences.toggleAniListFavorite(mediaId)
 
             // Update UI list
             if (isFavorite) {
-                android.util.Log.d("AniListFavorite", "  Removing from UI list, was favorite")
                 _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
             } else {
-                android.util.Log.d("AniListFavorite", "  Adding to UI list, was not favorite")
                 if (anime != null) {
                     val userFavorite = UserFavoriteAnime(
                         id = anime.id,
@@ -1993,7 +1906,6 @@ class MainViewModel : ViewModel() {
     fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId)
 
     fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
-        android.util.Log.d("MAL_DEBUG", "addExploreAnimeToList: anime.id=${anime.id}, malId=${anime.malId}, status=$status")
         queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null)
         updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
     }
@@ -2024,13 +1936,11 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val defaultPkg = defaultExtensionPackage.value
             if (defaultPkg.isEmpty()) {
-                Log.d(TAG_EXT, "No default extension selected")
                 return@launch
             }
 
             val sm = sourceManager
             if (sm == null) {
-                Log.d(TAG_EXT, "SourceManager not initialized")
                 return@launch
             }
 
@@ -2040,12 +1950,9 @@ class MainViewModel : ViewModel() {
             val allSources = sm.getSources()
             val sw = allSources.find { it.extension.packageName == defaultPkg }
             if (sw == null) {
-                Log.d(TAG_EXT, "Default extension $defaultPkg not found among loaded sources")
                 return@launch
             }
             val source = sw.source
-            Log.d(TAG_EXT, "Using extension: ${sw.extension.name} (${sw.extension.packageName}) sourceClass=${sw.extension.sourceClass}")
-            Log.d(TAG_EXT, "Loaded source: ${source.name} (id=${source.id}, lang=${source.lang})")
 
             val searchTerms = listOfNotNull(
                 anime.titleEnglish,
@@ -2053,35 +1960,25 @@ class MainViewModel : ViewModel() {
             ).distinct()
 
             var matchedSAnime: SAnime? = null
-            var matchedQuery = ""
 
             for (query in searchTerms) {
                 try {
                     val page = source.getSearchAnime(1, query, AnimeFilterList())
-                    Log.d(TAG_EXT, "Search '$query': ${page.animes.size} results")
-                    page.animes.forEach { a: SAnime ->
-                        Log.d(TAG_EXT, "  -> ${a.title} | url=${a.url}")
-                    }
                     matchedSAnime = page.animes.firstOrNull { a: SAnime ->
                         a.title.contains(anime.title ?: "", ignoreCase = true) ||
                                 (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
                     } ?: page.animes.firstOrNull()
                     if (matchedSAnime != null) {
-                        matchedQuery = query
                         break
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG_EXT, "Search failed for '$query'", e)
                 }
             }
 
             if (matchedSAnime == null) {
-                Log.d(TAG_EXT, "Could not find anime '${anime.title}' in extension")
                 return@launch
             }
-            Log.d(TAG_EXT, "Matched (via '$matchedQuery'): ${matchedSAnime.title}")
 
-            // Try getEpisodeList directly from search result first
             var sEpisodes: List<SEpisode> = try {
                 source.getEpisodeList(matchedSAnime)
             } catch (_: Exception) { emptyList() }
@@ -2090,36 +1987,19 @@ class MainViewModel : ViewModel() {
                 try {
                     matchedSAnime = source.getAnimeDetails(matchedSAnime)
                 } catch (e: Exception) {
-                    Log.w(TAG_EXT, "getAnimeDetails failed", e)
                 }
 
                 sEpisodes = try {
                     source.getEpisodeList(matchedSAnime)
                 } catch (_: Exception) { emptyList() }
             }
-            Log.d(TAG_EXT, "Got ${sEpisodes.size} episodes total")
 
             for (sEpisode in sEpisodes) {
                 try {
-                    val videos = getExtensionVideos(source, sEpisode, matchedSAnime)
-                    val epNum = sEpisode.episode_number.toInt()
-                    Log.d(TAG_EXT, "--- Episode $epNum (${sEpisode.name}) ---")
-                    Log.d(TAG_EXT, "  Videos found: ${videos.size}")
-                    val subVideos = videos.filter { it.subtitleTracks.isNotEmpty() || !it.videoTitle.contains("DUB", ignoreCase = true) }
-                    val dubVideos = videos.filter { it.videoTitle.contains("DUB", ignoreCase = true) }
-                    Log.d(TAG_EXT, "  SUB count: ${subVideos.size} | DUB count: ${dubVideos.size}")
-                    videos.forEachIndexed { i, v ->
-                        val trackInfo = buildString {
-                            if (v.subtitleTracks.isNotEmpty()) append(" subs=[${v.subtitleTracks.joinToString { it.lang }}]")
-                            if (v.audioTracks.isNotEmpty()) append(" audios=[${v.audioTracks.joinToString { it.lang }}]")
-                        }
-                        Log.d(TAG_EXT, "  [$i] title='${v.videoTitle}' url=${v.videoUrl.take(120)} res=${v.resolution ?: "N/A"}$trackInfo")
-                    }
+                    getExtensionVideos(source, sEpisode, matchedSAnime)
                 } catch (e: Exception) {
-                    Log.e(TAG_EXT, "Failed to get videos for episode ${sEpisode.episode_number}", e)
                 }
             }
-            Log.d(TAG_EXT, "=== Done logging extension streams ===")
         }
     }
 
@@ -2142,35 +2022,29 @@ class MainViewModel : ViewModel() {
         defaultPackage: String,
     ): ExtensionStreamResult? {
         return withContext(Dispatchers.IO) {
+            val overallStart = System.currentTimeMillis()
             try {
-                android.util.Log.d(TAG_EXT, "playEpisodeWithExtension: '$defaultPackage' ep=$episodeNumber")
                 val sm = sourceManager
                 if (sm == null) {
-                    Log.e(TAG_EXT, "SourceManager not initialized")
                     return@withContext null
                 }
 
-                // Ensure sources are loaded (like StreamViewModel does)
                 if (sm.getSources().isEmpty()) {
                     sm.loadSources()
                 }
                 val allSources = sm.getSources()
                 val sourceWithExt = allSources.find { it.extension.packageName == defaultPackage }
                 if (sourceWithExt == null) {
-                    android.util.Log.d(TAG_EXT, "Found ${allSources.size} loaded sources, looking for $defaultPackage")
-                    // Fallback: reload and try again
                     sm.reloadSources()
                     sm.loadSources()
                     val reloaded = sm.getSources()
                     val found = reloaded.find { it.extension.packageName == defaultPackage }
                     if (found == null) {
-                        Log.e(TAG_EXT, "Extension $defaultPackage not found among loaded sources")
                         return@withContext null
                     }
                 }
                 val sw = sourceWithExt ?: sm.getSources().find { it.extension.packageName == defaultPackage } ?: return@withContext null
                 val source = sw.source
-                android.util.Log.d(TAG_EXT, "Using source: ${source.name} (id=${source.id})")
 
                 val extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client
 
@@ -2182,46 +2056,37 @@ class MainViewModel : ViewModel() {
                         val page = source.getSearchAnime(1, query, AnimeFilterList())
                         val results = page.animes
                         if (results.isEmpty()) continue
-                        // Score: exact match > startsWith > shortest contains (to avoid sequels/premiums)
                         val scored = results.map { a ->
                             val title = a.title
                             val score = when {
                                 title.equals(query, ignoreCase = true) -> 1000
                                 query.startsWith(title, ignoreCase = true) || title.startsWith(query, ignoreCase = true) -> 500
-                                title.contains(query, ignoreCase = true) -> 300 - (title.length - query.length)  // shorter is better
+                                title.contains(query, ignoreCase = true) -> 300 - (title.length - query.length)
                                 else -> 0
                             }
                             a to score
                         }
                         matchedSAnime = scored.maxByOrNull { it.second }?.first
                         if (matchedSAnime != null && scored.maxByOrNull { it.second }?.second ?: 0 > 0) break
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) {
+                    }
                 }
 
                 if (matchedSAnime == null) {
-                    Log.e(TAG_EXT, "Could not match anime in extension")
                     return@withContext null
                 }
 
-                // Use SourceManager.getEpisodes (matches reference app's StreamViewModel behavior)
-                var sEpisodes = sm.getEpisodes(source, matchedSAnime).also {
-                    Log.d(TAG_EXT, "getEpisodeList on search result returned ${it.size} episodes")
-                }
+                var sEpisodes = sm.getEpisodes(source, matchedSAnime)
 
                 if (sEpisodes.isEmpty()) {
                     try {
                         matchedSAnime = sm.getAnimeDetails(source, matchedSAnime)
-                        Log.d(TAG_EXT, "getAnimeDetails returned url=${matchedSAnime.url}")
                     } catch (e: Exception) {
-                        Log.w(TAG_EXT, "getAnimeDetails failed", e)
                     }
-                    sEpisodes = sm.getEpisodes(source, matchedSAnime).also {
-                        Log.d(TAG_EXT, "getEpisodeList after details returned ${it.size} episodes")
-                    }
+                    sEpisodes = sm.getEpisodes(source, matchedSAnime)
                 }
 
                 val sEpisode = if (sEpisodes.isEmpty()) {
-                    Log.d(TAG_EXT, "No episodes found, trying direct video fetch for movie/special")
                     SEpisode.create().apply {
                         url = matchedSAnime.url
                         name = matchedSAnime.title
@@ -2233,48 +2098,41 @@ class MainViewModel : ViewModel() {
                         ?: sEpisodes.firstOrNull { it.name?.contains("$episodeNumber", ignoreCase = true) == true }
                         ?: sEpisodes.getOrNull(episodeNumber - 1)
                         ?: run {
-                            Log.e(TAG_EXT, "Episode $episodeNumber not found in extension (${sEpisodes.size} episodes available)")
                             return@withContext null
                         }
                 }
 
-                Log.d(TAG_EXT, "Episode url=${sEpisode.url} name='${sEpisode.name}' episode_number=${sEpisode.episode_number}")
                 if (source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
                     source.prepareNewEpisode(sEpisode, matchedSAnime)
                 }
 
-                // Fast path: fetch hosters first (much faster than episode-level getVideoList)
                 data class VideoWithHoster(val video: Video, val hosterName: String)
                 val allVideos = mutableListOf<VideoWithHoster>()
                 var resolvedHosters: List<Hoster>? = null
 
                 val hosters = try {
-                    val h = source.getHosterList(sEpisode)
-                    Log.d(TAG_EXT, "getHosterList returned ${h.size} hosters")
-                    h
-                } catch (_: Throwable) { null }
+                    source.getHosterList(sEpisode)
+                } catch (e: Throwable) {
+                    null
+                }
 
                 if (hosters != null && hosters.isNotEmpty()) {
                     resolvedHosters = hosters
                     for (hoster in hosters) {
                         val hosterVideos = try {
                             if (hoster.lazy) source.getVideoList(hoster) else hoster.videoList ?: source.getVideoList(hoster)
-                        } catch (_: Throwable) { emptyList() }
+                        } catch (e: Throwable) {
+                            emptyList()
+                        }
                         hosterVideos.forEach { allVideos.add(VideoWithHoster(it, hoster.hosterName)) }
                     }
                 } else {
-                    val directVideos = try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
+                    val directVideos = try { source.getVideoList(sEpisode) } catch (e: Throwable) { emptyList() }
                     directVideos.forEach { allVideos.add(VideoWithHoster(it, "")) }
                 }
 
                 if (allVideos.isEmpty()) {
-                    Log.e(TAG_EXT, "No videos found for episode $episodeNumber")
                     return@withContext null
-                }
-
-                Log.d(TAG_EXT, "All ${allVideos.size} videos:")
-                allVideos.forEachIndexed { i, v ->
-                    Log.d(TAG_EXT, "  [$i] hoster='${v.hosterName}' title='${v.video.videoTitle}' url=${v.video.videoUrl.take(60)}")
                 }
 
                 val dubVideos = allVideos.filter {
@@ -2285,24 +2143,20 @@ class MainViewModel : ViewModel() {
                     (v.hosterName.contains("sub", ignoreCase = true) || v.video.videoTitle.contains("sub", ignoreCase = true))
                 }
 
-                Log.d(TAG_EXT, "dubVideos=${dubVideos.size} subVideos=${subVideos.size} other=${allVideos.size - dubVideos.size - subVideos.size}")
-
                 val preferDub = preferredCategory.value == "dub"
                 val preferSub = preferredCategory.value == "sub"
-                Log.d(TAG_EXT, "preferredCategory='${preferredCategory.value}' preferDub=$preferDub preferSub=$preferSub")
                 val candidates = when {
-                    preferDub && dubVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: dubVideos (preferDub)"); dubVideos }
-                    preferSub && subVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: subVideos (preferSub)"); subVideos }
-                    dubVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: dubVideos (fallback)"); dubVideos }
-                    subVideos.isNotEmpty() -> { Log.d(TAG_EXT, "Selected: subVideos (fallback)"); subVideos }
-                    else -> { Log.d(TAG_EXT, "Selected: allVideos (no match)"); allVideos }
+                    preferDub && dubVideos.isNotEmpty() -> dubVideos
+                    preferSub && subVideos.isNotEmpty() -> subVideos
+                    dubVideos.isNotEmpty() -> dubVideos
+                    subVideos.isNotEmpty() -> subVideos
+                    else -> allVideos
                 }
 
                 val bestVideo = candidates.maxByOrNull {
                     val res = it.video.resolution ?: 0
                     if (res == 0) it.video.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
                 }?.video ?: allVideos.last().video
-                Log.d(TAG_EXT, "bestVideo.title='${bestVideo.videoTitle}' url=${bestVideo.videoUrl.take(60)}")
 
                 val referer = bestVideo.headers?.let { h ->
                     (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
@@ -2334,8 +2188,6 @@ class MainViewModel : ViewModel() {
 
                 val videos = allVideos.map { it.video }
 
-                Log.d(TAG_EXT, "Extension stream ready: ${bestVideo.videoUrl}")
-
                 ExtensionStreamResult(
                     url = bestVideo.videoUrl,
                     referer = referer,
@@ -2349,7 +2201,6 @@ class MainViewModel : ViewModel() {
                     episode = sEpisode,
                 )
             } catch (e: Exception) {
-                Log.e(TAG_EXT, "Extension playback failed", e)
                 null
             }
         }
@@ -2395,7 +2246,6 @@ class MainViewModel : ViewModel() {
                     source = source,
                 )
             } catch (e: Exception) {
-                Log.e(TAG_EXT, "Failed to fetch hoster videos", e)
                 null
             }
         }
@@ -2408,7 +2258,6 @@ class MainViewModel : ViewModel() {
                 val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 connectivityManager?.unregisterNetworkCallback(callback)
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Failed to unregister connectivity callback: ${e.message}")
             }
         }
     }

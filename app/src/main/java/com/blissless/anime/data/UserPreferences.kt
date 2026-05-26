@@ -171,7 +171,6 @@ class UserPreferences(private val context: Context) {
         }
         _aniListFavorites.value = current
         saveAniListFavorites(current)
-        android.util.Log.d("AniListFavorite", "toggleAniListFavorite: mediaId=$mediaId, wasAdded=$wasAdded, new count=${current.size}")
         return wasAdded
     }
 
@@ -179,24 +178,18 @@ class UserPreferences(private val context: Context) {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         val encoded = json.encodeToString(kotlinx.serialization.serializer(), favorites.toList())
         sharedPreferences.edit().putString(KEY_ANILIST_FAVORITES, encoded).apply()
-        android.util.Log.d("AniListFavorite", "saveAniListFavorites: saved ${favorites.size} favorites")
     }
 
     private fun loadAniListFavorites() {
         val saved = sharedPreferences.getString(KEY_ANILIST_FAVORITES, null)
-        android.util.Log.d("AniListFavorite", "loadAniListFavorites: raw saved = ${saved?.take(100)}")
         if (saved != null) {
             try {
                 val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 val list = json.decodeFromString<List<Int>>(kotlinx.serialization.serializer(), saved)
                 _aniListFavorites.value = list.toSet()
-                android.util.Log.d("AniListFavorite", "loadAniListFavorites: loaded ${list.size} favorites")
             } catch (e: Exception) {
                 _aniListFavorites.value = emptySet()
-                android.util.Log.e("AniListFavorite", "loadAniListFavorites: failed to parse - ${e.message}")
             }
-        } else {
-            android.util.Log.d("AniListFavorite", "loadAniListFavorites: no saved data found")
         }
     }
 

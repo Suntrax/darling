@@ -3,7 +3,6 @@ package com.blissless.anime.api.myanimelist
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
-import android.util.Log
 import com.blissless.anime.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,13 +29,10 @@ class MalApiService(private val context: Context) {
     private val authManager = MalAuthManager(context)
 
     fun getAuthUrl(clientId: String, state: String = "random_state_string"): Uri {
-        Log.d("MAL_LOGIN", "getAuthUrl: Generating new code verifier...")
         val redirectUri = "animescraper://success"
 
         val codeVerifier = generateCodeVerifier()
-        Log.d("MAL_LOGIN", "getAuthUrl: Code verifier length: ${codeVerifier.length}")
         authManager.saveCodeVerifier(codeVerifier)
-        Log.d("MAL_LOGIN", "getAuthUrl: Code verifier saved")
 
         val scope = "write:users+read:users+profile"
 
@@ -68,23 +64,16 @@ class MalApiService(private val context: Context) {
     suspend fun exchangeCodeForToken(code: String, clientId: String, clientSecret: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                Log.d("MAL_LOGIN", "exchangeCodeForToken: Getting code verifier...")
                 val redirectUri = "animescraper://success"
                 val codeVerifier = authManager.getCodeVerifier()
-                Log.d(
-                    "MAL_LOGIN",
-                    "exchangeCodeForToken: Code verifier is ${if (codeVerifier != null) "present (${codeVerifier.length} chars)" else "NULL"}"
-                )
 
                 if (codeVerifier == null) {
-                    Log.e("MAL_LOGIN", "exchangeCodeForToken: Code verifier is null!")
                     return@withContext false
                 }
 
                 authManager.clearCodeVerifier()
 
                 val url = URL("https://myanimelist.net/v1/oauth2/token")
-                Log.d("MAL_LOGIN", "exchangeCodeForToken: Connecting to MAL token endpoint...")
 
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
@@ -118,27 +107,22 @@ class MalApiService(private val context: Context) {
                 conn.outputStream.use { it.write(postData.toByteArray()) }
 
                 val responseCode = conn.responseCode
-                Log.d("MAL_LOGIN", "exchangeCodeForToken: Response code: $responseCode")
 
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     val reader = BufferedReader(InputStreamReader(conn.inputStream))
                     val response = reader.readText()
                     reader.close()
 
-                    Log.d("MAL_LOGIN", "exchangeCodeForToken: Token response received")
                     parseAndSaveToken(response)
                     fetchUserInfo()
                     true
                 } else {
-                    Log.e("MAL_LOGIN", "exchangeCodeForToken: Failed with code $responseCode")
                     val errorReader = BufferedReader(InputStreamReader(conn.errorStream))
                     val errorResponse = errorReader.readText()
                     errorReader.close()
-                    Log.e("MAL_LOGIN", "exchangeCodeForToken: Error response: $errorResponse")
                     false
                 }
             } catch (e: Exception) {
-                Log.e("MAL_LOGIN", "exchangeCodeForToken: Exception: ${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -339,21 +323,13 @@ class MalApiService(private val context: Context) {
     suspend fun updateAnimeStatus(animeId: Int, status: String?, score: Int? = null, episodesWatched: Int? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                Log.d(
-                    "MAL_API",
-                    "updateAnimeStatus called: animeId=$animeId, status=$status, score=$score, episodesWatched=$episodesWatched"
-                )
-
                 val authHeader = authManager.getAuthHeader()
-                Log.d("MAL_API", "Auth header: ${authHeader?.take(20)}...")
 
                 if (authHeader == null) {
-                    Log.e("MAL_API", "No auth header available!")
                     return@withContext false
                 }
 
                 val url = URL("$MAL_API_BASE/anime/$animeId/my_list_status")
-                Log.d("MAL_API", "URL: $url")
 
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "PUT"
@@ -369,24 +345,18 @@ class MalApiService(private val context: Context) {
                 score?.let { params.add("score=$it") }
                 episodesWatched?.let { params.add("num_watched_episodes=$it") }
 
-                Log.d("MAL_API", "Params: ${params.joinToString("&")}")
-
                 if (params.isEmpty()) {
-                    Log.e("MAL_API", "No params to send!")
                     return@withContext false
                 }
 
                 conn.outputStream.use { it.write(params.joinToString("&").toByteArray()) }
 
                 val responseCode = conn.responseCode
-                Log.d("MAL_API", "Response code: $responseCode")
 
                 val success = responseCode == HttpURLConnection.HTTP_OK || responseCode == 201
-                Log.d("MAL_API", "Update result: $success")
 
                 success
             } catch (e: Exception) {
-                Log.e("MAL_API", "Exception: ${e.message}")
                 e.printStackTrace()
                 false
             }

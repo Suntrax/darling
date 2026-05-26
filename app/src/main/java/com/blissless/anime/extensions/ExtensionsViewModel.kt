@@ -44,11 +44,15 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         .followSslRedirects(true)
         .build()
 
+    private val repoPrefs = application.getSharedPreferences("extension_repos", Context.MODE_PRIVATE)
+    private val KEY_SAVED_REPOS = "saved_repos"
+
     private val _uiState = MutableStateFlow(ExtensionsUiState())
     val uiState: StateFlow<ExtensionsUiState> = _uiState.asStateFlow()
 
     init {
         loadExtensions()
+        loadSavedRepos()
     }
 
     fun loadExtensions() {
@@ -86,6 +90,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = _uiState.value.copy(
             repos = currentRepos + RepoState(url = trimmed, isLoading = true)
         )
+        persistRepos()
 
         viewModelScope.launch {
             try {
@@ -105,6 +110,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = _uiState.value.copy(
             repos = _uiState.value.repos.filter { it.url != url }
         )
+        persistRepos()
     }
 
     fun installExtension(repoExtension: RepoExtension) {
@@ -168,6 +174,34 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
         apkFile
+    }
+
+    private fun loadSavedRepos() {
+        viewModelScope.launch {
+            val savedJson = repoPrefs.getString(KEY_SAVED_REPOS, null) ?: return@launch
+            try {
+                val urls = Json.decodeFromString<List<String>>(savedJson)
+                val currentUrls = _uiState.value.repos.map { it.url }.toSet()
+                for (url in urls) {
+                    if (url in currentUrls) continue
+                    _uiState.value = _uiState.value.copy(
+                        repos = _uiState.value.repos + RepoState(url = url, isLoading = true)
+                    )
+                    try {
+                        val repo = fetchRepo(url)
+                        updateRepoState(url) { copy(repo = repo, isLoading = false, error = null) }
+                    } catch (e: Exception) {
+                        updateRepoState(url) { copy(repo = null, isLoading = false, error = e.message) }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun persistRepos() {
+        val urls = _uiState.value.repos.map { it.url }
+        val json = Json.encodeToString(urls)
+        repoPrefs.edit().putString(KEY_SAVED_REPOS, json).apply()
     }
 
     private fun updateRepoState(url: String, transform: RepoState.() -> RepoState) {

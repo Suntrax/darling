@@ -75,13 +75,37 @@ fun resolveApkUrl(repoUrl: String, apkPath: String): String {
 }
 
 fun parseRepoJson(repoUrl: String, jsonElement: JsonElement): Repo {
+    val fallbackName = extractRepoName(repoUrl)
     return when (jsonElement) {
-        is JsonObject -> Repo.fromJson(jsonElement)
+        is JsonObject -> {
+            val repo = Repo.fromJson(jsonElement)
+            if (repo.name.isBlank()) repo.copy(name = fallbackName) else repo
+        }
         is JsonArray -> {
             val extensions = jsonElement.map { RepoExtension.fromJson(it.jsonObject) }
-            val name = try { URL(repoUrl).host } catch (_: Exception) { repoUrl }
-            Repo(name = name, description = "", extensions = extensions)
+            Repo(name = fallbackName, description = "", extensions = extensions)
         }
         else -> throw Exception("Unexpected JSON type: ${jsonElement::class.simpleName}")
+    }
+}
+
+private fun extractRepoName(repoUrl: String): String {
+    return try {
+        val url = URL(repoUrl)
+        val host = url.host.lowercase()
+        val path = url.path.trim('/')
+        when {
+            host == "raw.githubusercontent.com" -> {
+                val parts = path.split('/')
+                if (parts.size >= 2) parts[0] else host
+            }
+            host == "github.com" -> {
+                val parts = path.split('/')
+                if (parts.isNotEmpty()) parts[0] else host
+            }
+            else -> host
+        }
+    } catch (_: Exception) {
+        repoUrl
     }
 }
