@@ -46,7 +46,6 @@ Download the APK from [Releases](https://github.com/Suntrax/darling/releases) an
 `local.properties` file with the following keys needed:
 
 CLIENT_ID_ANILIST  
-CLIENT_ID_ANILIST2  
 TMDB_API_KEY  
 MAL_CLIENT_ID  
 

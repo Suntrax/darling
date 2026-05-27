@@ -34,9 +34,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerDefaults
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.Crossfade
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
@@ -481,9 +479,8 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
 
     val startupScreen by viewModel.startupScreen.collectAsState()
-    val pagerState = rememberPagerState(initialPage = startupScreen, pageCount = { 4 })
-
-    var committedPage by remember { mutableIntStateOf(startupScreen) }
+    val currentPageState = remember { mutableIntStateOf(startupScreen) }
+    var currentPage by currentPageState
 
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
@@ -496,7 +493,7 @@ fun MainScreen(
         if (stack.isNotEmpty()) {
             val prevPage = stack.removeLast()
             screenNavigationStack = stack
-            scope.launch { pagerState.animateScrollToPage(prevPage) }
+            currentPage = prevPage
         }
     }
 
@@ -562,19 +559,10 @@ fun MainScreen(
         isLoggedInKey++
     }
 
-    LaunchedEffect(pagerState.currentPage, pagerState.currentPageOffsetFraction) {
-        val currentPage = pagerState.currentPage
-        val offset = pagerState.currentPageOffsetFraction
-
-        val approachingPage = when {
-            offset > 0.3f -> currentPage + 1
-            offset < -0.3f -> currentPage - 1
-            else -> currentPage
-        }
-
-        if (approachingPage in 0..3 && approachingPage !in preloadedPages) {
-            preloadedPages = preloadedPages + approachingPage
-            when (approachingPage) {
+    LaunchedEffect(currentPage) {
+        if (currentPage !in preloadedPages) {
+            preloadedPages = preloadedPages + currentPage
+            when (currentPage) {
                 0 -> { viewModel.fetchAiringSchedule() }
                 1 -> { }
                 2 -> { viewModel.refreshHome() }
@@ -1917,27 +1905,16 @@ fun MainScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = !overlayOpen,
-                    beyondViewportPageCount = 2,
-                    flingBehavior = PagerDefaults.flingBehavior(
-                        state = pagerState,
-                        snapAnimationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ),
-                    modifier = Modifier.fillMaxSize()
+                Crossfade(
+                    targetState = currentPage,
+                    animationSpec = tween(280),
+                    label = "screenCrossfade"
                 ) { page ->
-                    val isCurrentPage = pagerState.currentPage == page
-                    val isScheduleVisible = pagerState.currentPage == 0
-
                     when (page) {
                         0 -> ScheduleScreen(
                             viewModel = viewModel,
                             isOled = isOled,
-                            isVisible = isScheduleVisible,
+                            isVisible = true,
                             preventAutoSync = preventScheduleSync,
                             showStatusColors = showStatusColors,
                             disableMaterialColors = disableMaterialColors,
@@ -2003,7 +1980,7 @@ fun MainScreen(
                             completed = completed,
                             onHold = onHold,
                             dropped = dropped,
-                            isVisible = isCurrentPage,
+                            isVisible = true,
                             onShowAnimeDialog = onShowAnimeDialog,
                             onClearAnimeStack = onClearAnimeStack,
                             onCharacterClick = { characterId ->
@@ -2200,7 +2177,7 @@ fun MainScreen(
                             shadowElevation = 8.dp,
                             border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
                         ) {
-                            val selectedIndex = pagerState.targetPage
+                            val selectedIndex = currentPage
 
                             Row(
                                 modifier = Modifier
@@ -2231,7 +2208,7 @@ fun MainScreen(
                                                     val event = awaitPointerEvent()
                                                     if (event.changes.any { it.pressed }) {
                                                         scope.launch {
-                                                            pagerState.scrollToPage(index)
+                                                            currentPage = index
                                                         }
                                                     }
                                                 }

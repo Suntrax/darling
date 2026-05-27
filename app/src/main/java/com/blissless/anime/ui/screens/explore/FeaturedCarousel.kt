@@ -93,15 +93,10 @@ fun FeaturedCarousel(
     val scope = rememberCoroutineScope()
     val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
     var autoScrollJob by remember { mutableStateOf<Job?>(null) }
-    var headerVisible by remember { mutableStateOf(false) }
+    var headerVisible by remember { mutableStateOf(true) }
     var pageWhenScrollStarted by remember { mutableIntStateOf(pagerState.currentPage) }
     var isHeaderSwiping by remember { mutableStateOf(false) }
     var timerResetSignal by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(Unit) {
-        delay(300)
-        headerVisible = true
-    }
 
     LaunchedEffect(pagerState.isScrollInProgress, pagerState.currentPageOffsetFraction) {
         if (pagerState.isScrollInProgress) {

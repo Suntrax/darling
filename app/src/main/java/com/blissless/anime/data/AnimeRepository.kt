@@ -56,7 +56,7 @@ class AnimeRepository(
 
     companion object {
         private const val TAG = "AnimeRepository"
-        private val CLIENT_IDS = listOf(BuildConfig.CLIENT_ID_ANILIST, BuildConfig.CLIENT_ID_ANILIST2)
+        private val CLIENT_IDS = listOf(BuildConfig.CLIENT_ID_ANILIST)
 
         // Use all available providers (validated by HTTP check in MiruroService)
         val PRIORITY_PROVIDERS = emptyList<String>()

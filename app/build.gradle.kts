@@ -4,7 +4,7 @@ import java.io.FileInputStream
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.20"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.21"
 }
 
 // 1. Load the local.properties file
@@ -22,18 +22,16 @@ android {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 45
-        versionName = "4.0.2"
+        versionCode = 46
+        versionName = "4.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
-        val anilistApiKey2 = localProperties.getProperty("CLIENT_ID_ANILIST2")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
         val malClientId = localProperties.getProperty("MAL_CLIENT_ID") ?: ""
 
         buildConfigField("String", "CLIENT_ID_ANILIST", "\"$anilistApiKey\"")
-        buildConfigField("String", "CLIENT_ID_ANILIST2", "\"$anilistApiKey2\"")
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
         val malClientSecret = localProperties.getProperty("MAL_CLIENT_SECRET") ?: ""
