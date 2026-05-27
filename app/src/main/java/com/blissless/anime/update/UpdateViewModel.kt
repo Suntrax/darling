@@ -41,7 +41,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
     private val owner = "Suntrax"
     private val repo = "darling"
 
-    fun checkForUpdates() {
+    fun checkForUpdates(showToast: Boolean = true) {
         viewModelScope.launch {
             _uiState.value = UpdateUiState(isChecking = true)
             try {
@@ -56,7 +56,9 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                 val cleanTag = release.tagName.removePrefix("v").removePrefix("V")
                 if (compareVersions(cleanTag, currentVersion) <= 0) {
                     _uiState.value = UpdateUiState(release = release)
-                    Toast.makeText(getApplication(), "Already up to date ($currentVersion)", Toast.LENGTH_SHORT).show()
+                    if (showToast) {
+                        Toast.makeText(getApplication(), "Already up to date ($currentVersion)", Toast.LENGTH_SHORT).show()
+                    }
                     return@launch
                 }
                 _uiState.value = UpdateUiState(release = release)
@@ -64,6 +66,11 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = UpdateUiState(error = e.message ?: "Update check failed")
             }
         }
+    }
+
+    fun setReleaseAndDownload(release: GitHubRelease) {
+        _uiState.value = UpdateUiState(release = release)
+        downloadUpdate()
     }
 
     fun downloadUpdate() {
@@ -105,8 +112,8 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
         val ctx = getApplication<Application>()
         val cacheDir = File(ctx.cacheDir, "apks")
         cacheDir.mkdirs()
+        cacheDir.listFiles()?.filter { it.name.endsWith(".apk") }?.forEach { it.delete() }
         val apkFile = File(cacheDir, "$fileName.apk")
-        apkFile.deleteOnExit()
 
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
@@ -122,12 +129,16 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
     private fun installApk(file: File) {
         val ctx = getApplication<Application>()
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-            data = uri
-            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-            putExtra(Intent.EXTRA_RETURN_RESULT, true)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            ctx.startActivity(intent)
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(error = "Failed to open installer: ${e.message}")
+        }
     }
 
     private fun getDeviceAbi(): String {

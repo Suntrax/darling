@@ -53,6 +53,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_LOCAL_ANIME_STATUS = "local_anime_status"
         private const val KEY_DEFAULT_SUBTITLE_LANG = "default_subtitle_lang"
         private const val KEY_MAL_FAVORITES = "mal_favorites"
+        private const val KEY_CHECK_UPDATES_ON_START = "check_updates_on_start"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -236,6 +237,7 @@ class UserPreferences(private val context: Context) {
         _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 60)
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
         _showBufferIndicator.value = sharedPreferences.getBoolean(KEY_SHOW_BUFFER_INDICATOR, true)
+        _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, false)
 
         // Load local favorites
         loadLocalFavorites()
@@ -609,6 +611,15 @@ class UserPreferences(private val context: Context) {
         }
     }
     
+    // Check for Updates on Start
+    private val _checkUpdatesOnStart = MutableStateFlow(false)
+    val checkUpdatesOnStart: StateFlow<Boolean> = _checkUpdatesOnStart.asStateFlow()
+
+    fun setCheckUpdatesOnStart(enabled: Boolean) {
+        _checkUpdatesOnStart.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_CHECK_UPDATES_ON_START, enabled) }
+    }
+
     // MAL Favorites
     fun getMalFavorites(): Set<Int> {
         val saved = sharedPreferences.getStringSet(KEY_MAL_FAVORITES, emptySet()) ?: emptySet()

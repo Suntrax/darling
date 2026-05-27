@@ -6,10 +6,17 @@ A modern anime tracking and streaming app for Android.
 ![Language](https://img.shields.io/badge/Language-Kotlin-blue.svg)
 ![MinSDK](https://img.shields.io/badge/MinSDK-26-orange.svg)
 
+## Screenshots
+
+| Home | Explore | Schedule| Widget |
+|------|---------|---------|--------|
+| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Schedule](screenshots/airing.png) | ![Widget](screenshots/widget.png) |
+
 ## Features
 
 - **AniList and MyAnimeList Integration** - Login to sync your anime list
 - **Streaming** - Watch anime with built-in player (ExoPlayer)
+- **Extension Streaming** - Dynamically load extension APKs to stream from multiple sources using the Tachiyomi anime source framework
 - **Progress Tracking** - Automatically sync watch progress
 - **Explore** - Browse trending, seasonal, and top-rated anime
 - **Video Player** - Opening and ending skip buttons, quality selection, resize button
@@ -24,36 +31,22 @@ Download the APK from [Releases](https://github.com/Suntrax/darling/releases) an
 
 ## Tech Stack
 
-- Kotlin + Jetpack Compose
-- Media3 ExoPlayer
-- AniList GraphQL API
-- MVVM Architecture
-
-## Project Structure
-
-```
-app/src/main/java/com/blissless/anime/
-├── api/          # API clients
-├── data/         # Repositories and data sources
-├── dialogs/      # Dialog components
-├── network/      # Network utilities
-├── player/       # Video player helpers
-├── ui/
-│   ├── components/  # Reusable UI components
-│   ├── screens/      # App screens
-│   └── theme/        # Material theming
-├── DarlingApplication.kt
-├── MainActivity.kt
-├── MainViewModel.kt
-└── OverlayState.kt
-```
+- **Kotlin + Jetpack Compose** - UI framework
+- **Media3 ExoPlayer** - Video playback
+- **AniList GraphQL API** - Anime list syncing, metadata, user data
+- **TMDB API** - Episode metadata (titles, descriptions, thumbnails) for library and streaming views
+- **Jikan API (v4)** - MyAnimeList favorites and history sync for MAL users
+- **Tachiyomi Anime Source Framework** - Dynamic extension system for multi-source streaming
+- **MVVM Architecture** - ViewModel + StateFlow pattern
+- **OkHttp + kotlinx.serialization** - HTTP client and JSON parsing for third-party APIs
+- **Coil** - Image loading and caching
 
 ## Forking the repository
 
-local.properties file with the following keys needed:
+`local.properties` file with the following keys needed:
 
-ANIMEKAI_API_BASE_URL (can be adjusted to other providers)  
 CLIENT_ID_ANILIST  
+CLIENT_ID_ANILIST2  
 TMDB_API_KEY  
 MAL_CLIENT_ID  
 

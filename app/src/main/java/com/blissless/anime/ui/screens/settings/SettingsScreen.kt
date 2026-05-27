@@ -146,7 +146,7 @@ fun SettingsScreen(
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
                 "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
-                "about" -> AboutSettingsPage(onBack = { selectedGroup = null })
+                "about" -> AboutSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
             }
         }
     }
@@ -474,10 +474,10 @@ private fun AccountSettingsPage(
             Button(
                 onClick = { showLogoutConfirmation = true },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Log Out")
+                Text("Log Out", color = Color.White)
             }
         } else {
             SectionHeader("SIGN IN")
@@ -968,10 +968,14 @@ private fun ExtensionsSettingsPage(
 }
 
 @Composable
-private fun AboutSettingsPage(onBack: () -> Unit) {
+private fun AboutSettingsPage(
+    viewModel: MainViewModel,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
     val updateViewModel: UpdateViewModel = viewModel()
     val updateState by updateViewModel.uiState.collectAsState()
+    val checkOnStart by viewModel.checkUpdatesOnStart.collectAsState()
     val packageInfo = remember {
         context.packageManager.getPackageInfo(context.packageName, 0)
     }
@@ -1054,6 +1058,54 @@ private fun AboutSettingsPage(onBack: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+
+        SettingsCard {
+            SettingsToggle(
+                title = "Check for Updates on Start",
+                description = "Automatically check for new versions when opening the app",
+                checked = checkOnStart,
+                onCheckedChange = { viewModel.setCheckUpdatesOnStart(it) }
+            )
+        }
+
+        SectionHeader("LINKS")
+        SettingsCard {
+            val githubUrl = "https://github.com/Suntrax/darling"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(githubUrl))
+                        context.startActivity(intent)
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("GitHub Repository", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(githubUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    "Open",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }

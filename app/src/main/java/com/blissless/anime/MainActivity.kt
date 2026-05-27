@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
@@ -15,6 +16,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
@@ -42,10 +44,12 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -108,6 +112,8 @@ import com.blissless.anime.ui.screens.status.StatusListScreen
 import com.blissless.anime.ui.screens.character.StaffScreen
 import com.blissless.anime.ui.screens.relations.AllRelationsScreen
 import com.blissless.anime.ui.theme.AppTheme
+import com.blissless.anime.update.GitHubRelease
+import com.blissless.anime.update.UpdateViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -2333,6 +2339,70 @@ streamError?.let { error ->
                             }
 },
                         dismissButton = null
+                    )
+                }
+
+                // Update check on startup
+                val updateViewModel: UpdateViewModel = viewModel()
+                val pendingUpdateState by viewModel.pendingUpdateRelease.collectAsState()
+                var showUpdateDialog by remember { mutableStateOf(false) }
+
+                LaunchedEffect(pendingUpdateState) {
+                    if (pendingUpdateState != null) {
+                        showUpdateDialog = true
+                    }
+                }
+
+                val pendingUpdate = pendingUpdateState
+                if (showUpdateDialog && pendingUpdate != null) {
+                    AlertDialog(
+                        onDismissRequest = { showUpdateDialog = false },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        },
+                        title = {
+                            Text(
+                                text = "Update Available",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    text = "Version ${pendingUpdate.tagName.removePrefix("v")} is now available.",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Would you like to download and install it?",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showUpdateDialog = false
+                                    updateViewModel.setReleaseAndDownload(pendingUpdate)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Update")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showUpdateDialog = false }) {
+                                Text("Later")
+                            }
+                        }
                     )
                 }
             }

@@ -35,6 +35,7 @@ import com.blissless.anime.data.models.TmdbEpisode
 import com.blissless.anime.data.models.UserActivity
 import com.blissless.anime.data.models.UserAnimeStats
 import com.blissless.anime.data.models.UserFavoriteAnime
+import com.blissless.anime.update.GitHubRelease
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -578,6 +579,11 @@ class MainViewModel : ViewModel() {
     val bufferAheadSeconds: StateFlow<Int> get() = userPreferences.bufferAheadSeconds
     val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
+    val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
+
+    // Pending update from startup check
+    private val _pendingUpdateRelease = MutableStateFlow<GitHubRelease?>(null)
+    val pendingUpdateRelease: StateFlow<GitHubRelease?> = _pendingUpdateRelease.asStateFlow()
 
     // Cache Delegations
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> get() = cacheManager.prefetchedStreams
@@ -747,6 +753,43 @@ class MainViewModel : ViewModel() {
             if (hasToken) {
                 fetchAniListFavorites()
             }
+
+            // Check for updates on start if enabled
+            if (userPreferences.checkUpdatesOnStart.value) {
+                checkForUpdatesSilently()
+            }
+        }
+    }
+
+    fun checkForUpdatesSilently() {
+        viewModelScope.launch {
+            try {
+                val url = "https://api.github.com/repos/Suntrax/darling/releases/latest"
+                val request = okhttp3.Request.Builder().url(url)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build()
+                val response = withContext(Dispatchers.IO) {
+                    OkHttpClient().newCall(request).execute()
+                }
+                if (!response.isSuccessful) return@launch
+                val body = withContext(Dispatchers.IO) { response.body.string() }
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val release = json.decodeFromString<GitHubRelease>(body)
+                val currentVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+                val cleanTag = release.tagName.removePrefix("v").removePrefix("V")
+                val parts1 = cleanTag.split(".").map { it.toIntOrNull() ?: 0 }
+                val parts2 = currentVersion.split(".").map { it.toIntOrNull() ?: 0 }
+                val maxLen = maxOf(parts1.size, parts2.size)
+                var cmp = 0
+                for (i in 0 until maxLen) {
+                    val p1 = parts1.getOrElse(i) { 0 }
+                    val p2 = parts2.getOrElse(i) { 0 }
+                    if (p1 != p2) { cmp = p1 - p2; break }
+                }
+                if (cmp > 0) {
+                    _pendingUpdateRelease.value = release
+                }
+            } catch (_: Exception) { }
         }
     }
 
@@ -1511,6 +1554,7 @@ class MainViewModel : ViewModel() {
     fun setBufferAheadSeconds(seconds: Int) = userPreferences.setBufferAheadSeconds(seconds)
     fun setBufferSizeMb(sizeMb: Int) = userPreferences.setBufferSizeMb(sizeMb)
     fun setShowBufferIndicator(show: Boolean) = userPreferences.setShowBufferIndicator(show)
+    fun setCheckUpdatesOnStart(enabled: Boolean) = userPreferences.setCheckUpdatesOnStart(enabled)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {

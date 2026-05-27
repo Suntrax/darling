@@ -73,6 +73,7 @@ private const val ANILIST_PREFS = "anilist_prefs"
 private const val KEY_DATA = "schedule_data"
 private const val KEY_UPD = "last_update"
 private const val KEY_REFRESH_TIME = "last_refresh_time"
+private const val KEY_WAS_AUTH = "was_authed"
 private const val WORK_PERIODIC = "airing_schedule_widget_periodic"
 private const val WORK_NOW = "airing_schedule_widget_now"
 private const val COOLDOWN_MS = 30_000L
@@ -114,16 +115,18 @@ object AiringScheduleWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         var data = loadData(prefs)
+        val token = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
+            .getString("auth_token", null)
+        val wasAuthed = prefs.getBoolean(KEY_WAS_AUTH, false)
+        val isAuthed = token != null
 
-        if (data.entries.isEmpty()) {
+        if (data.entries.isEmpty() || isAuthed != wasAuthed) {
             try {
-                val token = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
-                    .getString("auth_token", null)
                 val fresh = withContext(Dispatchers.IO) {
                     WidgetScheduleFetcher.quickFetch(context, token)
                 }
                 if (fresh.entries.isNotEmpty()) {
-                    saveWidgetData(context, fresh)
+                    saveWidgetData(context, fresh, isAuthed)
                     withContext(Dispatchers.IO) { cacheCovers(context, fresh.entries) }
                     data = fresh
                 }
@@ -397,12 +400,13 @@ class AiringScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget = AiringScheduleWidget
 }
 
-private fun saveWidgetData(context: Context, data: WidgetScheduleData) {
+private fun saveWidgetData(context: Context, data: WidgetScheduleData, isAuthed: Boolean = false) {
     val j = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     val saved = j.encodeToString(data)
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
         .putString(KEY_DATA, saved)
         .putLong(KEY_UPD, System.currentTimeMillis())
+        .putBoolean(KEY_WAS_AUTH, isAuthed)
         .commit()
 }
 
@@ -468,7 +472,7 @@ class AiringScheduleWorker(context: Context, params: WorkerParameters) : Corouti
                 .getString("auth_token", null)
             val data = WidgetScheduleFetcher.fetch(applicationContext, token)
             cacheCovers(applicationContext, data.entries)
-            saveWidgetData(applicationContext, data)
+            saveWidgetData(applicationContext, data, token != null)
             updateWidget(applicationContext)
             Result.success()
         } catch (e: Exception) {
