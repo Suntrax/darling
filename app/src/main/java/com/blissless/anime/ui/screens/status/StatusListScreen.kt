@@ -119,7 +119,7 @@ fun StatusListScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.surface)
             .graphicsLayer {
                 translationY = animatedOffset
             }
@@ -153,12 +153,12 @@ fun StatusListScreen(
                                 text = title,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "${animeList.size} anime",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -168,12 +168,12 @@ fun StatusListScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
 
@@ -184,7 +184,7 @@ fun StatusListScreen(
                 ) {
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         )
                     ) {
                         Column(
@@ -201,7 +201,7 @@ fun StatusListScreen(
                             Text(
                                 text = "No anime in this list",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -524,7 +524,7 @@ private fun StatusListAnimeCard(
                 maxLines = 2,
                 style = MaterialTheme.typography.labelMedium,
                 overflow = TextOverflow.Ellipsis,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

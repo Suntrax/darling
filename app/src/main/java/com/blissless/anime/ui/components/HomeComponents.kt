@@ -75,9 +75,9 @@ data class HomeAnimeCardBounds(
 @Composable
 fun LoadingSkeleton(isOled: Boolean) {
     val shimmerColors = listOf(
-        if (isOled) Color(0xFF2A2A2A) else Color(0xFFE0E0E0),
-        if (isOled) Color(0xFF1A1A1A) else Color(0xFFD0D0D0),
-        if (isOled) Color(0xFF2A2A2A) else Color(0xFFE0E0E0),
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
     )
     val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
     val shimmerOffset by infiniteTransition.animateFloat(
@@ -154,7 +154,7 @@ fun LoadingSkeleton(isOled: Boolean) {
                                 .height(3.dp)
                                 .padding(horizontal = 4.dp)
                                 .background(
-                                    if (isOled) Color(0xFF333333) else Color(0xFFE8E8E8),
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
                                     RoundedCornerShape(2.dp)
                                 )
                         ) {
@@ -186,7 +186,7 @@ fun SectionHeader(
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (isOled) Color(0xFF1A1A1A).copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -203,17 +203,17 @@ fun SectionHeader(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.weight(1f))
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
             ) {
                 Text(
                     "$count",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
@@ -556,7 +556,7 @@ fun HomeAnimeCard(
             else -> "Unknown"
         }
         Box(modifier = Modifier.width(130.dp).height(36.dp)) {
-            Text(text = displayTitle, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
+            Text(text = displayTitle, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

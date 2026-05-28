@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -169,17 +170,18 @@ private fun SettingsLandingPage(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(top = 36.dp, bottom = 100.dp)
+            .padding(horizontal = 16.dp)
+            .padding(top = 20.dp, bottom = 100.dp)
     ) {
         Row(
+            modifier = Modifier.padding(vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             AsyncImage(
                 model = R.mipmap.ic_launcher_round,
                 contentDescription = "App",
-                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
+                modifier = Modifier.size(42.dp).clip(CircleShape)
             )
             Column {
                 Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -187,7 +189,7 @@ private fun SettingsLandingPage(
             }
         }
 
-        Spacer(modifier = Modifier.height(36.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
