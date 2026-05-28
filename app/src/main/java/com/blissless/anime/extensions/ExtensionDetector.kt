@@ -4,22 +4,34 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 
 class ExtensionDetector(private val context: Context) {
 
     @Suppress("DEPRECATION")
     private val packageFlags = PackageManager.GET_CONFIGURATIONS or
             PackageManager.GET_META_DATA or
-            PackageManager.GET_SIGNATURES or
             (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
                 PackageManager.GET_SIGNING_CERTIFICATES else 0)
 
     fun detectInstalledExtensions(): List<Extension> {
         val pm = context.packageManager
-        val installedPackages = getInstalledPackages(pm)
+        val installedPackages = try {
+            getInstalledPackages(pm)
+        } catch (e: SecurityException) {
+            Log.e("ExtensionDetector", "Missing QUERY_ALL_PACKAGES permission", e)
+            return emptyList()
+        }
         return installedPackages
             .filter { isExtension(it) }
-            .map { toExtension(it, pm) }
+            .mapNotNull { pkgInfo ->
+                try {
+                    toExtension(pkgInfo, pm)
+                } catch (e: Exception) {
+                    Log.w("ExtensionDetector", "Failed to process extension: ${pkgInfo.packageName}", e)
+                    null
+                }
+            }
             .sortedBy { it.name }
     }
 
@@ -56,6 +68,12 @@ class ExtensionDetector(private val context: Context) {
             ?: metaData?.getString(METADATA_ANIME_SOURCE_CLASS)
             ?: metaData?.getString(METADATA_SOURCE_FACTORY)
 
+        val icon = try {
+            ai.loadIcon(pm)
+        } catch (e: Exception) {
+            null
+        }
+
         return Extension(
             packageName = pkgInfo.packageName,
             name = pm.getApplicationLabel(ai)?.toString() ?: pkgInfo.packageName,
@@ -66,7 +84,7 @@ class ExtensionDetector(private val context: Context) {
                 @Suppress("DEPRECATION")
                 pkgInfo.versionCode.toLong()
             },
-            icon = ai.loadIcon(pm),
+            icon = icon,
             sourceClass = sourceClass,
             isNsfw = isMetadataTrue(metaData, METADATA_NSFW) ||
                     isMetadataTrue(metaData, METADATA_ANIME_NSFW),

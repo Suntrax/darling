@@ -11,10 +11,12 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import com.blissless.anime.stream.SourceManager.SourceWithExt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class SearchResult(
     val source: SourceWithExt,
@@ -81,7 +83,9 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 _uiState.value = _uiState.value.copy(searchResults = results.toList())
             }
-            _uiState.value = _uiState.value.copy(isSearching = false, searchResults = results.toList())
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(isSearching = false, searchResults = results.toList())
+            }
         }
     }
 
@@ -121,14 +125,8 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                 hosters = hosters,
             )
             when {
-                hosters == null -> {
-                    launchPlayer(source.source, episode, anime)
-                }
-                hosters.size == 1 -> {
-                    loadAndPlay(source.source, hosters.first(), episode, anime)
-                }
-                hosters.isEmpty() -> {
-                    launchPlayer(source.source, episode, anime)
+                hosters.isNullOrEmpty() -> {
+                    loadAndPlay(source.source, episode = episode, anime = anime)
                 }
                 else -> {
                     loadAndPlay(source.source, hosters.first(), episode, anime)
@@ -138,52 +136,50 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectHoster(hoster: Hoster) {
-        val source = _uiState.value.selectedSource ?: return
+        val state = _uiState.value
+        val source = state.selectedSource ?: return
+        val episode = state.selectedEpisode ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 selectedHoster = hoster,
                 isLoadingVideos = true,
             )
-            loadAndPlay(source.source, hoster, _uiState.value.selectedEpisode!!)
+            loadAndPlay(source.source, hoster, episode, state.selectedAnime)
         }
     }
 
-    private suspend fun loadAndPlay(source: AnimeCatalogueSource, hoster: Hoster, episode: SEpisode, anime: SAnime? = null) {
-        val videos = try {
-            val v = manager.getVideosFromHoster(source, hoster)
-            if (source is AnimeHttpSource) {
-                PlayerData.extensionClient = source.client
-            }
-            v
-        } catch (e: Throwable) {
+    private suspend fun loadAndPlay(source: AnimeCatalogueSource, hoster: Hoster? = null, episode: SEpisode, anime: SAnime? = null) {
+        val videos = if (hoster != null) {
             try {
-                val v = manager.getVideosDirect(source, episode, anime)
+                val v = manager.getVideosFromHoster(source, hoster)
                 if (source is AnimeHttpSource) {
                     PlayerData.extensionClient = source.client
                 }
                 v
-            } catch (e2: Throwable) {
-                _uiState.value = _uiState.value.copy(error = "Failed to load videos: ${e2.message}")
-                emptyList()
+            } catch (e: Throwable) {
+                fallbackGetVideos(source, episode, anime, e.message)
             }
+        } else {
+            fallbackGetVideos(source, episode, anime)
         }
         _uiState.value = _uiState.value.copy(isLoadingVideos = false)
         launchPlayerWithVideos(videos)
     }
 
-    private suspend fun launchPlayer(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null) {
-        val videos = try {
+    private suspend fun fallbackGetVideos(
+        source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime?, previousError: String? = null
+    ): List<Video> {
+        return try {
             val v = manager.getVideosDirect(source, episode, anime)
             if (source is AnimeHttpSource) {
                 PlayerData.extensionClient = source.client
             }
             v
-        } catch (e: Throwable) {
-            _uiState.value = _uiState.value.copy(error = "Failed to load videos: ${e.message}")
+        } catch (e2: Throwable) {
+            val msg = previousError?.let { "$it; " } ?: ""
+            _uiState.value = _uiState.value.copy(error = "Failed to load videos: ${msg}${e2.message}")
             emptyList()
         }
-        _uiState.value = _uiState.value.copy(isLoadingVideos = false)
-        launchPlayerWithVideos(videos)
     }
 
     private fun launchPlayerWithVideos(videos: List<Video>) {
@@ -200,18 +196,10 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
         val episode = state.selectedEpisode ?: return
         val anime = state.selectedAnime
 
-        val bestIndex = oldVideos.indexOfLast {
-            val res = it.resolution ?: 0
-            if (res == 0) {
-                (it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0) > 0
-            } else res > 0
-        }.let { if (it < 0) oldVideos.indices.last else it }
-
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingVideos = true)
             try {
-                // Re-fetch fresh video list just before playing (URL tokens expire)
-                    val freshVideos = manager.getVideosDirect(source.source, episode, anime)
+                val freshVideos = manager.getVideosDirect(source.source, episode, anime)
                 if (freshVideos.isNotEmpty()) {
                     val freshVideo = freshVideos.getOrNull(index) ?: freshVideos.first()
                     val ctx = getApplication<Application>()
@@ -224,14 +212,17 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                     ctx.startActivity(Intent(ctx, PlayerActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     })
+                } else {
+                    _uiState.value = _uiState.value.copy(error = "No videos available for this episode")
                 }
             } catch (e: Throwable) {
                 val ctx = getApplication<Application>()
+                val fallbackVideo = oldVideos.getOrNull(index) ?: oldVideos.firstOrNull() ?: return@launch
                 PlayerData.videos = oldVideos
                 PlayerData.animeTitle = source.extension.name.removePrefix("Aniyomi: ")
-                PlayerData.currentQualityIndex = index
-                PlayerData.selectedSubtitle = oldVideos[index].subtitleTracks.firstOrNull()
-                PlayerData.selectedAudio = oldVideos[index].audioTracks.firstOrNull()
+                PlayerData.currentQualityIndex = oldVideos.indexOf(fallbackVideo).coerceAtLeast(0)
+                PlayerData.selectedSubtitle = fallbackVideo.subtitleTracks.firstOrNull()
+                PlayerData.selectedAudio = fallbackVideo.audioTracks.firstOrNull()
                 PlayerData.extensionClient = (source.source as? AnimeHttpSource)?.client
                 ctx.startActivity(Intent(ctx, PlayerActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -248,6 +239,11 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
             selectedSource = null,
             episodes = emptyList(),
             selectedEpisode = null,
+            isLoadingEpisodes = false,
+            isLoadingVideos = false,
+            hosters = null,
+            selectedHoster = null,
+            pendingVideos = null,
         )
     }
 

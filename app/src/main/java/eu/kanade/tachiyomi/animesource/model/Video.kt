@@ -42,7 +42,7 @@ data class Video(
         audioTracks: List<Track> = emptyList(),
     ) : this(
         videoTitle = quality,
-        videoUrl = videoUrl ?: "null",
+        videoUrl = videoUrl ?: "",
         headers = headers,
         subtitleTracks = subtitleTracks,
         audioTracks = audioTracks,
@@ -57,7 +57,7 @@ data class Video(
         headers: Headers? = null,
     ) : this(
         videoTitle = quality,
-        videoUrl = videoUrl ?: "null",
+        videoUrl = videoUrl ?: "",
         headers = headers,
     )
 }

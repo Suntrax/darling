@@ -1,9 +1,9 @@
 package com.blissless.anime.stream
 
 import android.content.Context
+import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
-import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 class SourceManager(private val context: Context) {
     private val detector = ExtensionDetector(context)
     private val loader = ExtensionLoader(context)
+    @Volatile
     private var sources: List<SourceWithExt> = emptyList()
 
     data class SourceWithExt(
@@ -33,14 +34,16 @@ class SourceManager(private val context: Context) {
     suspend fun loadSources() {
         withContext(Dispatchers.IO) {
             val extensions = detector.detectInstalledExtensions()
-            sources = extensions.flatMap { ext ->
+            val loaded = extensions.flatMap { ext ->
                 try {
                     val loaded = loader.loadSources(ext)
                     loaded.map { SourceWithExt(it, ext) }
                 } catch (e: Exception) {
+                    Log.w("SourceManager", "Failed to load extension: ${ext.packageName}", e)
                     emptyList()
                 }
             }
+            sources = loaded
         }
     }
 
@@ -53,11 +56,13 @@ class SourceManager(private val context: Context) {
             val targets = if (sourceFilter != null) listOf(sourceFilter) else sources
             for (sw in targets) {
                 try {
-                    val page = sw.source.getSearchAnime(1, query, AnimeFilterList())
+                    val filters = sw.source.getFilterList()
+                    val page = sw.source.getSearchAnime(1, query, filters)
                     if (page.animes.isNotEmpty()) {
                         onProgress(sw, page.animes)
                     }
                 } catch (e: Exception) {
+                    Log.w("SourceManager", "Search failed for ${sw.source.name}", e)
                 }
             }
         }
@@ -65,21 +70,13 @@ class SourceManager(private val context: Context) {
 
     suspend fun getEpisodes(source: AnimeCatalogueSource, anime: SAnime): List<SEpisode> {
         return withContext(Dispatchers.IO) {
-            try {
-                source.getEpisodeList(anime)
-            } catch (e: Exception) {
-                throw e
-            }
+            source.getEpisodeList(anime)
         }
     }
 
     suspend fun getAnimeDetails(source: AnimeCatalogueSource, anime: SAnime): SAnime {
         return withContext(Dispatchers.IO) {
-            try {
-                source.getAnimeDetails(anime)
-            } catch (e: Exception) {
-                throw e
-            }
+            source.getAnimeDetails(anime)
         }
     }
 

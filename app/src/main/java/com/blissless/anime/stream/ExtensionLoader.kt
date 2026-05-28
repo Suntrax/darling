@@ -1,16 +1,17 @@
 package com.blissless.anime.stream
 
 import android.content.Context
+import android.util.Log
 import dalvik.system.DexClassLoader
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
-import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
 import com.blissless.anime.extensions.Extension
+import java.util.concurrent.ConcurrentHashMap
 
 class ParentFirstClassLoader(apkPath: String, dexOutput: String, parent: ClassLoader) :
     DexClassLoader(apkPath, dexOutput, null, parent) {
 
-    private val parentFirstPackages = emptyList<String>()
+    private val parentFirstPackages = setOf("eu.kanade.tachiyomi", "okhttp3", "kotlin")
 
     override fun loadClass(name: String, resolve: Boolean): Class<*>? {
         for (pkg in parentFirstPackages) {
@@ -28,17 +29,12 @@ class ParentFirstClassLoader(apkPath: String, dexOutput: String, parent: ClassLo
 
 class ExtensionLoader(private val context: Context) {
 
+    private val loaderCache = ConcurrentHashMap<String, ParentFirstClassLoader>()
+
     fun loadSources(extension: Extension): List<AnimeCatalogueSource> {
         val pm = context.packageManager
         val ai = pm.getApplicationInfo(extension.packageName, 0)
         val apkPath = ai.sourceDir
-        val dexOutput = context.codeCacheDir
-
-        val loader = ParentFirstClassLoader(
-            apkPath,
-            dexOutput.absolutePath,
-            context.classLoader
-        )
 
         val sourceClass = extension.sourceClass
         if (sourceClass == null) {
@@ -46,13 +42,16 @@ class ExtensionLoader(private val context: Context) {
         }
 
         val sourceClassName = if (sourceClass.startsWith(".")) {
-            val pkg = pm.getPackageInfo(extension.packageName, 0).packageName
-            "$pkg$sourceClass"
+            "${extension.packageName}$sourceClass"
         } else {
             sourceClass
         }
 
         return try {
+            val loader = loaderCache.getOrPut(apkPath) {
+                val dexOutput = context.codeCacheDir
+                ParentFirstClassLoader(apkPath, dexOutput.absolutePath, context.classLoader)
+            }
             val clazz = loader.loadClass(sourceClassName)
             when {
                 AnimeSourceFactory::class.java.isAssignableFrom(clazz) -> {
@@ -64,11 +63,17 @@ class ExtensionLoader(private val context: Context) {
                     listOf(source)
                 }
                 else -> {
+                    Log.w("ExtensionLoader", "Source class $sourceClassName does not implement AnimeCatalogueSource or AnimeSourceFactory")
                     emptyList()
                 }
             }
         } catch (e: Exception) {
+            Log.e("ExtensionLoader", "Failed to load source class $sourceClassName from ${extension.packageName}", e)
             emptyList()
         }
+    }
+
+    fun clearCache() {
+        loaderCache.clear()
     }
 }

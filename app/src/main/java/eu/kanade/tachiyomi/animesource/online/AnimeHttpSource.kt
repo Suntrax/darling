@@ -19,6 +19,7 @@ import okhttp3.Response
 import java.net.URI
 import java.net.URISyntaxException
 import java.security.MessageDigest
+import java.util.Locale
 
 abstract class AnimeHttpSource : AnimeCatalogueSource {
 
@@ -36,7 +37,7 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
         get() = network.client
 
     protected fun generateId(name: String, lang: String, versionId: Int): Long {
-        val key = "${name.lowercase()}/$lang/$versionId"
+        val key = "${name.lowercase(Locale.ROOT)}/$lang/$versionId"
         val bytes = MessageDigest.getInstance("MD5").digest(key.toByteArray())
         return (0..7).map { bytes[it].toLong() and 0xff shl 8 * (7 - it) }.reduce(Long::or) and Long.MAX_VALUE
     }

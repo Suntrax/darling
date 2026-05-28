@@ -3,13 +3,13 @@ package com.blissless.anime.extensions
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +21,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 data class ExtensionsUiState(
     val isLoading: Boolean = true,
@@ -40,6 +41,9 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
 
     private val detector = ExtensionDetector(application)
     private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
@@ -130,10 +134,22 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                     putExtra(Intent.EXTRA_RETURN_RESULT, true)
                 }
                 ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                delay(5000)
+                waitForInstallation(repoExtension.packageName)
                 loadExtensions()
             } catch (e: Exception) {
                 Toast.makeText(ctx, "Install failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private suspend fun waitForInstallation(packageName: String) {
+        val pm = getApplication<Application>().packageManager
+        repeat(30) {
+            try {
+                pm.getPackageInfo(packageName, 0)
+                return
+            } catch (_: PackageManager.NameNotFoundException) {
+                kotlinx.coroutines.delay(1000)
             }
         }
     }
@@ -210,5 +226,11 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                 if (it.url == url) it.transform() else it
             }
         )
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        httpClient.dispatcher.executorService.shutdown()
+        httpClient.connectionPool.evictAll()
     }
 }
