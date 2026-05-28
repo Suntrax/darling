@@ -48,7 +48,6 @@ object GraphqlQueries {
             status
             averageScore
             genres
-            tags { name isAdult }
             seasonYear
             isAdult
             startDate { year }
@@ -75,7 +74,6 @@ object GraphqlQueries {
                 status
                 averageScore
                 genres
-                tags { name isAdult }
                 seasonYear
                 isAdult
             }

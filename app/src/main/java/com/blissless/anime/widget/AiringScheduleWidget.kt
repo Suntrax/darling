@@ -52,6 +52,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.blissless.anime.MainActivity
 import com.blissless.anime.R
+import com.blissless.anime.data.models.isAdultContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -91,7 +92,8 @@ data class WidgetAiringEntry(
     val userStatus: String? = null,
     val isAdult: Boolean = false,
     val titleEnglish: String? = null,
-    val titleRomaji: String? = null
+    val titleRomaji: String? = null,
+    val genres: List<String> = emptyList()
 )
 
 @Serializable
@@ -150,7 +152,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
         }
 
         val userPrefs = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
-        val hideAdult = userPrefs.getBoolean("hide_adult_content", false)
+        val hideAdult = userPrefs.getBoolean("hide_adult_content", true)
         val preferEnglish = userPrefs.getBoolean("prefer_english_titles", true)
 
         if (data.entries.isEmpty() || isStale(data.lastUpdateTime))
@@ -207,7 +209,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
 
         val nowTs = System.currentTimeMillis() / 1000
         val items = data.entries
-            .filter { if (hideAdult) !it.isAdult else true }
+            .filter { if (hideAdult) !isAdultContent(it.isAdult, it.genres) else true }
             .filter { it.dayOfWeek == dow && it.airingAt >= todayStart && it.airingAt < todayEnd }
             .sortedBy { it.airingAt }
 
@@ -488,7 +490,7 @@ object WidgetScheduleFetcher {
     fun quickFetch(context: Context, authToken: String? = null): WidgetScheduleData {
         val ct = System.currentTimeMillis() / 1000
         val body = JSONObject().apply {
-            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres tags{name isAdult} seasonYear isAdult mediaListEntry{id status}}}}}")
+            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}")
             put("variables", JSONObject(mapOf("p" to 1, "s" to (ct - 86400).toInt(), "e" to (ct + 86400).toInt())))
         }
         val resp = execute(body.toString(), authToken, shortTimeout = true)
@@ -498,7 +500,7 @@ object WidgetScheduleFetcher {
 
     fun fetch(context: Context, authToken: String? = null): WidgetScheduleData {
         val ct = System.currentTimeMillis() / 1000
-        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres tags{name isAdult} seasonYear isAdult mediaListEntry{id status}}}}}"
+        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"
         val entries = mutableListOf<WidgetAiringEntry>()
         var page = 1
         while (page <= 5) {
@@ -582,17 +584,13 @@ object WidgetScheduleFetcher {
                 val score = if (m.has("averageScore") && !m.isNull("averageScore")) m.getInt("averageScore") else null
                 val ta = if (s.has("timeUntilAiring") && !s.isNull("timeUntilAiring")) s.getLong("timeUntilAiring") else null
                 val status = m.optJSONObject("mediaListEntry")?.optString("status")?.takeIf { it.isNotEmpty() }
-                val ga = m.optJSONArray("genres")
-                val hasAdultGenre = if (ga != null) (0 until ga.length()).any {
-                    val g = ga.optString(it, ""); g.equals("Hentai", ignoreCase = true) || g.equals("Nudity", ignoreCase = true)
-                } else false
-                val tagArr = m.optJSONArray("tags")
-                val hasAdultTag = if (tagArr != null) (0 until tagArr.length()).any {
-                    val t = tagArr.getJSONObject(it); t.optBoolean("isAdult", false) || t.optString("name", "").equals("Nudity", ignoreCase = true)
-                } else false
-                val adult = m.optBoolean("isAdult", false) || hasAdultGenre || hasAdultTag
+                val genres = mutableListOf<String>()
+                m.optJSONArray("genres")?.let { arr ->
+                    for (j in 0 until arr.length()) { genres.add(arr.optString(j, "")) }
+                }
+                val adult = m.optBoolean("isAdult", false)
                 val cal = Calendar.getInstance().apply { timeInMillis = s.getLong("airingAt") * 1000L }
-                r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status, adult, titleEn, titleRo))
+                r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status, adult, titleEn, titleRo, genres))
             } catch (_: Exception) { }
         }
         return r

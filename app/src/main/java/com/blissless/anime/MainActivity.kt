@@ -119,6 +119,8 @@ import kotlin.math.absoluteValue
 class MainActivity : ComponentActivity() {
 
     private val mainViewModel: MainViewModel by viewModels()
+    private val _widgetClicks = kotlinx.coroutines.flow.MutableSharedFlow<Int>(replay = 1, extraBufferCapacity = 1)
+    val widgetClicks: kotlinx.coroutines.flow.SharedFlow<Int> = _widgetClicks
 
     companion object {
         const val PREFS_NAME = "anilist_prefs"
@@ -135,6 +137,7 @@ class MainActivity : ComponentActivity() {
 
         mainViewModel.init(applicationContext, hasToken)
 
+        intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
         handleAuthCallback(intent)
 
         setContent {
@@ -424,6 +427,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+        intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
     }
 
     override fun onResume() {
@@ -654,31 +658,31 @@ fun MainScreen(
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
 
+    val mainAct = context as? MainActivity
     LaunchedEffect(Unit) {
-        val activity = context as? MainActivity ?: return@LaunchedEffect
-        val animeId = activity.intent?.getIntExtra("widget_anime_id", 0) ?: return@LaunchedEffect
-        if (animeId <= 0) return@LaunchedEffect
-        activity.intent?.removeExtra("widget_anime_id")
-        val detailedData = viewModel.fetchDetailedAnimeData(animeId)
-        if (detailedData != null) {
-            selectedAnimeState = AnimeMedia(
-                id = detailedData.id,
-                title = detailedData.title,
-                titleEnglish = detailedData.titleEnglish,
-                cover = detailedData.cover,
-                banner = detailedData.banner,
-                progress = 0,
-                totalEpisodes = detailedData.episodes,
-                latestEpisode = detailedData.latestEpisode,
-                status = detailedData.status ?: "",
-                averageScore = detailedData.averageScore,
-                genres = detailedData.genres,
-                listStatus = "",
-                listEntryId = 0,
-                year = detailedData.year,
-                malId = detailedData.malId
-            )
-            showDetailedAnimeScreen = true
+        mainAct?.widgetClicks?.collect { animeId ->
+            if (animeId <= 0) return@collect
+            val detailedData = viewModel.fetchDetailedAnimeData(animeId)
+            if (detailedData != null) {
+                selectedAnimeState = AnimeMedia(
+                    id = detailedData.id,
+                    title = detailedData.title,
+                    titleEnglish = detailedData.titleEnglish,
+                    cover = detailedData.cover,
+                    banner = detailedData.banner,
+                    progress = 0,
+                    totalEpisodes = detailedData.episodes,
+                    latestEpisode = detailedData.latestEpisode,
+                    status = detailedData.status ?: "",
+                    averageScore = detailedData.averageScore,
+                    genres = detailedData.genres,
+                    listStatus = "",
+                    listEntryId = 0,
+                    year = detailedData.year,
+                    malId = detailedData.malId
+                )
+                showDetailedAnimeScreen = true
+            }
         }
     }
 

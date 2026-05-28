@@ -28,9 +28,9 @@
     <path
         android:fillColor="#FF1A1A1A"
         android:pathData="M12,28h226v58H12z" />
-    <!-- Accent bar (blue) -->
+    <!-- Accent bar (purple, planning) -->
     <path
-        android:fillColor="#FF2196F3"
+        android:fillColor="#FF9C27B0"
         android:pathData="M12,28h3v58H12z" />
     <!-- Cover placeholder (rounded corners) -->
     <path
@@ -40,9 +40,9 @@
     <path
         android:fillColor="#FF757575"
         android:pathData="M62,42h90v3H62z" />
-    <!-- Status dot (blue) -->
+    <!-- Status dot (purple, planning) -->
     <path
-        android:fillColor="#FF2196F3"
+        android:fillColor="#FF9C27B0"
         android:pathData="M62,52m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
     <!-- Episode text (dim) -->
     <path

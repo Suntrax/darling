@@ -1202,7 +1202,6 @@ class MainViewModel : ViewModel() {
         val episodes = media.episodes ?: 0
         val latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 }
 
-        val isAdultByTags = media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true
         return ExploreAnime(
             id = media.id,
             title = title,
@@ -1215,7 +1214,7 @@ class MainViewModel : ViewModel() {
             genres = media.genres ?: emptyList(),
             year = media.startDate?.year ?: media.seasonYear,
             malId = media.idMal,
-            isAdult = media.isAdult || isAdultByTags
+            isAdult = media.isAdult ?: false
         )
     }
 
@@ -1239,7 +1238,6 @@ class MainViewModel : ViewModel() {
                 val titleEnglish = media.title.english
                 val episodes = media.episodes ?: 0
 
-                val isAdultByTags = media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true
                 AiringScheduleAnime(
                     id = media.id,
                     title = title,
@@ -1253,7 +1251,7 @@ class MainViewModel : ViewModel() {
                     genres = media.genres ?: emptyList(),
                     year = media.seasonYear,
                     malId = media.idMal,
-                    isAdult = media.isAdult || isAdultByTags
+                    isAdult = media.isAdult ?: false
                 )
             }.sortedBy { it.airingAt }
 
@@ -1675,7 +1673,7 @@ class MainViewModel : ViewModel() {
             latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
             nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt,
             relations = relationsList,
-            isAdult = media.isAdult ?: false || media.tags?.any { it.isAdult || it.name.equals("Nudity", ignoreCase = true) } == true,
+            isAdult = media.isAdult ?: false,
             characters = media.characters,
             trailerUrl = media.trailer?.let {
                 if (it.site == "youtube") "https://www.youtube.com/watch?v=${it.id}"
