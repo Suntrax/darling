@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "com.blissless.anime"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 48
         versionName = "4.1"
 
@@ -82,12 +82,44 @@ android {
         compose = true
         buildConfig = true
     }
+
 }
 
 kotlin {
     compilerOptions {
         freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
     }
+}
+
+abstract class RenameApkTask : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val apkDir: DirectoryProperty
+
+    @get:Input
+    abstract val versionName: Property<String>
+
+    @TaskAction
+    fun rename() {
+        val dir = apkDir.get().asFile
+        dir.listFiles()?.filter { it.extension == "apk" }?.forEach { apk ->
+            val newName = when {
+                apk.name.contains("arm64-v8a") -> "Darling-arm64-v8a.apk"
+                apk.name.contains("armeabi-v7a") -> "Darling-armeabi-v7a.apk"
+                else -> "Darling-${versionName.get()}.apk"
+            }
+            apk.renameTo(File(dir, newName))
+        }
+    }
+}
+
+val renameReleaseApk = tasks.register<RenameApkTask>("renameReleaseApk") {
+    apkDir = layout.buildDirectory.dir("outputs/apk/release")
+    versionName = android.defaultConfig.versionName
+}
+
+tasks.matching { it.name == "packageRelease" }.configureEach {
+    finalizedBy(renameReleaseApk)
 }
 
 dependencies {
