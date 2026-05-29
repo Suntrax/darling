@@ -105,6 +105,21 @@
 -keep class * extends androidx.room.RoomDatabase { *; }
 -keep @androidx.room.Database class * { *; }
 
+# Keep Tachiyomi anime source framework (loaded dynamically via DexClassLoader)
+-keep class eu.kanade.tachiyomi.animesource.** { *; }
+-keep class eu.kanade.tachiyomi.network.** { *; }
+-keep class eu.kanade.tachiyomi.util.** { *; }
+-keep class eu.kanade.tachiyomi.AppInfo { *; }
+-dontwarn eu.kanade.tachiyomi.**
+
+# Keep all interfaces and models used by extension sources
+-keep class * extends eu.kanade.tachiyomi.animesource.AnimeCatalogueSource { *; }
+-keep class * implements eu.kanade.tachiyomi.animesource.AnimeSourceFactory { *; }
+-keep class * extends eu.kanade.tachiyomi.animesource.online.AnimeHttpSource { *; }
+
+# Keep model classes accessed reflectively by extensions
+-keep class eu.kanade.tachiyomi.animesource.model.** { *; }
+
 # Keep Kotlin serializers for all serializable classes
 -keep,includedescriptorclasses class com.blissless.anime.widget.**$$serializer { *; }
 -keepclassmembers class com.blissless.anime.widget.** {
