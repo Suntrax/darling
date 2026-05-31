@@ -101,9 +101,16 @@ fun SettingsScreen(
     disableMaterialColors: Boolean = false,
     preferredCategory: String = "sub",
     preferredScraper: String = "Animekai",
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    initialGroup: String? = null
 ) {
     var selectedGroup by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(initialGroup) {
+        if (initialGroup != null) {
+            selectedGroup = initialGroup
+        }
+    }
 
     val s = MaterialTheme.colorScheme
     val groups = remember {
@@ -735,6 +742,8 @@ private fun PlayerSettingsPage(
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
+    val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
+    val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
 
     SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
         SectionHeader("TRACKING")
@@ -802,6 +811,22 @@ private fun PlayerSettingsPage(
                 description = "Automatically play the next episode when current ends",
                 checked = autoPlayNextEpisode,
                 onCheckedChange = { viewModel.setAutoPlayNextEpisode(it) }
+            )
+        }
+
+        SectionHeader("SWIPE GESTURE CONTROLS")
+        SettingsCard {
+            SettingsToggle(
+                title = "Swipe for Volume",
+                description = "Swipe up/down on the left side of the player to adjust volume",
+                checked = swipeVolume,
+                onCheckedChange = { viewModel.setSwipeVolume(it) }
+            )
+            SettingsToggle(
+                title = "Swipe for Brightness",
+                description = "Swipe up/down on the right side of the player to adjust brightness",
+                checked = swipeBrightness,
+                onCheckedChange = { viewModel.setSwipeBrightness(it) }
             )
         }
     }

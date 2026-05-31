@@ -3,6 +3,7 @@ package com.blissless.anime
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.util.Log
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import androidx.core.net.toUri
@@ -580,6 +581,8 @@ class MainViewModel : ViewModel() {
     val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
+    val swipeVolume: StateFlow<Boolean> get() = userPreferences.swipeVolume
+    val swipeBrightness: StateFlow<Boolean> get() = userPreferences.swipeBrightness
 
     // Pending update from startup check
     private val _pendingUpdateRelease = MutableStateFlow<GitHubRelease?>(null)
@@ -1553,6 +1556,8 @@ class MainViewModel : ViewModel() {
     fun setBufferSizeMb(sizeMb: Int) = userPreferences.setBufferSizeMb(sizeMb)
     fun setShowBufferIndicator(show: Boolean) = userPreferences.setShowBufferIndicator(show)
     fun setCheckUpdatesOnStart(enabled: Boolean) = userPreferences.setCheckUpdatesOnStart(enabled)
+    fun setSwipeVolume(enabled: Boolean) = userPreferences.setSwipeVolume(enabled)
+    fun setSwipeBrightness(enabled: Boolean) = userPreferences.setSwipeBrightness(enabled)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {
@@ -2006,6 +2011,10 @@ class MainViewModel : ViewModel() {
             for (query in searchTerms) {
                 try {
                     val page = source.getSearchAnime(1, query, AnimeFilterList())
+                    Log.w("ExtensionSearch", "${source.name}: got ${page.animes.size} results for \"$query\"")
+                    page.animes.forEach { a ->
+                        Log.i("ExtensionSearch", "  -> ${a.title}")
+                    }
                     matchedSAnime = page.animes.firstOrNull { a: SAnime ->
                         a.title.contains(anime.title ?: "", ignoreCase = true) ||
                                 (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
@@ -2014,6 +2023,7 @@ class MainViewModel : ViewModel() {
                         break
                     }
                 } catch (e: Exception) {
+                    Log.w("ExtensionSearch", "Search failed for ${source.name}: ${e.message}")
                 }
             }
 
@@ -2097,20 +2107,42 @@ class MainViewModel : ViewModel() {
                     try {
                         val page = source.getSearchAnime(1, query, AnimeFilterList())
                         val results = page.animes
+                        Log.w("ExtensionSearch", "${sw.source.name}: got ${results.size} results for \"$query\"")
                         if (results.isEmpty()) continue
+                        val normalizedQuery = query.lowercase()
+                            .replace(Regex("[-–—_:;]"), " ")
+                            .replace(Regex("\\s+"), " ")
+                            .trim()
+                        val queryWords = normalizedQuery.split(" ").filter { it.length > 1 }
                         val scored = results.map { a ->
                             val title = a.title
+                            val normalizedTitle = title.lowercase()
+                                .replace(Regex("[-–—_:;]"), " ")
+                                .replace(Regex("\\s+"), " ")
+                                .trim()
+                            val titleWords = normalizedTitle.split(" ").filter { it.length > 1 }
+
                             val score = when {
-                                title.equals(query, ignoreCase = true) -> 1000
-                                query.startsWith(title, ignoreCase = true) || title.startsWith(query, ignoreCase = true) -> 500
-                                title.contains(query, ignoreCase = true) -> 300 - (title.length - query.length)
-                                else -> 0
+                                normalizedTitle == normalizedQuery -> 1000
+                                normalizedTitle.contains(normalizedQuery) -> 600 + normalizedTitle.length / 10
+                                normalizedQuery.contains(normalizedTitle) -> {
+                                    val lengthPenalty = (normalizedQuery.length - normalizedTitle.length)
+                                    maxOf(50, 400 - lengthPenalty)
+                                }
+                                else -> {
+                                    val matchingWords = queryWords.count { w -> titleWords.any { it == w || it.startsWith(w) || w.startsWith(it) } }
+                                    val wordScore = if (queryWords.isNotEmpty()) (matchingWords * 200) / queryWords.size else 0
+                                    wordScore + (matchingWords * 10)
+                                }
                             }
+                            Log.i("ExtensionSearch", "  \"${a.title}\" -> score=$score")
                             a to score
                         }
-                        matchedSAnime = scored.maxByOrNull { it.second }?.first
-                        if (matchedSAnime != null && scored.maxByOrNull { it.second }?.second ?: 0 > 0) break
+                        val best = scored.maxByOrNull { it.second }
+                        matchedSAnime = best?.first
+                        if (matchedSAnime != null && best?.second ?: 0 >= 300) break
                     } catch (e: Exception) {
+                        Log.w("ExtensionSearch", "Search failed for ${sw.source.name}: ${e.message}")
                     }
                 }
 

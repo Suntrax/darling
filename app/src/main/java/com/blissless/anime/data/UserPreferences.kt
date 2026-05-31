@@ -54,6 +54,8 @@ class UserPreferences(private val context: Context) {
         private const val KEY_DEFAULT_SUBTITLE_LANG = "default_subtitle_lang"
         private const val KEY_MAL_FAVORITES = "mal_favorites"
         private const val KEY_CHECK_UPDATES_ON_START = "check_updates_on_start"
+        private const val KEY_SWIPE_VOLUME = "swipe_volume"
+        private const val KEY_SWIPE_BRIGHTNESS = "swipe_brightness"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -238,6 +240,8 @@ class UserPreferences(private val context: Context) {
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
         _showBufferIndicator.value = sharedPreferences.getBoolean(KEY_SHOW_BUFFER_INDICATOR, true)
         _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, false)
+        _swipeVolume.value = sharedPreferences.getBoolean(KEY_SWIPE_VOLUME, false)
+        _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
 
         // Load local favorites
         loadLocalFavorites()
@@ -615,9 +619,26 @@ class UserPreferences(private val context: Context) {
     private val _checkUpdatesOnStart = MutableStateFlow(false)
     val checkUpdatesOnStart: StateFlow<Boolean> = _checkUpdatesOnStart.asStateFlow()
 
+    // Swipe Gesture Controls
+    private val _swipeVolume = MutableStateFlow(false)
+    val swipeVolume: StateFlow<Boolean> = _swipeVolume.asStateFlow()
+
+    private val _swipeBrightness = MutableStateFlow(false)
+    val swipeBrightness: StateFlow<Boolean> = _swipeBrightness.asStateFlow()
+
     fun setCheckUpdatesOnStart(enabled: Boolean) {
         _checkUpdatesOnStart.value = enabled
         sharedPreferences.edit { putBoolean(KEY_CHECK_UPDATES_ON_START, enabled) }
+    }
+
+    fun setSwipeVolume(enabled: Boolean) {
+        _swipeVolume.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SWIPE_VOLUME, enabled) }
+    }
+
+    fun setSwipeBrightness(enabled: Boolean) {
+        _swipeBrightness.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SWIPE_BRIGHTNESS, enabled) }
     }
 
     // MAL Favorites

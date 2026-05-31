@@ -24,6 +24,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FastForward
@@ -59,6 +61,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -168,6 +171,8 @@ fun PlayerScreen(
     disableMaterialColors: Boolean = false,
     showBufferIndicator: Boolean = true,
     bufferAheadSeconds: Int = 30,
+    swipeVolume: Boolean = false,
+    swipeBrightness: Boolean = false,
     animekaiIntroStart: Int? = null,
     animekaiIntroEnd: Int? = null,
     animekaiOutroStart: Int? = null,
@@ -269,6 +274,11 @@ fun PlayerScreen(
     var skipIsForward by remember { mutableStateOf(true) }
     var skipResetJob by remember { mutableStateOf<Job?>(null) }
     var hideControlsJob by remember { mutableStateOf<Job?>(null) }
+
+    var playerVolume by remember { mutableFloatStateOf(1f) }
+    var currentBrightness by remember { mutableFloatStateOf(0.5f) }
+    var showVolumeOverlay by remember { mutableStateOf(false) }
+    var showBrightnessOverlay by remember { mutableStateOf(false) }
 
     LaunchedEffect(showControls, hasError, showSkipIndicator) {
         if (showControls || hasError || showSkipIndicator) {
@@ -881,6 +891,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         // These handle seeking and toggling controls. Defined first so they are "under" the padding zones.
 
         // Left Seek Zone (30% width, offset by padding)
+        // Also handles vertical drag for volume when swipeVolume is enabled
         var lastLeftTapTime by remember { mutableLongStateOf(0L) }
         Box(
             modifier = Modifier
@@ -888,6 +899,24 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                 .fillMaxWidth(0.3f)
                 .padding(start = 40.dp)
                 .align(Alignment.CenterStart)
+                .pointerInput(swipeVolume) {
+                    if (swipeVolume) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { _, dragAmount ->
+                                if (!hasError) {
+                                    val volumeChange = -(dragAmount / 500f)
+                                    playerVolume = (playerVolume + volumeChange).coerceIn(0f, 1f)
+                                    exoPlayer.volume = playerVolume
+                                    showVolumeOverlay = true
+                                    scope.launch {
+                                        delay(1500)
+                                        showVolumeOverlay = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
                 .pointerInput(backwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { 
@@ -917,6 +946,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         )
 
         // Right Seek Zone (30% width, offset by padding)
+        // Also handles vertical drag for brightness when swipeBrightness is enabled
         var lastRightTapTime by remember { mutableLongStateOf(0L) }
         Box(
             modifier = Modifier
@@ -924,6 +954,28 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                 .fillMaxWidth(0.3f)
                 .padding(end = 40.dp)
                 .align(Alignment.CenterEnd)
+                .pointerInput(swipeBrightness) {
+                    if (swipeBrightness) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { _, dragAmount ->
+                                if (!hasError) {
+                                    val brightnessChange = -(dragAmount / 1000f)
+                                    currentBrightness = (currentBrightness + brightnessChange).coerceIn(0.01f, 1f)
+                                    activity?.let { act ->
+                                        val lp = act.window.attributes
+                                        lp.screenBrightness = currentBrightness
+                                        act.window.attributes = lp
+                                    }
+                                    showBrightnessOverlay = true
+                                    scope.launch {
+                                        delay(1500)
+                                        showBrightnessOverlay = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
                 .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
                         onTap = { 
@@ -983,8 +1035,6 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                 .pointerInput(Unit) { detectTapGestures(onTap = {}) }
         )
 
-        // 4. UI Overlays (Top Layer)
-        
         // Controls UI with darkening overlay (drawn first)
         AnimatedVisibility(
             visible = controlsVisible,
@@ -1718,6 +1768,95 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                         }
                     }
                 }
+                }
+            }
+        }
+
+        // Volume Overlay Indicator (on top of controls)
+        val accentColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+        AnimatedVisibility(
+            visible = showVolumeOverlay,
+            enter = fadeIn(animationSpec = tween(200)) + slideInVertically { it / 4 },
+            exit = fadeOut(animationSpec = tween(300)),
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.VolumeUp,
+                    contentDescription = "Volume",
+                    tint = accentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "${(playerVolume * 100).toInt()}%",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(80.dp)
+                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(playerVolume)
+                            .align(Alignment.BottomCenter)
+                            .background(accentColor, RoundedCornerShape(2.dp))
+                    )
+                }
+            }
+        }
+
+        // Brightness Overlay Indicator (on top of controls)
+        AnimatedVisibility(
+            visible = showBrightnessOverlay,
+            enter = fadeIn(animationSpec = tween(200)) + slideInVertically { it / 4 },
+            exit = fadeOut(animationSpec = tween(300)),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(end = 16.dp)
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.BrightnessHigh,
+                    contentDescription = "Brightness",
+                    tint = if (disableMaterialColors) Color.White else Color(0xFFFFD54F),
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "${(currentBrightness * 100).toInt()}%",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(80.dp)
+                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(currentBrightness)
+                            .align(Alignment.BottomCenter)
+                            .background(if (disableMaterialColors) Color.White else Color(0xFFFFD54F), RoundedCornerShape(2.dp))
+                    )
                 }
             }
         }

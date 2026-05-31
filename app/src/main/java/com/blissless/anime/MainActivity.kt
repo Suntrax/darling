@@ -541,6 +541,8 @@ fun MainScreen(
     val preferredCategory by viewModel.preferredCategory.collectAsState(initial = "sub")
     val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
     val bufferAheadSeconds by viewModel.bufferAheadSeconds.collectAsState(initial = 30)
+    val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
+    val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
 
     LaunchedEffect(currentlyWatching) {
         if (currentlyWatching.isNotEmpty()) {
@@ -615,6 +617,7 @@ fun MainScreen(
 
     // Extension flow state
     var showNoExtDialog by remember { mutableStateOf(false) }
+    var pendingSettingsGroup by remember { mutableStateOf<String?>(null) }
     var extensionVideos by remember { mutableStateOf<List<Video>?>(null) }
     var extensionHosters by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Hoster>?>(null) }
     var showExtHosterDialog by remember { mutableStateOf(false) }
@@ -1788,11 +1791,20 @@ fun MainScreen(
             onDismissRequest = { showNoExtDialog = false },
             title = { Text("No Default Extension") },
             text = {
-                Text("Go to Settings â†’ Extensions to set a default extension for streaming.")
+                Text("Set a default extension in Settings > Extensions to enable streaming.")
             },
             confirmButton = {
+                TextButton(onClick = {
+                    showNoExtDialog = false
+                    currentPage = 3
+                    pendingSettingsGroup = "extensions"
+                }) {
+                    Text("Go to Extensions")
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { showNoExtDialog = false }) {
-                    Text("OK")
+                    Text("Cancel")
                 }
             }
         )
@@ -1855,6 +1867,8 @@ fun MainScreen(
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,
+                swipeVolume = swipeVolume,
+                swipeBrightness = swipeBrightness,
                 disableMaterialColors = disableMaterialColors,
                 showBufferIndicator = showBufferIndicator,
                 bufferAheadSeconds = bufferAheadSeconds,
@@ -2075,7 +2089,8 @@ fun MainScreen(
                             autoSkipEnding = autoSkipEnding,
                             autoPlayNextEpisode = autoPlayNextEpisode,
                             disableMaterialColors = disableMaterialColors,
-                            preferredCategory = preferredCategory
+                            preferredCategory = preferredCategory,
+                            initialGroup = pendingSettingsGroup
                         )
                     }
                 }

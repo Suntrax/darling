@@ -52,14 +52,20 @@ class SourceManager(private val context: Context) {
         sourceFilter: SourceWithExt? = null,
         onProgress: (SourceWithExt, List<SAnime>) -> Unit,
     ) {
+        Log.w("ExtensionSearch", "search() called: query=\"$query\", sourceFilter=${sourceFilter?.source?.name}")
         withContext(Dispatchers.IO) {
             val targets = if (sourceFilter != null) listOf(sourceFilter) else sources
+            Log.w("ExtensionSearch", "search() targets: ${targets.size} sources")
             for (sw in targets) {
                 try {
                     val filters = sw.source.getFilterList()
                     val page = sw.source.getSearchAnime(1, query, filters)
+                    Log.w("ExtensionSearch", "${sw.source.name} (${sw.extension.name}): returned ${page.animes.size} results for \"$query\"")
                     if (page.animes.isNotEmpty()) {
                         onProgress(sw, page.animes)
+                        page.animes.forEach { anime ->
+                            Log.i("ExtensionSearch", "  -> [${sw.source.name}] ${anime.title} (${anime.url})")
+                        }
                     }
                 } catch (e: Exception) {
                     Log.w("SourceManager", "Search failed for ${sw.source.name}", e)

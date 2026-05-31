@@ -2,6 +2,7 @@ package com.blissless.anime.stream
 
 import android.app.Application
 import android.content.Intent
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -83,6 +84,7 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 _uiState.value = _uiState.value.copy(searchResults = results.toList())
             }
+            Log.i("ExtensionSearch", "Total search results for \"$query\": ${results.size}")
             withContext(Dispatchers.Main) {
                 _uiState.value = _uiState.value.copy(isSearching = false, searchResults = results.toList())
             }

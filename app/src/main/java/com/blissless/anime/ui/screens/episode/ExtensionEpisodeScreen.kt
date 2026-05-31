@@ -58,6 +58,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import android.util.Log
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -199,8 +200,13 @@ fun ExtensionEpisodeScreen(
                 animes.forEach { anime ->
                     results.add(SearchResult(anime, sw))
                 }
+                Log.i("ExtensionSearch", "${sw.source.name}: found ${animes.size} results")
+                animes.forEach { anime ->
+                    Log.i("ExtensionSearch", "  -> [${sw.source.name}] ${anime.title} (${anime.url})")
+                }
             }
             searchResults = results.toList()
+            Log.i("ExtensionSearch", "Total: ${results.size} results for \"$searchText\"")
             isSearching = false
         }
     }
