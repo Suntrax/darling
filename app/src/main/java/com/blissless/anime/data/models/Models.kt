@@ -364,7 +364,8 @@ data class HomeCacheData(
 
 @Serializable
 data class PlaybackPositionCache(
-    val positions: Map<String, Long>
+    val positions: Map<String, Long>,
+    val durations: Map<String, Long> = emptyMap()
 )
 
 // ============================================

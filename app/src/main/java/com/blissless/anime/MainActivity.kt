@@ -526,6 +526,7 @@ fun MainScreen(
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     val playbackPositions by viewModel.playbackPositions.collectAsState()
+    val playbackDurations by viewModel.playbackDurations.collectAsState()
 
     LaunchedEffect(isFavoriteRateLimited) {
         if (isFavoriteRateLimited) {
@@ -847,6 +848,9 @@ fun MainScreen(
             )
         }
         currentEpisode = params.episodeNumber
+        if (currentAnime != null && currentAnime!!.id > 0) {
+            savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, params.episodeNumber)
+        }
         showPlayer = true
     }
 
@@ -855,6 +859,7 @@ fun MainScreen(
         currentEpisode = episode
         totalEpisodes = anime.totalEpisodes
         streamError = null
+        savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, episode)
         showPlayer = false
 
         val extPackage = viewModel.defaultExtensionPackage.value
@@ -959,6 +964,7 @@ fun MainScreen(
 
             if (cached != null) {
                 currentEpisode = prevEp
+                savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, prevEp)
                 currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $prevEp"
                 currentVideoUrl = cached.url
                 currentReferer = cached.referer
@@ -990,6 +996,7 @@ fun MainScreen(
                     if (result != null && result.videos.isNotEmpty()) {
                         episodeCache[prevEp] = result
                         currentEpisode = prevEp
+                        savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, prevEp)
                         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $prevEp"
                         currentVideoUrl = result.url
                         currentReferer = result.referer
@@ -1028,6 +1035,7 @@ fun MainScreen(
             if (cached != null) {
                 cachedExtensionNext = null
                 currentEpisode = nextEp
+                savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, nextEp)
                 currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $nextEp"
                 currentVideoUrl = cached.url
                 currentReferer = cached.referer
@@ -1060,6 +1068,7 @@ fun MainScreen(
                     if (result != null && result.videos.isNotEmpty()) {
                         episodeCache[nextEp] = result
                         currentEpisode = nextEp
+                        savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, nextEp)
                         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $nextEp"
                         currentVideoUrl = result.url
                         currentReferer = result.referer
@@ -1843,8 +1852,11 @@ fun MainScreen(
                 animekaiIntroEnd = animekaiIntroEnd,
                 animekaiOutroStart = animekaiOutroStart,
                 animekaiOutroEnd = animekaiOutroEnd,
-                onSavePosition = { position ->
-                    viewModel.savePlaybackPosition(anime.id, currentEpisode, position)
+                onSavePosition = { position, duration ->
+                    viewModel.savePlaybackPosition(anime.id, currentEpisode, position, duration)
+                },
+                onClearPlaybackPosition = { _, episode ->
+                    viewModel.clearPlaybackPosition(anime.id, episode)
                 },
                 onPositionSaved = { position ->
                     savedPlaybackPosition = position
@@ -2078,7 +2090,8 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
-                            playbackPositions = playbackPositions
+                            playbackPositions = playbackPositions,
+                            playbackDurations = playbackDurations
                         )
                         3 -> SettingsScreen(
                             viewModel = viewModel,

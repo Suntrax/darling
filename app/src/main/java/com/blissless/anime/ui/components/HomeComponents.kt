@@ -230,6 +230,7 @@ fun HomeAnimeHorizontalList(
     preferEnglishTitles: Boolean = true,
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
     onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
@@ -333,6 +334,7 @@ fun HomeAnimeHorizontalList(
                         preferEnglishTitles = preferEnglishTitles,
                         isLoggedIn = isLoggedIn,
                         playbackPositions = playbackPositions,
+                        playbackDurations = playbackDurations,
                         disableMaterialColors = disableMaterialColors,
                         onClick = { bounds ->
                             viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
@@ -360,6 +362,7 @@ fun HomeAnimeCard(
     preferEnglishTitles: Boolean = true,
     isLoggedIn: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
     onClick: (HomeAnimeCardBounds?) -> Unit,
     onPlayClick: () -> Unit,
@@ -380,8 +383,9 @@ fun HomeAnimeCard(
     val nextEpisode = anime.progress + 1
     val playbackKey = "${anime.id}_$nextEpisode"
     val savedPosition = playbackPositions[playbackKey] ?: 0L
-    val defaultEpisodeDuration = 24 * 60 * 1000L
-    val progressPercent = if (savedPosition > 0) (savedPosition.toFloat() / defaultEpisodeDuration.toFloat()).coerceIn(0f, 1f) else 0f
+    val savedDuration = playbackDurations[playbackKey] ?: 0L
+    val effectiveDuration = if (savedDuration > 0L) savedDuration else 24 * 60 * 1000L
+    val progressPercent = if (savedPosition > 0) (savedPosition.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f) else 0f
 
     val progressText = when (listType) {
         "CURRENT" -> {

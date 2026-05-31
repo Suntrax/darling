@@ -119,7 +119,8 @@ fun HomeScreen(
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     onOverlayOpenChange: (Boolean) -> Unit = {},
     currentScreenIndex: Int = 0,
-    playbackPositions: Map<String, Long> = emptyMap()
+    playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap()
 ) {
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
@@ -464,6 +465,7 @@ fun HomeScreen(
                                 preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "CURRENT") },
@@ -499,6 +501,7 @@ fun HomeScreen(
                                 preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "PLANNING") },
@@ -534,6 +537,7 @@ fun HomeScreen(
                                 preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "COMPLETED") },
@@ -569,6 +573,7 @@ fun HomeScreen(
                                 preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "PAUSED") },
@@ -604,6 +609,7 @@ fun HomeScreen(
                                 preferEnglishTitles = preferEnglishTitles,
                                 isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "DROPPED") },

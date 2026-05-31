@@ -13,6 +13,9 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -177,7 +180,8 @@ fun PlayerScreen(
     animekaiIntroEnd: Int? = null,
     animekaiOutroStart: Int? = null,
     animekaiOutroEnd: Int? = null,
-    onSavePosition: ((Long) -> Unit)? = null,
+    onSavePosition: ((Long, Long) -> Unit)? = null,
+    onClearPlaybackPosition: ((Int, Int) -> Unit)? = null,
     onPositionSaved: ((Long) -> Unit)? = null,
     onProgressUpdate: (percentage: Int) -> Unit = {},
     onPreviousEpisode: (() -> Unit)? = null,
@@ -372,7 +376,7 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            onSavePosition?.invoke(currentPosition)
+            onSavePosition?.invoke(currentPosition, duration)
             activity?.window?.let { window ->
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
@@ -463,6 +467,7 @@ fun PlayerScreen(
                             }
                         }
                         if (playbackState == Player.STATE_ENDED) {
+                            onClearPlaybackPosition?.invoke(animeId, currentEpisode)
                             if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
                                 if (isLatestEpisode) {
                                     Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
@@ -746,6 +751,19 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         }
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                exoPlayer.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     fun formatTime(ms: Long): String {
         val seconds = (ms / 1000) % 60
         val minutes = (ms / (1000 * 60)) % 60
@@ -782,7 +800,8 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         playbackError = null
         
         // Save current position BEFORE stopping
-        onSavePosition?.invoke(exoPlayer.currentPosition)
+        val currentDur = exoPlayer.duration
+        onSavePosition?.invoke(exoPlayer.currentPosition, if (currentDur > 0) currentDur else 0L)
         onPositionSaved?.invoke(exoPlayer.currentPosition)
         
         // Stop and clear the current playback to prevent audio overlap

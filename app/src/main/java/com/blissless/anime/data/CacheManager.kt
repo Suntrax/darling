@@ -39,7 +39,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         private const val TAG = "CacheManager"
         private const val CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
         private const val AIRING_CACHE_DURATION_MS = 1 * 60 * 60 * 1000L
-        private const val STREAM_CACHE_DURATION_MS = 60 * 60 * 1000L // 1 hour
+        private const val STREAM_CACHE_DURATION_MS = 24 * 60 * 60 * 1000L // 24 hours
 
         private const val CACHE_EXPLORE_TIME = "cache_explore_time"
         private const val CACHE_HOME_TIME = "cache_home_time"
@@ -165,6 +165,9 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     private val _playbackPositions = MutableStateFlow<Map<String, Long>>(emptyMap())
     val playbackPositions: StateFlow<Map<String, Long>> = _playbackPositions.asStateFlow()
+
+    private val _playbackDurations = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val playbackDurations: StateFlow<Map<String, Long>> = _playbackDurations.asStateFlow()
 
     // TMDB episode cache - stores episode titles by anime ID
     private val _tmdbEpisodeCache = MutableStateFlow<Map<Int, List<TmdbEpisode>>>(emptyMap())
@@ -353,27 +356,40 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val cachedData = sharedPreferences.getString(CACHE_PLAYBACK_POSITIONS, null) ?: return
             val cacheData = json.decodeFromString<PlaybackPositionCache>(cachedData)
             _playbackPositions.value = cacheData.positions
+            _playbackDurations.value = cacheData.durations
         } catch (e: Exception) {
         }
     }
 
-    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long) {
+    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L) {
         val key = "${animeId}_$episode"
         _playbackPositions.value = _playbackPositions.value + (key to position)
+        if (duration > 0L) {
+            _playbackDurations.value = _playbackDurations.value + (key to duration)
+        }
         try {
-            val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
+            val jsonString = json.encodeToString(
+                PlaybackPositionCache.serializer(),
+                PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
+            )
             sharedPreferences.edit { putString(CACHE_PLAYBACK_POSITIONS, jsonString) }
         } catch (e: Exception) { }
     }
 
     fun getPlaybackPosition(animeId: Int, episode: Int): Long = _playbackPositions.value["${animeId}_$episode"] ?: 0L
 
+    fun getPlaybackDuration(animeId: Int, episode: Int): Long = _playbackDurations.value["${animeId}_$episode"] ?: 0L
+
     fun clearPlaybackPosition(animeId: Int, episode: Int) {
         val key = "${animeId}_$episode"
         if (_playbackPositions.value.containsKey(key)) {
             _playbackPositions.value = _playbackPositions.value - key
+            _playbackDurations.value = _playbackDurations.value - key
             sharedPreferences.edit {
-                val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
+                val jsonString = json.encodeToString(
+                    PlaybackPositionCache.serializer(),
+                    PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
+                )
                 putString(CACHE_PLAYBACK_POSITIONS, jsonString)
             }
         }
@@ -383,8 +399,12 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val prefix = "${animeId}_"
         val newMap = _playbackPositions.value.filterKeys { !it.startsWith(prefix) }
         _playbackPositions.value = newMap
+        _playbackDurations.value = _playbackDurations.value.filterKeys { !it.startsWith(prefix) }
         sharedPreferences.edit {
-            val jsonString = json.encodeToString(PlaybackPositionCache.serializer(), PlaybackPositionCache(_playbackPositions.value))
+            val jsonString = json.encodeToString(
+                PlaybackPositionCache.serializer(),
+                PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
+            )
             putString(CACHE_PLAYBACK_POSITIONS, jsonString)
         }
     }
