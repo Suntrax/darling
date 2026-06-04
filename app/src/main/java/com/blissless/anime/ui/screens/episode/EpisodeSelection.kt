@@ -57,12 +57,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -245,6 +247,8 @@ fun RichEpisodeScreen(
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
     val currentProgress = anime.progress
+    val playbackPositions by viewModel.playbackPositions.collectAsState()
+    val playbackDurations by viewModel.playbackDurations.collectAsState()
 
     var tmdbEpisodes by remember { mutableStateOf<List<TmdbEpisode>>(emptyList()) }
     var isLoadingEpisodes by remember { mutableStateOf(true) }
@@ -517,7 +521,7 @@ fun RichEpisodeScreen(
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
                             val hasAired = episodeNum <= released
-                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, onSelect = { selectedEpisode = episodeNum }, onPlay = {
+                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, playbackPositions = playbackPositions, playbackDurations = playbackDurations, animeId = anime.id, onSelect = { selectedEpisode = episodeNum }, onPlay = {
                                 if (hasAired) {
                                     val title = if (ep.title.isNotEmpty() && !ep.title.startsWith("Episode", ignoreCase = true)) ep.title else "Episode $episodeNum"
                                     onEpisodeSelect(episodeNum, title)
@@ -540,6 +544,9 @@ fun RichEpisodeScreen(
                                 isOled = isOled,
                                 isSelected = selectedEpisode == episodeNum,
                                 disableMaterialColors = disableMaterialColors,
+                                playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
+                                animeId = anime.id,
                                 onSelect = { selectedEpisode = episodeNum },
                                 onPlay = {
                                     if (hasAired) {
@@ -567,6 +574,9 @@ private fun SimpleRichEpisodeCard(
     isOled: Boolean,
     isSelected: Boolean,
     disableMaterialColors: Boolean = false,
+    playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap(),
+    animeId: Int = 0,
     onSelect: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -605,61 +615,101 @@ private fun SimpleRichEpisodeCard(
                 }
             }
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp).alpha(contentAlpha),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(44.dp).background(badgeBg, RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp).alpha(contentAlpha),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    when {
-                        isWatched -> Icon(Icons.Default.Check, contentDescription = "Watched", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                        isCurrent -> Icon(Icons.Default.PlayArrow, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                        else -> Text(
-                            text = "$episodeNumber",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = badgeText
+                    Box(
+                        modifier = Modifier.size(44.dp).background(badgeBg, RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            isWatched -> Icon(Icons.Default.Check, contentDescription = "Watched", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                            isCurrent -> Icon(Icons.Default.PlayArrow, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                            else -> Text(
+                                text = "$episodeNumber",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeText
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Episode $episodeNumber",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = when {
+                                !hasAired -> "Not yet aired"
+                                isCurrent -> "Up next"
+                                isWatched -> "Watched"
+                                else -> "Available"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when {
+                                !hasAired -> Color.Gray
+                                isCurrent -> MaterialTheme.colorScheme.primary
+                                isWatched -> MaterialTheme.colorScheme.primary
+                                else -> if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                         )
                     }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Episode $episodeNumber",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = when {
-                            !hasAired -> "Not yet aired"
-                            isCurrent -> "Up next"
-                            isWatched -> "Watched"
-                            else -> "Available"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = when {
-                            !hasAired -> Color.Gray
-                            isCurrent -> MaterialTheme.colorScheme.primary
-                            isWatched -> MaterialTheme.colorScheme.primary
-                            else -> if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    if (hasAired) {
+                        FilledTonalIconButton(
+                            onClick = onPlay,
+                            modifier = Modifier.size(40.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
                         }
-                    )
+                    }
                 }
-                if (hasAired) {
-                    FilledTonalIconButton(
-                        onClick = onPlay,
-                        modifier = Modifier.size(40.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            contentColor = MaterialTheme.colorScheme.primary
+                // Progress bar and remaining time
+                val epPlaybackKey = "${animeId}_$episodeNumber"
+                val savedPos = playbackPositions[epPlaybackKey] ?: 0L
+                val epDuration = playbackDurations[epPlaybackKey] ?: 0L
+                val progressRatio = if (savedPos > 0 && epDuration > 0) (savedPos.toFloat() / epDuration).coerceIn(0f, 1f) else 0f
+                val remainingText = if (savedPos > 0 && epDuration > savedPos) {
+                    val remaining = epDuration - savedPos
+                    val mins = (remaining / 60000).toInt()
+                    val secs = ((remaining % 60000) / 1000).toInt()
+                    "${mins}:${"%02d".format(secs)} left"
+                } else null
+                if (savedPos > 5000L) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        LinearProgressIndicator(
+                            progress = { progressRatio },
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
                         )
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = formatTimeFromMs(savedPos),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (remainingText != null) {
+                                Text(
+                                    text = remainingText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -680,6 +730,9 @@ private fun RichTmdbEpisodeCard(
     isOled: Boolean,
     isSelected: Boolean,
     disableMaterialColors: Boolean = false,
+    playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap(),
+    animeId: Int = 0,
     onSelect: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -769,7 +822,45 @@ private fun RichTmdbEpisodeCard(
                         }
                     }
                 }
-                Column(modifier = Modifier.padding(12.dp)) {
+                // Progress bar and remaining time between image and info
+                val epPlaybackKey = "${animeId}_$episodeNumber"
+                val savedPos = playbackPositions[epPlaybackKey] ?: 0L
+                val epDuration = playbackDurations[epPlaybackKey] ?: 0L
+                val progressRatio = if (savedPos > 0 && epDuration > 0) (savedPos.toFloat() / epDuration).coerceIn(0f, 1f) else 0f
+                val remainingText = if (savedPos > 0 && epDuration > savedPos) {
+                    val remaining = epDuration - savedPos
+                    val mins = (remaining / 60000).toInt()
+                    val secs = ((remaining % 60000) / 1000).toInt()
+                    "${mins}:${"%02d".format(secs)} left"
+                } else null
+                if (savedPos > 5000L) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        LinearProgressIndicator(
+                            progress = { progressRatio },
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = formatTimeFromMs(savedPos),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (remainingText != null) {
+                                Text(
+                                    text = remainingText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+                Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         if (image.isNullOrEmpty()) {
                             Box(
@@ -841,4 +932,12 @@ private fun RichTmdbEpisodeCard(
             }
         }
     }
+}
+
+private fun formatTimeFromMs(ms: Long): String {
+    val seconds = (ms / 1000) % 60
+    val minutes = (ms / (1000 * 60)) % 60
+    val hours = ms / (1000 * 60 * 60)
+    return if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds)
+    else String.format("%d:%02d", minutes, seconds)
 }

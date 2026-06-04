@@ -421,7 +421,7 @@ fun DownloadsScreen(
 
     if (playingDownload != null) {
         val savedPosition = remember(playingDownload) {
-            viewModel.getPlaybackPosition(playingDownload!!.animeId, playingDownload!!.episode)
+            viewModel.getPlaybackPosition(playingDownload!!.animeId, playingDownload!!.episode, isOffline = true)
         }
         Box(modifier = Modifier.fillMaxSize()) {
             OfflinePlayerScreen(
@@ -440,7 +440,7 @@ fun DownloadsScreen(
                 onNavbarHidden = onNavbarHidden,
                 tmdbEpisodes = tmdbEpisodeCache[playingDownload!!.animeId]?.associate { it.episode to it } ?: emptyMap(),
                 onSavePlaybackPosition = { animeId, episode, pos, dur ->
-                    viewModel.savePlaybackPosition(animeId, episode, pos, dur)
+                    viewModel.savePlaybackPosition(animeId, episode, pos, dur, isOffline = true)
                 },
                 initialPosition = savedPosition,
             )
@@ -508,7 +508,7 @@ private fun DownloadedEpisodesDialog(
                 ) {
                     items(episodes.sortedBy { it.episode }) { ep ->
                         val tmdbEp = tmdbEpisodes[ep.episode]
-                        val epPlaybackKey = "${ep.animeId}_${ep.episode}"
+                        val epPlaybackKey = "${ep.animeId}_${ep.episode}_offline"
                         val savedPos = playbackPositions[epPlaybackKey] ?: 0L
                         val epDuration = playbackDurations[epPlaybackKey] ?: 0L
                         val displayBytes = if (ep.totalBytes > 0) ep.totalBytes else ep.downloadedBytes
@@ -571,8 +571,8 @@ private fun DownloadedEpisodesDialog(
                                         // Delete button top-right
                                         IconButton(
                                             onClick = { episodeToDelete = ep },
-                                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
-                                                .background(Color.Black.copy(alpha = 0.5f), CircleShape).size(32.dp)
+                                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(32.dp)
+                                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                                         ) {
                                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
                                         }

@@ -420,8 +420,8 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         }
     }
 
-    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L) {
-        val key = "${animeId}_$episode"
+    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L, isOffline: Boolean = false) {
+        val key = "${animeId}_$episode${if (isOffline) "_offline" else ""}"
         _playbackPositions.value = _playbackPositions.value + (key to position)
         if (duration > 0L) {
             _playbackDurations.value = _playbackDurations.value + (key to duration)
@@ -435,12 +435,12 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         } catch (e: Exception) { }
     }
 
-    fun getPlaybackPosition(animeId: Int, episode: Int): Long = _playbackPositions.value["${animeId}_$episode"] ?: 0L
+    fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false): Long = _playbackPositions.value["${animeId}_$episode${if (isOffline) "_offline" else ""}"] ?: 0L
 
-    fun getPlaybackDuration(animeId: Int, episode: Int): Long = _playbackDurations.value["${animeId}_$episode"] ?: 0L
+    fun getPlaybackDuration(animeId: Int, episode: Int, isOffline: Boolean = false): Long = _playbackDurations.value["${animeId}_$episode${if (isOffline) "_offline" else ""}"] ?: 0L
 
-    fun clearPlaybackPosition(animeId: Int, episode: Int) {
-        val key = "${animeId}_$episode"
+    fun clearPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false) {
+        val key = "${animeId}_$episode${if (isOffline) "_offline" else ""}"
         if (_playbackPositions.value.containsKey(key)) {
             _playbackPositions.value = _playbackPositions.value - key
             _playbackDurations.value = _playbackDurations.value - key

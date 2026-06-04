@@ -1620,9 +1620,9 @@ class MainViewModel : ViewModel() {
 
     // Playback
     val playbackDurations: StateFlow<Map<String, Long>> get() = cacheManager.playbackDurations
-    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L) = cacheManager.savePlaybackPosition(animeId, episode, position, duration)
-    fun getPlaybackPosition(animeId: Int, episode: Int) = cacheManager.getPlaybackPosition(animeId, episode)
-    fun getPlaybackDuration(animeId: Int, episode: Int) = cacheManager.getPlaybackDuration(animeId, episode)
+    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L, isOffline: Boolean = false) = cacheManager.savePlaybackPosition(animeId, episode, position, duration, isOffline)
+    fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false) = cacheManager.getPlaybackPosition(animeId, episode, isOffline)
+    fun getPlaybackDuration(animeId: Int, episode: Int, isOffline: Boolean = false) = cacheManager.getPlaybackDuration(animeId, episode, isOffline)
     fun clearPlaybackPosition(animeId: Int, episode: Int) = cacheManager.clearPlaybackPosition(animeId, episode)
     fun clearAllPlaybackPositionsForAnime(animeId: Int) = cacheManager.clearAllPlaybackPositionsForAnime(animeId)
 
