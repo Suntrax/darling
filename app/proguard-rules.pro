@@ -5,6 +5,13 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
+# Disable optimization and obfuscation. R8's bytecode restructuring (even with -keep)
+# creates type inconsistencies that ART's verifier rejects across classloader
+# boundaries (extensions loaded via DexClassLoader).
+# Shrinking still removes unused code/resources.
+-dontoptimize
+-dontobfuscate
+
 # Keep Kotlin Serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
@@ -58,8 +65,10 @@
 -keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
 -keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
 
-# OkHttp
+# OkHttp (kept for extension streaming - loaded via parent classloader from extension APKs)
+-keep class okhttp3.** { *; }
 -dontwarn okhttp3.**
+-keep class okio.** { *; }
 -dontwarn okio.**
 -dontwarn javax.annotation.**
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
@@ -104,6 +113,15 @@
 # Keep Room database implementations (WorkManager uses Room internally, generated _Impl classes need constructors)
 -keep class * extends androidx.room.RoomDatabase { *; }
 -keep @androidx.room.Database class * { *; }
+
+# Keep Kotlin stdlib (loaded via parent classloader from extension APKs - R8 strips unused stdlib
+# classes that extensions still reference at runtime)
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+
+# Keep Jsoup (used by Tachiyomi framework and extension APKs for HTML parsing)
+-keep class org.jsoup.** { *; }
+-dontwarn org.jsoup.**
 
 # Keep Tachiyomi anime source framework (loaded dynamically via DexClassLoader)
 -keep class eu.kanade.tachiyomi.animesource.** { *; }

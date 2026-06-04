@@ -1,9 +1,14 @@
 ﻿package com.blissless.anime
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -44,6 +49,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
@@ -106,6 +112,8 @@ import com.blissless.anime.ui.screens.player.PlayerScreen
 import com.blissless.anime.ui.screens.episode.ExtensionStreamParams
 import com.blissless.anime.ui.screens.airing.ScheduleScreen
 import com.blissless.anime.ui.screens.settings.SettingsScreen
+import com.blissless.anime.ui.screens.downloads.DownloadsScreen
+import com.blissless.anime.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.anime.ui.screens.status.StatusListScreen
 import com.blissless.anime.ui.screens.character.StaffScreen
 import com.blissless.anime.ui.screens.relations.AllRelationsScreen
@@ -219,6 +227,18 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 enableHighRefreshRate()
+            }
+
+            val notifPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { _ -> }
+
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_DENIED) {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
             }
             
             val toastContext = LocalContext.current
@@ -486,7 +506,7 @@ fun MainScreen(
     val currentPageState = remember { mutableIntStateOf(startupScreen) }
     var currentPage by currentPageState
 
-    var preloadedPages by remember { mutableStateOf(setOf(1)) }
+    var preloadedPages by remember { mutableStateOf(setOf(1, 3)) }
 
     var screenNavigationStack by remember { mutableStateOf<List<Int>>(emptyList()) }
 
@@ -574,6 +594,7 @@ fun MainScreen(
                 1 -> { }
                 2 -> { viewModel.refreshHome() }
                 3 -> { }
+                4 -> { }
             }
         }
     }
@@ -1380,6 +1401,15 @@ fun MainScreen(
                     previousFirstAnime = exploreDialog.firstAnime,
                     previousIsFirstOpen = exploreDialog.isFirstOpen
                 )
+            },
+            preferEnglishTitles = preferEnglishTitles,
+            onNavigateToSettings = {
+                overlayState = OverlayState.None
+                currentPage = 4
+                pendingSettingsGroup = "extensions"
+            },
+            onStartDownload = { media ->
+                overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
             }
         )
     }
@@ -1507,7 +1537,16 @@ fun MainScreen(
                     viewModel.setLocalAnimeStatus(selectedAnimeState!!.id, null)
                 }
             },
-            onRemoveLocalStatus = { viewModel.setLocalAnimeStatus(selectedAnimeState!!.id, null) }
+            onRemoveLocalStatus = { viewModel.setLocalAnimeStatus(selectedAnimeState!!.id, null) },
+            preferEnglishTitles = preferEnglishTitles,
+            onNavigateToSettings = {
+                overlayState = OverlayState.None
+                currentPage = 4
+                pendingSettingsGroup = "extensions"
+            },
+            onStartDownload = { media ->
+                overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
+            }
         )
     }
 
@@ -1749,6 +1788,24 @@ fun MainScreen(
         )
     }
 
+    // Episode Download Dialog
+    val downloadDialog = overlayState as? OverlayState.EpisodeDownloadDialog
+    if (downloadDialog != null) {
+        EpisodeDownloadDialog(
+            anime = downloadDialog.anime,
+            viewModel = viewModel,
+            downloadManager = viewModel.episodeDownloadManager,
+            isOled = isOled,
+            preferEnglishTitles = preferEnglishTitles,
+            onDismiss = { overlayState = OverlayState.None },
+            onNavigateToSettings = {
+                overlayState = OverlayState.None
+                currentPage = 4
+                pendingSettingsGroup = "extensions"
+            }
+        )
+    }
+
     // All Relations Screen
     val allRelationsDialog = overlayState as? OverlayState.AllRelationsDialog
     if (allRelationsDialog != null) {
@@ -1805,7 +1862,7 @@ fun MainScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showNoExtDialog = false
-                    currentPage = 3
+                    currentPage = 4
                     pendingSettingsGroup = "extensions"
                 }) {
                     Text("Go to Extensions")
@@ -2039,6 +2096,14 @@ fun MainScreen(
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             onOverlayOpenChange = { overlayOpen = it },
+                            onNavigateToSettings = {
+                                overlayState = OverlayState.None
+                                currentPage = 4
+                                pendingSettingsGroup = "extensions"
+                            },
+                            onStartDownload = { media ->
+                                overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
+                            },
                             favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
                             onToggleFavorite = { anime -> 
@@ -2093,7 +2158,14 @@ fun MainScreen(
                             playbackPositions = playbackPositions,
                             playbackDurations = playbackDurations
                         )
-                        3 -> SettingsScreen(
+                        3 -> DownloadsScreen(
+                            viewModel = viewModel,
+                            downloadManager = viewModel.episodeDownloadManager,
+                            isOled = isOled,
+                            onDownloadClick = { },
+                            onNavbarHidden = viewModel::setHideNavbar,
+                        )
+                        4 -> SettingsScreen(
                             viewModel = viewModel,
                             isOled = isOled,
                             isLoggedIn = isLoggedIn,
@@ -2218,8 +2290,8 @@ fun MainScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val items = listOf("Schedule", "Explore", "Home", "Settings")
-                                val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.Settings)
+                                val items = listOf("Schedule", "Explore", "Home", "Downloads", "Settings")
+                                val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.FileDownload, Icons.Default.Settings)
 
                             items.forEachIndexed { index, item ->
                                 val isSelected = index == selectedIndex

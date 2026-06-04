@@ -36,6 +36,7 @@ import com.blissless.anime.data.models.TmdbEpisode
 import com.blissless.anime.data.models.UserActivity
 import com.blissless.anime.data.models.UserAnimeStats
 import com.blissless.anime.data.models.UserFavoriteAnime
+import com.blissless.anime.download.EpisodeDownloadManager
 import com.blissless.anime.update.GitHubRelease
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,6 +58,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
+import eu.kanade.tachiyomi.animesource.model.Track
 import okhttp3.OkHttpClient
 
 class MainViewModel : ViewModel() {
@@ -70,6 +72,7 @@ class MainViewModel : ViewModel() {
 
     private lateinit var userPreferences: UserPreferences
     private lateinit var cacheManager: CacheManager
+    lateinit var episodeDownloadManager: EpisodeDownloadManager
     private lateinit var repository: AnimeRepository
     private lateinit var context: Context
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
@@ -603,6 +606,17 @@ class MainViewModel : ViewModel() {
     // Get cache progress
     fun getCacheProgress(videoUrl: String) = cacheManager.getCacheProgress(videoUrl)
 
+    // Download cache management
+    fun getDownloadCacheSize(): Long = episodeDownloadManager.getDownloadCacheSize()
+
+    fun clearDownloadCache() {
+        viewModelScope.launch {
+            episodeDownloadManager.clearDownloadCache()
+            // Re-initialize for future downloads
+            episodeDownloadManager.initialize()
+        }
+    }
+
     // MAL API Service
     private lateinit var malApiService: MalApiService
 
@@ -710,6 +724,10 @@ class MainViewModel : ViewModel() {
         // Initialize video cache for offline playback
         cacheManager.initializeVideoCache(context)
 
+        // Initialize download manager
+        episodeDownloadManager = EpisodeDownloadManager(context)
+        episodeDownloadManager.initialize()
+
         // Check connectivity and register callback for auto-detection
         checkConnectivity()
         registerConnectivityCallback()
@@ -718,6 +736,7 @@ class MainViewModel : ViewModel() {
         userPreferences.loadPreferences(hasToken)
         cacheManager.loadStreamCache()
         cacheManager.loadPlaybackPositions()
+        cacheManager.loadTmdbEpisodeCache()
         loadAiringScheduleCache()
         updateOfflineLists()
 
@@ -1952,7 +1971,66 @@ class MainViewModel : ViewModel() {
 
     suspend fun fetchTmdbEpisodes(title: String, id: Int, year: Int? = null, format: String? = null, latest: Int = Int.MAX_VALUE) = repository.fetchTmdbEpisodes(title, id, year, format, latest)
 
-    fun getCachedTmdbEpisodes(animeId: Int): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId)
+    fun getCachedTmdbEpisodes(animeId: Int, status: String? = null): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId, status)
+    fun cacheTmdbEpisodes(animeId: Int, episodes: List<TmdbEpisode>) = cacheManager.cacheTmdbEpisodes(animeId, episodes)
+    val tmdbEpisodeCache: StateFlow<Map<Int, List<TmdbEpisode>>> get() = cacheManager.tmdbEpisodeCache
+
+    fun retryDownload(animeId: Int, episode: Int) {
+        viewModelScope.launch {
+            val defaultPkg = defaultExtensionPackage.value
+            if (defaultPkg.isEmpty()) {
+                _toastMessage.emit("No extension configured for download")
+                return@launch
+            }
+
+            // Build AnimeMedia from available data
+            val cached = cacheManager.detailedAnimeCache.value[animeId]
+            val allLists = currentlyWatching.value + planningToWatch.value + completed.value + onHold.value + dropped.value
+            val offlineLists = offlineCurrentlyWatching.value + offlinePlanningToWatch.value + offlineCompleted.value + offlineOnHold.value + offlineDropped.value
+            val localFavs = localFavorites.value.values.map { fav ->
+                AnimeMedia(id = fav.id, title = fav.title, cover = fav.cover, banner = fav.banner, year = fav.year, averageScore = fav.averageScore)
+            }
+            val allFromLists = allLists + offlineLists + localFavs
+            val listAnime = allFromLists.find { it.id == animeId }
+
+            val anime = if (cached != null) {
+                AnimeMedia(
+                    id = cached.id, title = cached.title, titleEnglish = cached.titleEnglish,
+                    cover = cached.cover, banner = cached.banner, year = cached.year,
+                    format = cached.format, status = cached.status ?: "",
+                    totalEpisodes = cached.episodes, averageScore = cached.averageScore,
+                    genres = cached.genres, malId = cached.malId,
+                )
+            } else listAnime
+
+            if (anime == null) {
+                _toastMessage.emit("Cannot retry: anime data not found")
+                return@launch
+            }
+
+            val result = playEpisodeWithExtension(anime, episode, defaultPkg)
+            if (result == null) {
+                _toastMessage.emit("Retry failed: could not fetch fresh stream data")
+                return@launch
+            }
+
+            episodeDownloadManager.removeDownload("${animeId}_$episode")
+            episodeDownloadManager.startDownload(
+                animeId = animeId,
+                animeName = anime.title,
+                episode = episode,
+                videoUrl = result.url,
+                referer = result.referer,
+                videoTitle = result.videoTitle,
+                subtitleUrl = result.subtitleUrl,
+                subtitleTracks = result.subtitleTrackList,
+                videoHeaders = result.videoHeaders,
+                mimeType = if (result.url.contains(".m3u8")) "application/x-mpegurl" else "video/mp4",
+                malId = anime.malId,
+                year = anime.year,
+            )
+        }
+    }
 
     fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
         queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null)
@@ -2061,6 +2139,7 @@ class MainViewModel : ViewModel() {
         val url: String,
         val referer: String,
         val subtitleUrl: String?,
+        val subtitleTrackList: List<Track> = emptyList(),
         val videoTitle: String,
         val videos: List<Video> = emptyList(),
         val hosters: List<Hoster>? = null,
@@ -2075,44 +2154,55 @@ class MainViewModel : ViewModel() {
         episodeNumber: Int,
         defaultPackage: String,
     ): ExtensionStreamResult? {
+        val epTag = "AnimeDownload"
+        Log.i(epTag, "playEpisodeWithExtension: anime=${anime.id} ep=$episodeNumber pkg=$defaultPackage")
         return withContext(Dispatchers.IO) {
             val overallStart = System.currentTimeMillis()
             try {
                 val sm = sourceManager
                 if (sm == null) {
+                    Log.w(epTag, "playEpisodeWithExtension: sourceManager is null")
+                    viewModelScope.launch { _toastMessage.emit("Download failed: Source manager not initialized") }
                     return@withContext null
                 }
 
                 if (sm.getSources().isEmpty()) {
+                    Log.d(epTag, "playEpisodeWithExtension: loading sources")
                     sm.loadSources()
                 }
                 val allSources = sm.getSources()
-                val sourceWithExt = allSources.find { it.extension.packageName == defaultPackage }
+                var sourceWithExt = allSources.find { it.extension.packageName == defaultPackage }
                 if (sourceWithExt == null) {
+                    Log.w(epTag, "playEpisodeWithExtension: source $defaultPackage not found, reloading")
                     sm.reloadSources()
                     sm.loadSources()
                     val reloaded = sm.getSources()
-                    val found = reloaded.find { it.extension.packageName == defaultPackage }
-                    if (found == null) {
+                    sourceWithExt = reloaded.find { it.extension.packageName == defaultPackage }
+                    if (sourceWithExt == null) {
+                        Log.e(epTag, "playEpisodeWithExtension: source $defaultPackage not found even after reload")
+                        viewModelScope.launch { _toastMessage.emit("Download failed: Extension '$defaultPackage' not found") }
                         return@withContext null
                     }
                 }
-                val sw = sourceWithExt ?: sm.getSources().find { it.extension.packageName == defaultPackage } ?: return@withContext null
+                val sw = sourceWithExt
                 val source = sw.source
+                Log.i(epTag, "playEpisodeWithExtension: using source ${sw.source.name} for ep $episodeNumber")
 
                 val extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client
 
                 val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
                 var matchedSAnime: SAnime? = null
 
+                Log.d(epTag, "playEpisodeWithExtension: searching for anime with terms: $searchTerms")
                 for (query in searchTerms) {
                     try {
                         val page = source.getSearchAnime(1, query, AnimeFilterList())
                         val results = page.animes
-                        Log.w("ExtensionSearch", "${sw.source.name}: got ${results.size} results for \"$query\"")
+                        Log.d(epTag, "${sw.source.name}: got ${results.size} results for \"$query\"")
                         if (results.isEmpty()) continue
                         val normalizedQuery = query.lowercase()
                             .replace(Regex("[-–—_:;]"), " ")
+                            .replace(Regex("['’´`]"), "'")
                             .replace(Regex("\\s+"), " ")
                             .trim()
                         val queryWords = normalizedQuery.split(" ").filter { it.length > 1 }
@@ -2120,6 +2210,7 @@ class MainViewModel : ViewModel() {
                             val title = a.title
                             val normalizedTitle = title.lowercase()
                                 .replace(Regex("[-–—_:;]"), " ")
+                                .replace(Regex("['’´`]"), "'")
                                 .replace(Regex("\\s+"), " ")
                                 .trim()
                             val titleWords = normalizedTitle.split(" ").filter { it.length > 1 }
@@ -2137,7 +2228,7 @@ class MainViewModel : ViewModel() {
                                     wordScore + (matchingWords * 10)
                                 }
                             }
-                            Log.i("ExtensionSearch", "  \"${a.title}\" -> score=$score")
+                            Log.d(epTag, "  \"${a.title}\" -> score=$score")
                             a to score
                         }
                         val best = scored.maxByOrNull { it.second }
@@ -2149,33 +2240,44 @@ class MainViewModel : ViewModel() {
                 }
 
                 if (matchedSAnime == null) {
+                    Log.w(epTag, "playEpisodeWithExtension: no matching anime found for ep $episodeNumber after searching all terms")
+                    viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Could not find '${anime.title}' in extension") }
                     return@withContext null
                 }
+                Log.i(epTag, "playEpisodeWithExtension: matched anime '${matchedSAnime.title}' for ep $episodeNumber")
 
                 var sEpisodes = sm.getEpisodes(source, matchedSAnime)
+                Log.d(epTag, "playEpisodeWithExtension: got ${sEpisodes.size} episodes from source")
 
                 if (sEpisodes.isEmpty()) {
+                    Log.d(epTag, "playEpisodeWithExtension: no episodes, fetching anime details")
                     try {
                         matchedSAnime = sm.getAnimeDetails(source, matchedSAnime)
                     } catch (e: Exception) {
+                        Log.w(epTag, "playEpisodeWithExtension: getAnimeDetails failed", e)
                     }
                     sEpisodes = sm.getEpisodes(source, matchedSAnime)
+                    Log.d(epTag, "playEpisodeWithExtension: after details, got ${sEpisodes.size} episodes")
                 }
 
                 val sEpisode = if (sEpisodes.isEmpty()) {
+                    Log.w(epTag, "playEpisodeWithExtension: no episodes from source, creating fallback episode")
                     SEpisode.create().apply {
                         url = matchedSAnime.url
                         name = matchedSAnime.title
                         episode_number = 1.0f
                     }
                 } else {
-                    sEpisodes.find { it.episode_number.toInt() == episodeNumber }
+                    val matched = sEpisodes.find { it.episode_number.toInt() == episodeNumber }
                         ?: sEpisodes.firstOrNull { it.name?.contains("Episode $episodeNumber", ignoreCase = true) == true }
                         ?: sEpisodes.firstOrNull { it.name?.contains("$episodeNumber", ignoreCase = true) == true }
                         ?: sEpisodes.getOrNull(episodeNumber - 1)
-                        ?: run {
-                            return@withContext null
-                        }
+                    if (matched == null) {
+                        Log.w(epTag, "playEpisodeWithExtension: episode $episodeNumber not found among ${sEpisodes.size} episodes")
+                        viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Episode not found in extension") }
+                        return@withContext null
+                    }
+                    matched
                 }
 
                 if (source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
@@ -2208,8 +2310,11 @@ class MainViewModel : ViewModel() {
                 }
 
                 if (allVideos.isEmpty()) {
+                    Log.w(epTag, "playEpisodeWithExtension: no videos found for ep $episodeNumber")
+                    viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: No video sources found") }
                     return@withContext null
                 }
+                Log.d(epTag, "playEpisodeWithExtension: found ${allVideos.size} videos for ep $episodeNumber")
 
                 val dubVideos = allVideos.filter {
                     it.hosterName.contains("dub", ignoreCase = true) || it.video.videoTitle.contains("dub", ignoreCase = true)
@@ -2264,10 +2369,20 @@ class MainViewModel : ViewModel() {
 
                 val videos = allVideos.map { it.video }
 
+                val preferredLang = defaultSubtitleLang.value
+                val sortedSubs = bestVideo.subtitleTracks.sortedByDescending { t ->
+                    when {
+                        t.lang.equals(preferredLang, ignoreCase = true) -> 2
+                        t.lang.equals("English", ignoreCase = true) -> 1
+                        else -> 0
+                    }
+                }
+
                 ExtensionStreamResult(
                     url = bestVideo.videoUrl,
                     referer = referer,
-                    subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
+                    subtitleUrl = sortedSubs.firstOrNull()?.url,
+                    subtitleTrackList = sortedSubs,
                     videoTitle = bestVideo.videoTitle,
                     videos = videos,
                     hosters = derivedHosters,
@@ -2277,6 +2392,8 @@ class MainViewModel : ViewModel() {
                     episode = sEpisode,
                 )
             } catch (e: Exception) {
+                Log.e(epTag, "playEpisodeWithExtension: exception for ep $episodeNumber", e)
+                viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: ${e.message}") }
                 null
             }
         }
@@ -2310,10 +2427,20 @@ class MainViewModel : ViewModel() {
                     (0 until h.size).associate { h.name(it) to h.value(it) }
                 } ?: emptyMap()
 
+                val preferredLang = defaultSubtitleLang.value
+                val sortedSubs = bestVideo.subtitleTracks.sortedByDescending { t ->
+                    when {
+                        t.lang.equals(preferredLang, ignoreCase = true) -> 2
+                        t.lang.equals("English", ignoreCase = true) -> 1
+                        else -> 0
+                    }
+                }
+
                 ExtensionStreamResult(
                     url = bestVideo.videoUrl,
                     referer = referer,
-                    subtitleUrl = bestVideo.subtitleTracks.firstOrNull()?.url,
+                    subtitleUrl = sortedSubs.firstOrNull()?.url,
+                    subtitleTrackList = sortedSubs,
                     videoTitle = bestVideo.videoTitle,
                     videos = videos,
                     hosters = listOf(hoster),

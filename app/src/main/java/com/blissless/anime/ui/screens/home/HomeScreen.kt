@@ -88,7 +88,10 @@ import com.blissless.anime.ui.components.LoadingSkeleton
 import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
 import com.blissless.anime.ui.components.SearchOverlay
 import com.blissless.anime.ui.components.SectionHeader
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.blissless.anime.ui.screens.details.DetailedAnimeScreen
+import com.blissless.anime.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.anime.ui.screens.status.StatusListScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -118,6 +121,8 @@ fun HomeScreen(
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     onOverlayOpenChange: (Boolean) -> Unit = {},
+    onNavigateToSettings: (() -> Unit)? = null,
+    onStartDownload: (AnimeMedia) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap()
@@ -144,6 +149,7 @@ fun HomeScreen(
 
     var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
     var showEpisodeSheet by remember { mutableStateOf(false) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
@@ -785,7 +791,27 @@ fun HomeScreen(
                 onEpisodeSelect = { episode, title ->
                     onPlayEpisode(selectedAnime!!, episode, title)
                     showEpisodeSheet = false
+                },
+                onDownloadClick = {
+                    showDownloadDialog = true
                 }
+            )
+        }
+    }
+
+    if (showDownloadDialog && selectedAnime != null) {
+        Dialog(
+            onDismissRequest = { showDownloadDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            EpisodeDownloadDialog(
+                anime = selectedAnime!!,
+                viewModel = viewModel,
+                downloadManager = viewModel.episodeDownloadManager,
+                isOled = isOled,
+                preferEnglishTitles = preferEnglishTitles,
+                onDismiss = { showDownloadDialog = false },
+                onNavigateToSettings = onNavigateToSettings
             )
         }
     }

@@ -53,12 +53,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isMinifyEnabled = false
+            isShrinkResources = false
             // 2. ADD THIS: Tell the release build to use the signing config above
             signingConfig = signingConfigs.getByName("release")
         }
@@ -103,12 +99,16 @@ abstract class RenameApkTask : DefaultTask() {
     fun rename() {
         val dir = apkDir.get().asFile
         dir.listFiles()?.filter { it.extension == "apk" }?.forEach { apk ->
-            val newName = when {
+            val target = File(dir, when {
                 apk.name.contains("arm64-v8a") -> "Darling-arm64-v8a.apk"
                 apk.name.contains("armeabi-v7a") -> "Darling-armeabi-v7a.apk"
                 else -> "Darling-${versionName.get()}.apk"
+            })
+            apk.renameTo(target)
+            if (!target.exists() && apk.exists()) {
+                apk.copyTo(target, overwrite = true)
+                apk.delete()
             }
-            apk.renameTo(File(dir, newName))
         }
     }
 }
@@ -118,7 +118,7 @@ val renameReleaseApk = tasks.register<RenameApkTask>("renameReleaseApk") {
     versionName = android.defaultConfig.versionName
 }
 
-tasks.matching { it.name == "packageRelease" }.configureEach {
+tasks.matching { it.name == "assembleRelease" }.configureEach {
     finalizedBy(renameReleaseApk)
 }
 

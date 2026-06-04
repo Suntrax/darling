@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -838,10 +839,14 @@ private fun CacheSettingsPage(
     context: Context,
     onBack: () -> Unit
 ) {
-    var cacheSize by remember { mutableLongStateOf(0L) }
-    var showClearCacheConfirmation by remember { mutableStateOf(false) }
+    var videoCacheSize by remember { mutableLongStateOf(0L) }
+    var downloadCacheSize by remember { mutableLongStateOf(0L) }
+    var showClearCacheConfirmation by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) { cacheSize = viewModel.getVideoCacheSize(context) }
+    LaunchedEffect(Unit) {
+        videoCacheSize = viewModel.getVideoCacheSize(context)
+        downloadCacheSize = viewModel.getDownloadCacheSize()
+    }
 
     SettingsPageScaffold(title = "Cache Management", onBack = onBack) {
         SettingsCard {
@@ -858,10 +863,34 @@ private fun CacheSettingsPage(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Video Cache", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(formatFileSize(cacheSize), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatFileSize(videoCacheSize), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Button(
-                    onClick = { showClearCacheConfirmation = true },
+                    onClick = { showClearCacheConfirmation = "video" },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(10.dp)
+                ) { Text("Clear") }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Download Cache", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(formatFileSize(downloadCacheSize), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Button(
+                    onClick = { showClearCacheConfirmation = "download" },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     shape = RoundedCornerShape(10.dp)
                 ) { Text("Clear") }
@@ -869,23 +898,36 @@ private fun CacheSettingsPage(
         }
     }
 
-    if (showClearCacheConfirmation) {
+    if (showClearCacheConfirmation != null) {
+        val isVideo = showClearCacheConfirmation == "video"
         AlertDialog(
-            onDismissRequest = { showClearCacheConfirmation = false },
-            title = { Text("Clear Cache") },
-            text = { Text("This will clear all video cache and temporary data. Your playback positions will be preserved. Continue?") },
+            onDismissRequest = { showClearCacheConfirmation = null },
+            title = { Text(if (isVideo) "Clear Video Cache" else "Clear Download Cache") },
+            text = {
+                Text(
+                    if (isVideo)
+                        "This will clear all video cache and temporary data. Your playback positions will be preserved. Continue?"
+                    else
+                        "This will delete all downloaded episodes. They will need to be re-downloaded. Continue?"
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.clearNonEssentialCaches(context)
-                        cacheSize = 0L
-                        showClearCacheConfirmation = false
+                        if (isVideo) {
+                            viewModel.clearNonEssentialCaches(context)
+                            videoCacheSize = 0L
+                        } else {
+                            viewModel.clearDownloadCache()
+                            downloadCacheSize = 0L
+                        }
+                        showClearCacheConfirmation = null
                         Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Clear") }
             },
-            dismissButton = { TextButton(onClick = { showClearCacheConfirmation = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showClearCacheConfirmation = null }) { Text("Cancel") } }
         )
     }
 }

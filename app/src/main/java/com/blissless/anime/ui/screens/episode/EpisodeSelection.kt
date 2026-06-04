@@ -43,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -236,7 +237,8 @@ fun RichEpisodeScreen(
     isOled: Boolean,
     disableMaterialColors: Boolean = false,
     onDismiss: () -> Unit,
-    onEpisodeSelect: (Int, String?) -> Unit
+    onEpisodeSelect: (Int, String?) -> Unit,
+    onDownloadClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
@@ -364,13 +366,14 @@ fun RichEpisodeScreen(
 
     // Fetch TMDB episodes when screen opens
     LaunchedEffect(anime.id) {
-        val cached = viewModel.getCachedTmdbEpisodes(anime.id)
+        val cached = viewModel.getCachedTmdbEpisodes(anime.id, anime.status)
         if (cached != null) {
             tmdbEpisodes = cached
             isLoadingEpisodes = false
         } else {
             try {
                 val episodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
+                viewModel.cacheTmdbEpisodes(anime.id, episodes)
                 tmdbEpisodes = episodes
             } catch (_: Exception) {}
             isLoadingEpisodes = false
@@ -434,13 +437,27 @@ fun RichEpisodeScreen(
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, end = 16.dp)
-                    .align(Alignment.TopEnd)
+                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 16.dp)
+                    .align(Alignment.TopStart)
                     .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+
+            if (onDownloadClick != null) {
+                IconButton(
+                    onClick = onDownloadClick,
+                    modifier = Modifier
+                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, end = 16.dp)
+                        .align(Alignment.TopEnd)
+                        .size(40.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        .zIndex(10f)
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(24.dp))
+                }
             }
             Box(modifier = Modifier
                 .align(Alignment.TopCenter)

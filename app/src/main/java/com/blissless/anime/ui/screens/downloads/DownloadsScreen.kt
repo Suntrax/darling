@@ -1,0 +1,774 @@
+package com.blissless.anime.ui.screens.downloads
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.media3.exoplayer.offline.Download
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.blissless.anime.MainViewModel
+import com.blissless.anime.data.models.TmdbEpisode
+import com.blissless.anime.download.EpisodeDownloadManager
+import com.blissless.anime.ui.screens.player.OfflinePlayerScreen
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+
+@Composable
+fun DownloadsScreen(
+    viewModel: MainViewModel,
+    downloadManager: EpisodeDownloadManager,
+    isOled: Boolean,
+    onDownloadClick: () -> Unit,
+    onNavbarHidden: (Boolean) -> Unit = {},
+) {
+    val downloadsInfo by downloadManager.downloadsInfo.collectAsState()
+    val groupedDownloads = remember(downloadsInfo) {
+        val completed = downloadsInfo.values.filter { it.state == Download.STATE_COMPLETED }
+        completed.groupBy { it.animeName }.map { (name, infos) ->
+            EpisodeDownloadManager.GroupedDownload(
+                animeName = name,
+                episodes = infos.sortedBy { it.episode },
+                totalSize = infos.sumOf { it.totalBytes },
+            )
+        }.sortedBy { it.animeName }
+    }
+
+    val inProgressDownloads = remember(downloadsInfo) {
+        downloadsInfo.values.filter {
+            it.state == Download.STATE_QUEUED || it.state == Download.STATE_DOWNLOADING
+        }.groupBy { it.animeName }
+    }
+    val failedDownloads = remember(downloadsInfo) {
+        downloadsInfo.values.filter {
+            it.state == Download.STATE_FAILED
+        }.groupBy { it.animeName }
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredGroupedDownloads = remember(groupedDownloads, searchQuery) {
+        if (searchQuery.isBlank()) groupedDownloads
+        else groupedDownloads.filter { group ->
+            group.animeName.contains(searchQuery, ignoreCase = true) ||
+            group.episodes.any { it.episode.toString() == searchQuery }
+        }
+    }
+    val filteredInProgressDownloads = remember(inProgressDownloads, searchQuery) {
+        if (searchQuery.isBlank()) inProgressDownloads
+        else inProgressDownloads.filter { (name, _) ->
+            name.contains(searchQuery, ignoreCase = true)
+        }
+    }
+    val filteredFailedDownloads = remember(failedDownloads, searchQuery) {
+        if (searchQuery.isBlank()) failedDownloads
+        else failedDownloads.filter { (name, _) ->
+            name.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    var showDeleteConfirm by remember { mutableStateOf<String?>(null) }
+    var selectedAnime by remember { mutableStateOf<EpisodeDownloadManager.GroupedDownload?>(null) }
+    var playingDownload by remember { mutableStateOf<EpisodeDownloadManager.DownloadInfo?>(null) }
+    var playerEpisodes by remember { mutableStateOf<List<EpisodeDownloadManager.DownloadInfo>>(emptyList()) }
+    val useMonochrome by viewModel.disableMaterialColors.collectAsState()
+    val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
+    val tmdbEpisodeCache by viewModel.tmdbEpisodeCache.collectAsState()
+    val swipeVolume by viewModel.swipeVolume.collectAsState()
+    val swipeBrightness by viewModel.swipeBrightness.collectAsState()
+    val autoSkipOpening by viewModel.autoSkipOpening.collectAsState()
+    val autoSkipEnding by viewModel.autoSkipEnding.collectAsState()
+    val autoPlayNextEpisode by viewModel.autoPlayNextEpisode.collectAsState()
+    val playbackPositions by viewModel.playbackPositions.collectAsState()
+    val playbackDurations by viewModel.playbackDurations.collectAsState()
+
+    val hasContent = groupedDownloads.isNotEmpty() || inProgressDownloads.isNotEmpty() || failedDownloads.isNotEmpty()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+        ) {
+        if (!hasContent) {
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
+                            RoundedCornerShape(20.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "No Downloads",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Downloaded episodes will appear here.\nOpen an anime to start downloading.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Stored in app cache",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isOled) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.navigationBarsPadding()
+            ) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Downloads",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Stored in app cache",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search downloads...", color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = if (isOled) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outline,
+                            cursorColor = MaterialTheme.colorScheme.primary,
+                            focusedTextColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                        )
+                    )
+                }
+
+                // In-progress downloads section
+                if (filteredInProgressDownloads.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Downloading",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    filteredInProgressDownloads.forEach { (animeName, infos) ->
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = animeName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    infos.sortedBy { it.episode }.forEach { info ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Ep ${info.episode}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.width(48.dp)
+                                            )
+                                            LinearProgressIndicator(
+                                                progress = { info.progress },
+                                                modifier = Modifier.weight(1f).height(4.dp).padding(end = 8.dp),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                trackColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
+                                            )
+                                            Text(
+                                                text = "${(info.progress * 100).toInt()}%",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                }
+
+                // Failed downloads section
+                if (filteredFailedDownloads.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Failed",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFEF5350)
+                        )
+                    }
+                    filteredFailedDownloads.forEach { (animeName, infos) ->
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = animeName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    infos.sortedBy { it.episode }.forEach { info ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Ep ${info.episode}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.width(48.dp)
+                                            )
+                                            Text(
+                                                text = "Failed",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFFEF5350),
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            IconButton(onClick = {
+                                                viewModel.retryDownload(info.animeId, info.episode)
+                                            }) {
+                                                Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                }
+
+                // Completed downloads
+                if (filteredGroupedDownloads.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Saved",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    items(filteredGroupedDownloads) { group ->
+                        DownloadsAnimeCard(
+                            anime = group,
+                            isOled = isOled,
+                            onClick = { selectedAnime = group },
+                            onDelete = { showDeleteConfirm = group.animeName },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirm != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = null },
+            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+            title = { Text("Delete Downloads?", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) },
+            text = { Text("All downloaded episodes for this anime will be removed.", color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm?.let { name ->
+                        downloadManager.removeAnime(name)
+                        showDeleteConfirm = null
+                    }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (selectedAnime != null) {
+        BackHandler { if (playingDownload == null) selectedAnime = null }
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            DownloadedEpisodesDialog(
+                anime = selectedAnime!!,
+                downloadManager = downloadManager,
+                isOled = isOled,
+                onDismiss = { selectedAnime = null },
+                onPlay = { info ->
+                    playerEpisodes = selectedAnime?.episodes ?: emptyList()
+                    playingDownload = info
+                },
+                tmdbEpisodes = tmdbEpisodeCache[selectedAnime!!.episodes.firstOrNull()?.animeId]?.associate { it.episode to it } ?: emptyMap(),
+                playbackPositions = playbackPositions,
+                playbackDurations = playbackDurations,
+            )
+        }
+    }
+
+    if (playingDownload != null) {
+        BackHandler { playingDownload = null }
+    }
+    } // end inner padded Box
+
+    if (playingDownload != null) {
+        val savedPosition = remember(playingDownload) {
+            viewModel.getPlaybackPosition(playingDownload!!.animeId, playingDownload!!.episode)
+        }
+        Box(modifier = Modifier.fillMaxSize()) {
+            OfflinePlayerScreen(
+                downloadInfo = playingDownload!!,
+                downloadManager = downloadManager,
+                isOled = isOled,
+                useMonochrome = useMonochrome,
+                defaultSubtitleLang = defaultSubtitleLang,
+                swipeVolume = swipeVolume,
+                swipeBrightness = swipeBrightness,
+                autoSkipOpening = autoSkipOpening,
+                autoSkipEnding = autoSkipEnding,
+                autoPlayNextEpisode = autoPlayNextEpisode,
+                onDismiss = { playingDownload = null },
+                allEpisodes = playerEpisodes,
+                onNavbarHidden = onNavbarHidden,
+                tmdbEpisodes = tmdbEpisodeCache[playingDownload!!.animeId]?.associate { it.episode to it } ?: emptyMap(),
+                onSavePlaybackPosition = { animeId, episode, pos, dur ->
+                    viewModel.savePlaybackPosition(animeId, episode, pos, dur)
+                },
+                initialPosition = savedPosition,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadedEpisodesDialog(
+    anime: EpisodeDownloadManager.GroupedDownload,
+    downloadManager: EpisodeDownloadManager,
+    isOled: Boolean,
+    onDismiss: () -> Unit,
+    onPlay: (EpisodeDownloadManager.DownloadInfo) -> Unit,
+    tmdbEpisodes: Map<Int, TmdbEpisode> = emptyMap(),
+    playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap(),
+) {
+    var episodes by remember(anime) { mutableStateOf(anime.episodes) }
+    var episodeToDelete by remember { mutableStateOf<EpisodeDownloadManager.DownloadInfo?>(null) }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = if (isOled) Color.Black else MaterialTheme.colorScheme.background
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (isOled) Color(0xFF0A0A0A) else MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
+                        .windowInsetsPadding(WindowInsets.statusBars),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = anime.animeName.replace("_", " ").replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Stored in app cache",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(episodes.sortedBy { it.episode }) { ep ->
+                        val tmdbEp = tmdbEpisodes[ep.episode]
+                        val epPlaybackKey = "${ep.animeId}_${ep.episode}"
+                        val savedPos = playbackPositions[epPlaybackKey] ?: 0L
+                        val epDuration = playbackDurations[epPlaybackKey] ?: 0L
+                        val displayBytes = if (ep.totalBytes > 0) ep.totalBytes else ep.downloadedBytes
+                        val progressRatio = if (savedPos > 0 && epDuration > 0) (savedPos.toFloat() / epDuration).coerceIn(0f, 1f) else 0f
+                        val remainingText = if (savedPos > 0 && epDuration > savedPos) {
+                            val remaining = epDuration - savedPos
+                            val mins = (remaining / 60000).toInt()
+                            val secs = ((remaining % 60000) / 1000).toInt()
+                            "${mins}:${"%02d".format(secs)} left"
+                        } else null
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF111111) else MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column {
+                                // Image section
+                                if (tmdbEp?.image != null) {
+                                    Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(tmdbEp.image)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = tmdbEp.title,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().height(60.dp).align(Alignment.BottomCenter)
+                                                .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
+                                        )
+                                        // EP Badge
+                                        Surface(
+                                            modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color.Black.copy(alpha = 0.7f)
+                                        ) {
+                                            Text(
+                                                text = "EP ${ep.episode}",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                        // Play button overlay
+                                        androidx.compose.material3.FilledTonalIconButton(
+                                            onClick = { onPlay(ep) },
+                                            modifier = Modifier.align(Alignment.Center).size(52.dp),
+                                            shape = CircleShape,
+                                            colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                                contentColor = Color.White
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(28.dp))
+                                        }
+                                        // Delete button top-right
+                                        IconButton(
+                                            onClick = { episodeToDelete = ep },
+                                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+                                                .background(Color.Black.copy(alpha = 0.5f), CircleShape).size(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                } else {
+                                    // Placeholder when no image
+                                    Box(modifier = Modifier.fillMaxWidth().height(100.dp).background(if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))) {
+                                        Box(
+                                            modifier = Modifier.size(44.dp).align(Alignment.Center)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                        }
+                                        Surface(
+                                            modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color.Black.copy(alpha = 0.7f)
+                                        ) {
+                                            Text(
+                                                text = "EP ${ep.episode}",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                // Progress bar and remaining time
+                                if (savedPos > 5000L) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                        LinearProgressIndicator(
+                                            progress = { progressRatio },
+                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = formatTimeFromMs(savedPos),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            if (remainingText != null) {
+                                                Text(
+                                                    text = remainingText,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                // Info section
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (tmdbEp != null) "Ep ${ep.episode} - ${tmdbEp.title}" else "Episode ${ep.episode}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (tmdbEp != null && tmdbEp.description.isNotEmpty()) {
+                                            Text(
+                                                text = tmdbEp.description,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = formatFileSize(displayBytes),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(16.dp)
+                ) { Text("Close") }
+            }
+        }
+
+    if (episodeToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { episodeToDelete = null },
+            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+            title = { Text("Delete Episode?", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) },
+            text = { Text("Episode ${episodeToDelete!!.episode} of ${anime.animeName.replace("_", " ")} will be removed.", color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ep = episodeToDelete!!
+                    val id = "${ep.animeId}_${ep.episode}"
+                    downloadManager.removeDownload(id)
+                    episodes = episodes.filter { it.episode != ep.episode }
+                    episodeToDelete = null
+                    if (episodes.isEmpty()) onDismiss()
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { episodeToDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+        else -> "${bytes / (1024 * 1024 * 1024)} GB"
+    }
+}
+
+private fun formatTimeFromMs(ms: Long): String {
+    val seconds = (ms / 1000) % 60
+    val minutes = (ms / (1000 * 60)) % 60
+    val hours = ms / (1000 * 60 * 60)
+    return if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds)
+    else String.format("%d:%02d", minutes, seconds)
+}
+
+@Composable
+private fun DownloadsAnimeCard(
+    anime: EpisodeDownloadManager.GroupedDownload,
+    isOled: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOled) Color(0xFF111111) else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        if (isOled) Color(0xFF1A1A2E) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                        RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.FolderOpen,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = anime.animeName.replace("_", " ").replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${anime.episodes.size} episode${if (anime.episodes.size != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF5350))
+            }
+        }
+    }
+}

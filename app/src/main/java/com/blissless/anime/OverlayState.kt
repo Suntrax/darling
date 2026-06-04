@@ -1,5 +1,6 @@
 package com.blissless.anime
 
+import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.ExploreAnime
 
 sealed class OverlayState {
@@ -49,5 +50,9 @@ sealed class OverlayState {
         val previousAnime: ExploreAnime? = null,
         val previousFirstAnime: ExploreAnime? = null,
         val previousIsFirstOpen: Boolean = false
+    ) : OverlayState()
+
+    data class EpisodeDownloadDialog(
+        val anime: AnimeMedia
     ) : OverlayState()
 }

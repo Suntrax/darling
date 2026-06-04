@@ -129,6 +129,7 @@ import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.data.models.LocalAnimeEntry
 import com.blissless.anime.data.models.TagData
 import com.blissless.anime.ui.components.rememberCinematicAnimation
+import com.blissless.anime.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.anime.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.anime.ui.screens.episode.RichEpisodeScreen
 import com.blissless.anime.dialogs.HomeAnimeStatusDialog
@@ -182,6 +183,9 @@ fun DetailedAnimeScreen(
     onViewAllCast: () -> Unit = {},
     onViewAllStaff: () -> Unit = {},
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    preferEnglishTitles: Boolean = true,
+    onNavigateToSettings: (() -> Unit)? = null,
+    onStartDownload: (AnimeMedia) -> Unit = {},
     initialCardBounds: MainViewModel.CardBounds? = null
 ) {
     val context = LocalContext.current
@@ -191,6 +195,7 @@ fun DetailedAnimeScreen(
     var detailedData by remember { mutableStateOf<DetailedAnimeData?>(null) }
     var isLoadingDetails by remember { mutableStateOf(true) }
     var relations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
 
     var isVisible by remember { mutableStateOf(false) }
     var previousAnimeId by remember { mutableIntStateOf(anime.id) }
@@ -444,21 +449,21 @@ fun DetailedAnimeScreen(
             dismissOnClickOutside = false
         )
     ) {
+        val animeMedia = AnimeMedia(
+            id = anime.id,
+            title = anime.title,
+            titleEnglish = anime.titleEnglish,
+            cover = anime.cover,
+            banner = anime.banner,
+            progress = 0,
+            totalEpisodes = anime.episodes,
+            latestEpisode = anime.latestEpisode,
+            status = anime.status ?: "",
+            averageScore = anime.averageScore,
+            genres = anime.genres,
+            listStatus = ""
+        )
         if (showEpisodeSelection) {
-            val animeMedia = AnimeMedia(
-                id = anime.id,
-                title = anime.title,
-                titleEnglish = anime.titleEnglish,
-                cover = anime.cover,
-                banner = anime.banner,
-                progress = 0,
-                totalEpisodes = anime.episodes,
-                latestEpisode = anime.latestEpisode,
-                status = anime.status ?: "",
-                averageScore = anime.averageScore,
-                genres = anime.genres,
-                listStatus = ""
-            )
             if (simplifyEpisodeMenu) {
                 EpisodeSelectionDialog(
                     anime = animeMedia,
@@ -478,7 +483,30 @@ fun DetailedAnimeScreen(
                     onEpisodeSelect = { episode, _ ->
                         showEpisodeSelection = false
                         onPlayEpisode(episode, null)
+                    },
+                    onDownloadClick = {
+                        showDownloadDialog = true
                     }
+                )
+            }
+        }
+
+        if (showDownloadDialog) {
+            Dialog(
+                onDismissRequest = { showDownloadDialog = false },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    decorFitsSystemWindows = false
+                )
+            ) {
+                EpisodeDownloadDialog(
+                    anime = animeMedia,
+                    viewModel = viewModel,
+                    downloadManager = viewModel.episodeDownloadManager,
+                    isOled = isOled,
+                    preferEnglishTitles = preferEnglishTitles,
+                    onDismiss = { showDownloadDialog = false },
+                    onNavigateToSettings = onNavigateToSettings
                 )
             }
         }
