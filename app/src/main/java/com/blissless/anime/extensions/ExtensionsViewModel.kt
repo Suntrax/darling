@@ -128,6 +128,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                     "${ctx.packageName}.fileprovider",
                     apkFile
                 )
+                @Suppress("DEPRECATION")
                 val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                     data = uri
                     flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -160,7 +161,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         if (!response.isSuccessful) {
             throw Exception("Server returned ${response.code} ${response.message}")
         }
-        val body = response.body?.string() ?: throw Exception("Empty response")
+        val body = response.body.string() ?: throw Exception("Empty response")
         val json = Json { ignoreUnknownKeys = true }
         val element = json.parseToJsonElement(body)
         val repo = parseRepoJson(repoUrl, element)
@@ -182,7 +183,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         if (!response.isSuccessful) {
             throw Exception("Server returned ${response.code} ${response.message}")
         }
-        val body = response.body ?: throw Exception("No response body")
+        val body = response.body
 
         apkFile.outputStream().use { output ->
             body.byteStream().use { input ->

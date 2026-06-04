@@ -1236,7 +1236,7 @@ class MainViewModel : ViewModel() {
             genres = media.genres ?: emptyList(),
             year = media.startDate?.year ?: media.seasonYear,
             malId = media.idMal,
-            isAdult = media.isAdult ?: false
+            isAdult = media.isAdult
         )
     }
 
@@ -1273,7 +1273,7 @@ class MainViewModel : ViewModel() {
                     genres = media.genres ?: emptyList(),
                     year = media.seasonYear,
                     malId = media.idMal,
-                    isAdult = media.isAdult ?: false
+                    isAdult = media.isAdult
                 )
             }.sortedBy { it.airingAt }
 
@@ -1357,7 +1357,7 @@ class MainViewModel : ViewModel() {
                     if (animeFromList != null) {
                         resolvedMalId = jikanService?.searchAnimeByTitle(animeFromList.title)
                     }
-                } else if (resolvedMalId == null && details != null) {
+                } else if (resolvedMalId == null) {
                     resolvedMalId = jikanService?.searchAnimeByTitle(details.title)
                 }
 
@@ -1670,7 +1670,7 @@ class MainViewModel : ViewModel() {
             return null
         }
         val relationsList = media.relations?.edges?.mapNotNull { edge ->
-            edge.node?.let { node ->
+            edge.node.let { node ->
                 AnimeRelation(
                     id = node.id,
                     title = node.title?.english ?: node.title?.romaji ?: "Unknown",
@@ -1699,7 +1699,7 @@ class MainViewModel : ViewModel() {
             latestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 },
             nextAiringEpisode = media.nextAiringEpisode?.episode, nextAiringTime = media.nextAiringEpisode?.airingAt,
             relations = relationsList,
-            isAdult = media.isAdult ?: false,
+            isAdult = media.isAdult,
             characters = media.characters,
             trailerUrl = media.trailer?.let {
                 if (it.site == "youtube") "https://www.youtube.com/watch?v=${it.id}"
@@ -2096,7 +2096,7 @@ class MainViewModel : ViewModel() {
                         Log.i("ExtensionSearch", "  -> ${a.title}")
                     }
                     matchedSAnime = page.animes.firstOrNull { a: SAnime ->
-                        a.title.contains(anime.title ?: "", ignoreCase = true) ||
+                        a.title.contains(anime.title, ignoreCase = true) ||
                                 (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
                     } ?: page.animes.firstOrNull()
                     if (matchedSAnime != null) {
@@ -2269,8 +2269,8 @@ class MainViewModel : ViewModel() {
                     }
                 } else {
                     val matched = sEpisodes.find { it.episode_number.toInt() == episodeNumber }
-                        ?: sEpisodes.firstOrNull { it.name?.contains("Episode $episodeNumber", ignoreCase = true) == true }
-                        ?: sEpisodes.firstOrNull { it.name?.contains("$episodeNumber", ignoreCase = true) == true }
+                        ?: sEpisodes.firstOrNull { it.name.contains("Episode $episodeNumber", ignoreCase = true) }
+                        ?: sEpisodes.firstOrNull { it.name.contains("$episodeNumber", ignoreCase = true) }
                         ?: sEpisodes.getOrNull(episodeNumber - 1)
                     if (matched == null) {
                         Log.w(epTag, "playEpisodeWithExtension: episode $episodeNumber not found among ${sEpisodes.size} episodes")

@@ -234,8 +234,8 @@ fun DetailedAnimeScreen(
                     status = effectiveLocalStatus ?: "CURRENT",
                     progress = progress,
                     totalEpisodes = anime.episodes,
-                    title = anime.title ?: "",
-                    cover = anime.cover,
+                            title = anime.title,
+                            cover = anime.cover,
                     banner = anime.banner,
                     year = anime.year,
                     averageScore = anime.averageScore
@@ -560,7 +560,7 @@ fun DetailedAnimeScreen(
             IconButton(
                 onClick = {
                     val shareText = buildString {
-                        displayData.title?.let { append(it) }
+                        displayData.title.let { append(it) }
                         append("\n\n")
                         append("https://anilist.co/anime/${displayData.id}")
                     }
@@ -701,7 +701,7 @@ fun DetailedAnimeScreen(
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Anime Title", displayData.titleEnglish))
                                 }.padding(vertical = 4.dp)) {
                                     Text(
-                                        text = displayData.titleEnglish!!, style = MaterialTheme.typography.bodyMedium,
+                                        text = displayData.titleEnglish, style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 10, overflow = TextOverflow.Clip,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1f)
@@ -714,7 +714,7 @@ fun DetailedAnimeScreen(
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Anime Title", displayData.titleNative))
                                 }.padding(vertical = 4.dp)) {
                                     Text(
-                                        text = displayData.titleNative!!, style = MaterialTheme.typography.bodySmall,
+                                        text = displayData.titleNative, style = MaterialTheme.typography.bodySmall,
                                         maxLines = 10, overflow = TextOverflow.Clip,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         modifier = Modifier.weight(1f)
@@ -1417,7 +1417,7 @@ fun DetailedAnimeScreen(
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (filteredRelations.isNotEmpty()) {
                                         TextButton(onClick = { 
-                                            onViewAllRelations(displayData.id, displayData.title ?: "") 
+                                            onViewAllRelations(displayData.id, displayData.title) 
                                         }) {
                                             Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                         }
@@ -1839,7 +1839,7 @@ fun DetailedAnimeScreen(
                                                 modifier = Modifier
                                                     .width(80.dp)
                                                     .clip(RoundedCornerShape(12.dp))
-                                                    .clickable { staffEdge.node?.id?.let { id -> onStaffClick(id) } }
+                                                    .clickable { staffEdge.node.id?.let { id -> onStaffClick(id) } }
                                                     .graphicsLayer {
                                                         scaleX = introScale * scrollScale
                                                         scaleY = introScale * scrollScale
@@ -1977,7 +1977,7 @@ fun DetailedAnimeScreen(
     if (showStatusDialog) {
         val animeMedia = AnimeMedia(
             id = anime.id,
-            title = anime.title ?: "",
+            title = anime.title,
             titleEnglish = anime.titleEnglish,
             cover = anime.cover,
             banner = anime.banner,
@@ -2010,7 +2010,7 @@ fun DetailedAnimeScreen(
                             status = status,
                             progress = progress,
                             totalEpisodes = anime.episodes,
-                            title = anime.title ?: "",
+                    title = anime.title,
                             cover = anime.cover,
                             banner = anime.banner,
                             year = anime.year,

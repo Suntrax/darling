@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.anime"
         minSdk = 26
         targetSdk = 37
-        versionCode = 49
-        versionName = "4.1.1"
+        versionCode = 50
+        versionName = "4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -163,7 +163,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx.v2100)
     implementation(libs.rxjava)
     implementation(libs.kotlinx.serialization.json.okio)
-    implementation(libs.kotlinx.serialization.json)
     implementation(libs.jsoup.v1181)
     implementation(libs.androidx.preference.ktx)
 }

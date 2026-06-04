@@ -617,7 +617,7 @@ class EpisodeDownloadManager(private val context: Context) {
                     Log.w(TAG, "cacheSubtitle: HTTP ${response.code} for $id, headers=$downloadHeaders")
                     return@runBlocking null
                 }
-                val bodyBytes = response.body!!.bytes()
+                val bodyBytes = response.body.bytes()
                 val subDir = File(context.cacheDir, "subtitles")
                 subDir.mkdirs()
                 val suffix = if (lang.isNotEmpty()) "_${lang.replace(Regex("\\W+"), "_")}" else ""

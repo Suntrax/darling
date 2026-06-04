@@ -12,6 +12,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 fun Call.asObservable(): Observable<Response> {
+    @Suppress("DEPRECATION")
     return Observable.create<Response> { subscriber ->
         enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {

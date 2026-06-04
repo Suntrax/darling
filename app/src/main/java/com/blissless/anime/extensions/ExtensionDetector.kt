@@ -76,7 +76,7 @@ class ExtensionDetector(private val context: Context) {
 
         return Extension(
             packageName = pkgInfo.packageName,
-            name = pm.getApplicationLabel(ai)?.toString() ?: pkgInfo.packageName,
+            name = pm.getApplicationLabel(ai).toString() ?: pkgInfo.packageName,
             versionName = pkgInfo.versionName ?: "",
             versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 pkgInfo.longVersionCode
@@ -114,6 +114,7 @@ class ExtensionDetector(private val context: Context) {
 
     private fun isMetadataTrue(metaData: android.os.Bundle?, key: String): Boolean {
         if (metaData == null) return false
+        @Suppress("DEPRECATION")
         val value = metaData.get(key)
         return when (value) {
             is Boolean -> value

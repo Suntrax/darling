@@ -47,7 +47,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
@@ -64,7 +64,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -228,10 +228,10 @@ fun PlayerScreen(
         isFullscreen = !isFullscreen
         activity?.let { act ->
             if (isFullscreen) {
-                act.window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                @Suppress("DEPRECATION") act.window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             } else {
-                act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                @Suppress("DEPRECATION") act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
         }
@@ -242,7 +242,7 @@ fun PlayerScreen(
         if (isFullscreen) {
             isFullscreen = false
             activity?.let { act ->
-                act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                @Suppress("DEPRECATION") act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
         }
@@ -1100,7 +1100,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                 modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                             ) {
                                 Icon(
-                                    Icons.Default.ArrowBack,
+                                    Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back",
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
@@ -1808,7 +1808,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.VolumeUp,
+                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                     contentDescription = "Volume",
                     tint = accentColor,
                     modifier = Modifier.size(22.dp)

@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.anime.data.models.ExploreAnime
+import com.blissless.anime.ui.theme.StatusColors
 import java.util.Locale
 import kotlin.math.absoluteValue
 

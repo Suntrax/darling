@@ -56,7 +56,7 @@ class AnimeThemesService {
 
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val body = response.body?.string()
+                    val body = response.body.string()
                     if (body != null) {
                         val data = json.decodeFromString<AnimeThemesApiResponse>(body)
                         extractThemesFromAnime(data.anime)

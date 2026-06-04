@@ -1073,6 +1073,7 @@ private fun AboutSettingsPage(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Darling", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    @Suppress("DEPRECATION")
                     Text("v$currentVersion (${packageInfo.versionCode})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

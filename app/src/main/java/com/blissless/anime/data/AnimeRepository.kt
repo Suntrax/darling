@@ -911,7 +911,7 @@ class AnimeRepository(
                 // For movies, return a single "episode" - just fetch basic info
                 return@withContext listOf(TmdbEpisode(
                     episode = 1,
-                    title = bestMatch.title ?: "Movie",
+                    title = bestMatch.title,
                     description = bestMatch.overview ?: "",
                     image = bestMatch.poster_path?.let { "https://image.tmdb.org/t/p/w500$it" }
                 ))
@@ -923,7 +923,7 @@ class AnimeRepository(
             
             // Check if this looks like anime vs live action for Chinese titles
             val isChineseTitle = animeTitle.toCharArray().any { it.code in 0x4E00..0x9FFF || it.code in 0x3400..0x4DBF }
-            val totalEpisodes = tvDetails.number_of_episodes ?: 0
+            val totalEpisodes = tvDetails.number_of_episodes
             
             // If it's a Chinese title with very few episodes (like 12), try to find one with more episodes
             if (isChineseTitle && totalEpisodes in 1..24 && searchResults.size > 1) {
@@ -933,10 +933,10 @@ class AnimeRepository(
                     .maxByOrNull { it.id }
                 if (betterMatch != null) {
                     val altTvDetails = fetchTvDetails(betterMatch.id)
-                    if (altTvDetails != null && (altTvDetails.number_of_episodes ?: 0) > totalEpisodes) {
+                    if (altTvDetails != null && altTvDetails.number_of_episodes > totalEpisodes) {
                         // Use offset 0 since we already picked the correct entry (Season 1)
                         val betterSortedSeasons = altTvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }
-                        val betterMaxEps = altTvDetails.number_of_episodes ?: 0
+                        val betterMaxEps = altTvDetails.number_of_episodes
                         val betterAllSeasonDetails = coroutineScope {
                             betterSortedSeasons.map { season ->
                                 async { fetchSeason(altTvDetails.id, season.season_number) }
@@ -1184,21 +1184,21 @@ class AnimeRepository(
         val normalizedOriginal = normalizeTitle(animeTitle)
         val normalizedTmdbName = normalizeTitle(tmdbName ?: "")
         if (normalizedTmdbName == normalizedOriginal) {
-            return Pair(0, tvDetails.number_of_episodes ?: 0)
+            return Pair(0, tvDetails.number_of_episodes)
         }
         
         // If there were multiple TMDB results, assume the best match (highest ID) is correct
         if (tmdbResultsCount > 1) {
-            return Pair(0, tvDetails.number_of_episodes ?: 0)
+            return Pair(0, tvDetails.number_of_episodes)
         }
 
         // Title matching via Aniwatch first episode title
         val (aniwatchOffset, hianimeCount) = fetchEpisodeOffsetFromAniwatch(animeTitle, allSeasonDetails)
         if (aniwatchOffset >= 0) {
-            return Pair(aniwatchOffset, if (hianimeCount > 0) hianimeCount else (tvDetails.number_of_episodes ?: 0))
+            return Pair(aniwatchOffset, if (hianimeCount > 0) hianimeCount else tvDetails.number_of_episodes)
         }
 
-        return Pair(0, tvDetails.number_of_episodes ?: 0)
+        return Pair(0, tvDetails.number_of_episodes)
     }
 
     private val visitedOffsetIds = mutableSetOf<Int>()
@@ -1245,7 +1245,7 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<AnimeRelationsResponse>(it)
                 data.data.Media.relations?.edges?.mapNotNull { edge ->
-                    edge.node?.let { node ->
+                    edge.node.let { node ->
                         AnimeRelation(
                             id = node.id,
                             title = node.title?.english ?: node.title?.romaji ?: "Unknown",
@@ -1470,10 +1470,10 @@ class AnimeRepository(
                             status = activity.status ?: "",
                             progress = activity.progress,
                             createdAt = activity.createdAt,
-                            mediaId = activity.media?.id ?: 0,
-                            mediaTitle = activity.media?.title?.romaji ?: activity.media?.title?.english ?: "Unknown",
-                            mediaTitleEnglish = activity.media?.title?.english,
-                            mediaCover = activity.media?.coverImage?.extraLarge ?: "",
+                            mediaId = activity.media.id,
+                            mediaTitle = activity.media.title?.romaji ?: activity.media.title?.english ?: "Unknown",
+                            mediaTitleEnglish = activity.media.title?.english,
+                            mediaCover = activity.media.coverImage?.extraLarge ?: "",
                             episodes = null,
                             averageScore = null,
                             year = null

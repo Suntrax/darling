@@ -94,7 +94,7 @@ fun HomeAnimeStatusDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(modifier = Modifier.height(4.dp))
-                        val latestEp = anime.latestEpisode?.takeIf { it > 0 }
+                        val latestEp = anime.latestEpisode.takeIf { it > 0 }
                         val totalEp = anime.totalEpisodes?.takeIf { it > 0 }
                         val progressText = when {
                             latestEp != null && latestEp > 0 && totalEp != null -> "${anime.progress} / $latestEp / $totalEp"
@@ -205,7 +205,7 @@ fun HomeAnimeStatusDialog(
                 Text("Episode Progress", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val maxEp = anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 }
+                val maxEp = anime.latestEpisode.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 }
 
                 OutlinedTextField(
                     value = selectedProgress,

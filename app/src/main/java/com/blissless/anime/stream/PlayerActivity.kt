@@ -185,13 +185,14 @@ class PlayerActivity : ComponentActivity() {
                     val ratio = if (videoSize.width == 0 || videoSize.height == 0) 0f
                     else {
                         var r = videoSize.width.toFloat() / videoSize.height.toFloat() * videoSize.pixelWidthHeightRatio
-                        if (videoSize.unappliedRotationDegrees == 90 || videoSize.unappliedRotationDegrees == 270) {
+                        @Suppress("DEPRECATION") if (videoSize.unappliedRotationDegrees == 90 || videoSize.unappliedRotationDegrees == 270) {
                             r = 1f / r
                         }
                         r
                     }
                     videoContainer?.setAspectRatio(ratio)
                 }
+                @Deprecated("Use onCues(CueGroup) instead", ReplaceWith("onCues(CueGroup(cues))"))
                 override fun onCues(cues: List<Cue>) {
                     subtitleView?.setCues(cues)
                 }

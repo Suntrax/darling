@@ -152,14 +152,14 @@ fun UserProfileScreen(
             val entries = userActivity.take(50).map { activity ->
                 val progressStr = activity.progress
                 val episodeDisplay = progressStr?.let { prog ->
-                    val nums = prog.filter { it.isDigit() }.chunked(2).map { it.toString().toIntOrNull() }.filterNotNull()
+                    val nums = prog.filter { it.isDigit() }.chunked(2).map { it.toIntOrNull() }.filterNotNull()
                     when {
                         nums.size >= 2 && nums[1] > nums[0] -> "${nums[0]}-${nums[1]}"
                         nums.isNotEmpty() -> "Episode ${nums[0]}"
                         else -> null
                     }
                 }
-                statuses.add(activity.status ?: "")
+                statuses.add(activity.status)
                 JikanHistoryEntry(
                     malId = activity.mediaId,
                     title = activity.mediaTitle,
@@ -532,7 +532,7 @@ private fun formatMinutesWatched(minutes: Int): String {
 }
 
 private fun formatDate(timestamp: Long): String {
-    val sdf = SimpleDateFormat("d MMMM, yyyy", Locale("de", "DE"))
+    val sdf = SimpleDateFormat("d MMMM, yyyy", Locale.forLanguageTag("de-DE"))
     return sdf.format(Date(timestamp * 1000))
 }
 
@@ -606,7 +606,7 @@ private fun FavoriteItem(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (anime.format != null) {
                             Text(
-                                anime.format!!, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                anime.format, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.labelSmall
                             )
                             Text(" · ", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
@@ -620,7 +620,7 @@ private fun FavoriteItem(
                 if (anime.year == null && anime.format != null) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        anime.format!!, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        anime.format, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.labelSmall
                     )
                 }

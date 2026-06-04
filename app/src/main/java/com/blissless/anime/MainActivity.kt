@@ -811,8 +811,8 @@ fun MainScreen(
         showPlayer = true
         // After starting DUB playback, fetch SUB subtitles in background
         if (currentCategory == "dub" && result.source != null && result.episode != null) {
-            val src = result.source!!
-            val ep = result.episode!!
+            val src = result.source
+            val ep = result.episode
             scope.launch {
                 val episodeVideos = withContext(Dispatchers.IO) {
                     try { src.getVideoList(ep) } catch (_: Throwable) { emptyList() }
@@ -991,7 +991,7 @@ fun MainScreen(
                 currentReferer = cached.referer
                 currentSubtitleUrl = cached.subtitleUrl
                 currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                currentServerName = if (cached.hosters != null && cached.hosters!!.isNotEmpty()) cached.hosters!!.first().hosterName else "Extension"
+                currentServerName = if (cached.hosters != null && cached.hosters.isNotEmpty()) cached.hosters.first().hosterName else "Extension"
                 currentCategory = "sub"
                 currentQualityOptions = cached.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                 currentQuality = cached.videoTitle
@@ -1023,7 +1023,7 @@ fun MainScreen(
                         currentReferer = result.referer
                         currentSubtitleUrl = result.subtitleUrl
                         currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                        currentServerName = if (result.hosters != null && result.hosters!!.isNotEmpty()) result.hosters!!.first().hosterName else "Extension"
+                        currentServerName = if (result.hosters != null && result.hosters.isNotEmpty()) result.hosters.first().hosterName else "Extension"
                         currentCategory = "sub"
                         currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                         currentQuality = result.videoTitle
@@ -1062,7 +1062,7 @@ fun MainScreen(
                 currentReferer = cached.referer
                 currentSubtitleUrl = cached.subtitleUrl
                 currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                currentServerName = if (cached.hosters != null && cached.hosters!!.isNotEmpty()) cached.hosters!!.first().hosterName else "Extension"
+                currentServerName = if (cached.hosters != null && cached.hosters.isNotEmpty()) cached.hosters.first().hosterName else "Extension"
                 currentCategory = "sub"
                 currentQualityOptions = cached.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                 currentQuality = cached.videoTitle
@@ -1095,7 +1095,7 @@ fun MainScreen(
                         currentReferer = result.referer
                         currentSubtitleUrl = result.subtitleUrl
                         currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                        currentServerName = if (result.hosters != null && result.hosters!!.isNotEmpty()) result.hosters!!.first().hosterName else "Extension"
+                        currentServerName = if (result.hosters != null && result.hosters.isNotEmpty()) result.hosters.first().hosterName else "Extension"
                         currentCategory = "sub"
                         currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                         currentQuality = result.videoTitle
@@ -2279,7 +2279,7 @@ fun MainScreen(
                             color = surfaceColor.copy(alpha = 0.95f),
                             tonalElevation = 4.dp,
                             shadowElevation = 8.dp,
-                            border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(width = 1.dp)
                         ) {
                             val selectedIndex = currentPage
 

@@ -327,6 +327,7 @@ fun CharacterScreen(
                                         MaterialTheme.colorScheme.primary,
                                         charAnimeTitles
                                     )
+                                    @Suppress("DEPRECATION")
                                     ClickableText(
                                         text = annotatedBio,
                                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
@@ -584,6 +585,7 @@ fun StaffScreen(
                                         MaterialTheme.colorScheme.primary,
                                         staffAnimeTitles
                                     )
+                                    @Suppress("DEPRECATION")
                                     ClickableText(
                                         text = annotatedBio,
                                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
