@@ -44,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.AspectRatio
@@ -751,8 +752,8 @@ fun OfflinePlayerScreen(
                                         )
                                 ) {
                                     Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Close",
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
                                         tint = Color.White,
                                         modifier = Modifier.size(24.dp)
                                     )
@@ -777,7 +778,7 @@ fun OfflinePlayerScreen(
                                 }
                             }
 
-                            // Subtitle toggle with language selection
+                            // CC/Subtitles button
                             if (subtitleTrackList.isNotEmpty()) {
                                 Box {
                                     val ccActive = subtitlesEnabled && subtitleTrackList.isNotEmpty()
@@ -786,26 +787,29 @@ fun OfflinePlayerScreen(
                                         ccActive -> Color(0xFF4FC3F7)
                                         else -> Color.White.copy(alpha = 0.5f)
                                     }
-                                    IconButton(
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = Color.Black.copy(alpha = 0.5f),
                                         onClick = {
-                                            // Load tracks on first open
                                             if (subtitleTrackList.isEmpty()) {
                                                 val id = "${currentDownload.animeId}_${currentDownload.episode}"
                                                 subtitleTrackList = downloadManager.getSubtitleTracks(id)
                                             }
                                             showSubtitleMenu = true
-                                        },
-                                        modifier = Modifier.background(
-                                            Color.Black.copy(alpha = 0.5f),
-                                            shape = MaterialTheme.shapes.small
-                                        )
+                                        }
                                     ) {
-                                        Text(
-                                            "CC",
-                                            color = ccColor,
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = "CC",
+                                                color = ccColor,
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
                                     }
 
                                     DropdownMenu(
@@ -841,25 +845,22 @@ fun OfflinePlayerScreen(
                                 }
                             }
                             // Resize button only (no server selectors)
-                            Box(
-                                modifier = Modifier.width(48.dp),
-                                contentAlignment = Alignment.Center
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
                             ) {
-                                IconButton(
-                                    onClick = {
-                                        resizeModeIndex =
-                                            (resizeModeIndex + 1) % resizeModes.size
-                                    },
-                                    modifier = Modifier.background(
-                                        Color.Black.copy(alpha = 0.5f),
-                                        shape = MaterialTheme.shapes.small
-                                    )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
-                                Icon(
-                                    Icons.Default.AspectRatio,
-                                    "Change aspect ratio",
-                                    tint = Color.White
-                                )
+                                    Icon(
+                                        Icons.Default.AspectRatio,
+                                        "Change aspect ratio",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }
@@ -1333,7 +1334,7 @@ fun OfflinePlayerScreen(
                         ) {
                             Box {
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(14.dp),
                                     color = Color.Black.copy(alpha = 0.5f),
                                     onClick = { showSpeedMenu = true }
                                 ) {
@@ -1390,10 +1391,10 @@ fun OfflinePlayerScreen(
                                 }
                             }
 
-                            // Autoplay + Fullscreen with connected background
+                            // Autoplay + Fullscreen (linked)
                             Row(
                                 modifier = Modifier
-                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)),
+                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
@@ -1401,38 +1402,45 @@ fun OfflinePlayerScreen(
                                     color = Color.Transparent
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
                                             text = "Autoplay",
                                             color = Color.White,
                                             style = MaterialTheme.typography.labelSmall
                                         )
-                                        Switch(
-                                            checked = autoPlayNextEpisode,
-                                            onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
-                                            modifier = Modifier.scale(0.6f),
-                                            colors = SwitchDefaults.colors(
-                                                checkedTrackColor = Color.White,
-                                                checkedThumbColor = Color.Black,
-                                                uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
-                                                uncheckedThumbColor = Color.White
+                                        Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                                            Switch(
+                                                checked = autoPlayNextEpisode,
+                                                onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                                modifier = Modifier.scale(0.5f),
+                                                colors = SwitchDefaults.colors(
+                                                    checkedTrackColor = Color.White,
+                                                    checkedThumbColor = Color.Black,
+                                                    uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
+                                                    uncheckedThumbColor = Color.White
+                                                )
                                             )
-                                        )
+                                        }
                                     }
                                 }
-
-                                IconButton(
+                                Surface(
                                     onClick = { toggleFullscreen() },
-                                    modifier = Modifier.size(40.dp)
+                                    color = Color.Transparent
                                 ) {
-                                    Icon(
-                                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                        contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
-                                        tint = Color.White
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                            contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

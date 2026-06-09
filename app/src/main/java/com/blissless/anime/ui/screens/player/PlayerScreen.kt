@@ -1170,7 +1170,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                             if ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty()) {
                                 Box {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(14.dp),
                                         color = Color.Black.copy(alpha = 0.5f),
                                         onClick = { showServerMenu = true }
                                     ) {
@@ -1289,12 +1289,12 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                             if (subtitleTracks.isNotEmpty() || subtitleUrl != null) {
                                 Box {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(14.dp),
                                         color = Color.Black.copy(alpha = 0.5f),
                                         onClick = { showSubtitleMenu = true }
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.Center
                                         ) {
@@ -1341,12 +1341,22 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                             }
 
                             // Resize button
-                            Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                                IconButton(
-                                    onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
-                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
-                                    Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
+                                    Icon(
+                                        Icons.Default.AspectRatio,
+                                        "Change aspect ratio",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
 
@@ -1717,9 +1727,23 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                 )
                             }
                         }
-                    }
+                        }
 
-                    // Bottom row with speed selector on left and time on right
+                        // Remaining time
+                        if (duration > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Text(
+                                    text = "-${formatTime((duration - currentPosition).coerceAtLeast(0L))}",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+
+                        // Bottom row with speed selector on left and time on right
                     var currentSpeed by rememberSaveable { mutableFloatStateOf(1f) }
                     val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
@@ -1731,7 +1755,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                         // Playback speed selector on the left
                         Box {
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 color = Color.Black.copy(alpha = 0.5f),
                                 onClick = { showSpeedMenu = true }
                             ) {
@@ -1779,10 +1803,10 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                             }
                         }
 
-                        // Autoplay + Fullscreen with connected background
+                        // Autoplay + Fullscreen (linked)
                         Row(
                             modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)),
+                                .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
@@ -1790,38 +1814,45 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                 color = Color.Transparent
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                                    modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
                                         text = "Autoplay",
                                         color = Color.White,
                                         style = MaterialTheme.typography.labelSmall
                                     )
-                                    Switch(
-                                        checked = autoPlayNextEpisode,
-                                        onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
-                                        modifier = Modifier.scale(0.6f),
-                                        colors = SwitchDefaults.colors(
+                                    Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                                        Switch(
+                                            checked = autoPlayNextEpisode,
+                                            onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                            modifier = Modifier.scale(0.5f),
+                                            colors = SwitchDefaults.colors(
                                             checkedTrackColor = Color.White,
                                             checkedThumbColor = Color.Black,
                                             uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
                                             uncheckedThumbColor = Color.White
                                         )
                                     )
+                                        }
                                 }
                             }
-
-                            IconButton(
+                            Surface(
                                 onClick = { toggleFullscreen() },
-                                modifier = Modifier.size(40.dp)
+                                color = Color.Transparent
                             ) {
-                                Icon(
-                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
-                                    tint = Color.White
-                                )
+                                Row(
+                                    modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
