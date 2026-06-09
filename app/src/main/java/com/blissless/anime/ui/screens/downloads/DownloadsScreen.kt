@@ -23,26 +23,33 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -96,10 +103,18 @@ fun DownloadsScreen(
         }.sortedBy { it.animeName }
     }
 
-    val inProgressDownloads = remember(downloadsInfo) {
-        downloadsInfo.values.filter {
+    val activeBatches by downloadManager.activeBatches.collectAsState()
+    val inProgressDownloads = remember(downloadsInfo, activeBatches) {
+        val fromDownloads = downloadsInfo.values.filter {
             it.state == Download.STATE_QUEUED || it.state == Download.STATE_DOWNLOADING
         }.groupBy { it.animeName }
+        val result = fromDownloads.toMutableMap()
+        for (animeName in activeBatches) {
+            if (animeName !in result) {
+                result[animeName] = emptyList()
+            }
+        }
+        result
     }
     val failedDownloads = remember(downloadsInfo) {
         downloadsInfo.values.filter {
@@ -130,6 +145,7 @@ fun DownloadsScreen(
 
     var showDeleteConfirm by remember { mutableStateOf<String?>(null) }
     var selectedAnime by remember { mutableStateOf<EpisodeDownloadManager.GroupedDownload?>(null) }
+    var showDownloadDialogFor by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var playingDownload by remember { mutableStateOf<EpisodeDownloadManager.DownloadInfo?>(null) }
     var playerEpisodes by remember { mutableStateOf<List<EpisodeDownloadManager.DownloadInfo>>(emptyList()) }
     val useMonochrome by viewModel.disableMaterialColors.collectAsState()
@@ -145,7 +161,15 @@ fun DownloadsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.notificationAnimeTaps.collect { animeName ->
-            selectedAnime = groupedDownloads.find { it.animeName == animeName }
+            if (downloadManager.getBatchEpisodes(animeName).isNotEmpty() ||
+                downloadsInfo.values.any { it.animeName == animeName && (it.state == Download.STATE_QUEUED || it.state == Download.STATE_DOWNLOADING) }
+            ) {
+                val animeId = downloadsInfo.values.firstOrNull { it.animeName == animeName }?.animeId
+                    ?: (groupedDownloads.find { it.animeName == animeName }?.episodes?.firstOrNull()?.animeId ?: 0)
+                showDownloadDialogFor = animeId to animeName
+            } else {
+                selectedAnime = groupedDownloads.find { it.animeName == animeName }
+            }
         }
     }
 
@@ -343,43 +367,54 @@ fun DownloadsScreen(
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.clickable {
+                                            val animeId = infos.firstOrNull()?.animeId ?: (downloadManager.getBatchEpisodes(animeName).hashCode())
+                                            showDownloadDialogFor = animeId to animeName
+                                        }
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    infos.sortedBy { it.episode }.forEach { info ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "Ep ${info.episode}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.width(48.dp)
-                                            )
-                                            LinearProgressIndicator(
-                                                progress = { info.progress },
-                                                modifier = Modifier.weight(1f).height(4.dp).padding(end = 8.dp),
-                                                color = MaterialTheme.colorScheme.primary,
-                                                trackColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
-                                            )
-                                            Text(
-                                                text = "${(info.progress * 100).toInt()}%",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            IconButton(
-                                                onClick = { downloadManager.removeDownload("${info.animeId}_${info.episode}") },
-                                                modifier = Modifier.size(24.dp)
+                                    val batchEps = downloadManager.getBatchEpisodes(animeName)
+                                    if (infos.isNotEmpty()) {
+                                        infos.sortedBy { it.episode }.forEach { info ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    "Cancel download",
-                                                    tint = Color.White.copy(alpha = 0.6f),
-                                                    modifier = Modifier.size(16.dp)
+                                                Text(
+                                                    text = "Ep ${info.episode}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.width(48.dp)
+                                                )
+                                                LinearProgressIndicator(
+                                                    modifier = Modifier.weight(1f).height(4.dp).padding(end = 8.dp),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    trackColor = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.surfaceVariant,
                                                 )
                                             }
                                         }
+                                    } else if (batchEps.isNotEmpty()) {
+                                        Text(
+                                            text = "${batchEps.first()}-${batchEps.last()} queued",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        TextButton(
+                                            onClick = { downloadManager.cancelBatch(animeName) }
+                                        ) { Text("Cancel All") }
+                                        TextButton(
+                                            onClick = {
+                                                val animeId = infos.firstOrNull()?.animeId ?: (downloadManager.getBatchEpisodes(animeName).hashCode())
+                                                showDownloadDialogFor = animeId to animeName
+                                            }
+                                        ) { Text("View Progress") }
                                     }
                                 }
                             }
@@ -570,6 +605,171 @@ fun DownloadsScreen(
             )
         }
     }
+
+    val downloadDialogInfo = showDownloadDialogFor
+    if (downloadDialogInfo != null) {
+        val (_, animeName) = downloadDialogInfo
+        val batchEps = downloadManager.getBatchEpisodes(animeName)
+        val sortedBatchEps = if (batchEps.isNotEmpty()) batchEps.sorted() else {
+            downloadsInfo.values.filter { it.animeName == animeName }.map { it.episode }.sorted()
+        }
+        val anyActive = sortedBatchEps.any { ep ->
+            val info = downloadsInfo.values.find { it.animeName == animeName && it.episode == ep }
+            info != null && (info.state == Download.STATE_QUEUED || info.state == Download.STATE_DOWNLOADING)
+        }
+        Dialog(
+            onDismissRequest = { if (!anyActive) showDownloadDialogFor = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = if (isOled) Color.Black else MaterialTheme.colorScheme.background
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (isOled) Color(0xFF0A0A0A) else MaterialTheme.colorScheme.surface,
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp).statusBarsPadding(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = {
+                                showDownloadDialogFor = null
+                            }) {
+                                Icon(Icons.Default.Close, "Close", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = animeName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${sortedBatchEps.size} episodes selected",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        itemsIndexed(sortedBatchEps, key = { _, ep -> "${animeName}_batch_$ep" }) { _, ep ->
+                            val info = downloadsInfo.values.find { it.animeName == animeName && it.episode == ep }
+                            val state = info?.state
+                            val isDone = state == Download.STATE_COMPLETED
+                            val isFailed = state == Download.STATE_FAILED
+                            val isDownloading = state == Download.STATE_DOWNLOADING
+                            val isQueued = state == Download.STATE_QUEUED
+                            val isWaiting = state == null
+                            val bgColor = when {
+                                isDone -> if (isOled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                isFailed -> if (isOled) Color(0xFF2E1A1A) else Color(0xFFFFEBEE)
+                                else -> if (isOled) Color(0xFF1A1A2E) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            }
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = bgColor)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                if (isDone) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                else if (isFailed) Color(0xFFEF5350).copy(alpha = 0.15f)
+                                                else Color.White.copy(alpha = 0.08f),
+                                                RoundedCornerShape(10.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        when {
+                                            isDone -> Icon(Icons.Default.DownloadDone, "Done", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                                            isFailed -> Icon(Icons.Default.Close, "Failed", tint = Color(0xFFEF5350), modifier = Modifier.size(22.dp))
+                                            else -> Text("$ep", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Episode $ep",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = when {
+                                                isDone -> MaterialTheme.colorScheme.primary
+                                                isFailed -> Color(0xFFEF5350)
+                                                else -> if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                    }
+                                    Text(
+                                        text = when {
+                                            isDone -> "Saved"
+                                            isFailed -> "Failed"
+                                            isDownloading -> "Downloading"
+                                            isQueued -> "Queued"
+                                            else -> "Waiting"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = when {
+                                            isDone -> MaterialTheme.colorScheme.primary
+                                            isFailed -> Color(0xFFEF5350)
+                                            isDownloading -> if (isOled) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurface
+                                            else -> if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (isOled) Color(0xFF0A0A0A) else MaterialTheme.colorScheme.surface,
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    downloadManager.cancelBatch(animeName)
+                                    showDownloadDialogFor = null
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text("Cancel") }
+                            val doneCount = sortedBatchEps.count { ep ->
+                                val d = downloadsInfo.values.find { it.animeName == animeName && it.episode == ep }
+                                d != null && d.state == Download.STATE_COMPLETED
+                            }
+                            Text(
+                                text = "$doneCount/${sortedBatchEps.size} episodes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.CenterVertically)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @android.annotation.SuppressLint("UnstableApiUsage")
@@ -619,7 +819,7 @@ private fun DownloadedEpisodesDialog(
                             color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Stored in app cache",
+                            text = if (anime.totalSize > 0) "Stored in app cache — ${formatFileSize(anime.totalSize)}" else "Stored in app cache",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -851,6 +1051,7 @@ private fun DownloadedEpisodesDialog(
             }
         )
     }
+
 }
 
 private fun formatDownloadTimestamp(timestamp: Long): String {

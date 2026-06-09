@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.offline.Download
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.AnimeMedia
@@ -132,6 +133,7 @@ fun EpisodeDownloadDialog(
     var showBatteryOptDialog by remember { mutableStateOf(false) }
     var batteryOptDismissed by remember { mutableStateOf(false) }
     var downloadActive by remember { mutableStateOf(true) }
+    var batchCancelled by remember { mutableStateOf(false) }
     val isIgnoringBatteryOptimizations = remember {
         val pm = context.getSystemService(android.os.PowerManager::class.java)
         pm?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -196,17 +198,25 @@ fun EpisodeDownloadDialog(
         requestedDownloadIds = episodes.map { "${anime.id}_$it" }.toSet()
         Log.d(TAG, "startDownload: tracking ${requestedDownloadIds.size} download IDs: $requestedDownloadIds")
 
-        downloadManager.startBatchNotification(displayTitle, episodes.size)
+        downloadManager.startBatchNotification(displayTitle, episodes.size, episodes.toSet())
 
-        scope.launch {
+        val capturedTitle = displayTitle
+        val capturedAnime = anime
+        val capturedExtPkg = extPkg
+        val capturedCategory = resolvedCategory
+        val capturedEpisodes = episodes.toList()
+
+        viewModel.viewModelScope.launch {
             try {
-                for (ep in episodes) {
-                    if (!downloadActive) return@launch
+                for (ep in capturedEpisodes) {
+                    if (downloadManager.isBatchCancelled(capturedTitle)) return@launch
                     currentEpisode = ep
                     Log.d(TAG, "startDownload: resolving episode $ep...")
                 val result = withContext(Dispatchers.IO) {
                     try {
-                        viewModel.playEpisodeWithExtension(anime, ep, extPkg)
+                        viewModel.playEpisodeWithExtension(capturedAnime, ep, capturedExtPkg)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.e(TAG, "playEpisodeWithExtension failed for Ep $ep", e)
                         null
@@ -224,9 +234,9 @@ fun EpisodeDownloadDialog(
                         Log.d(TAG, "startDownload: ep $ep trying video ${videoIndex + 1}/${sortedVideos.size}: ${video.videoTitle} (${video.resolution}p) url=${video.videoUrl.take(100)}")
                         val mimeType = downloadManager.probeVideoMimeType(video.videoUrl, result.videoHeaders)
 
-                        downloadManager.startDownload(
-                            animeId = anime.id,
-                            animeName = displayTitle,
+                        val started = downloadManager.startDownload(
+                            animeId = capturedAnime.id,
+                            animeName = capturedTitle,
                             episode = ep,
                             videoUrl = video.videoUrl,
                             referer = result.referer,
@@ -235,19 +245,28 @@ fun EpisodeDownloadDialog(
                             subtitleTracks = result.subtitleTrackList,
                             videoHeaders = result.videoHeaders,
                             mimeType = mimeType,
-                            malId = anime.malId,
-                            year = anime.year,
-                            category = resolvedCategory,
+                            malId = capturedAnime.malId,
+                            year = capturedAnime.year,
+                            category = capturedCategory,
                         )
+                        if (!started) {
+                            Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed to start, trying next source...")
+                            continue
+                        }
                         Log.i(TAG, "startDownload: ep $ep video ${videoIndex + 1} initiated, waiting...")
 
-                        val downloadId = "${anime.id}_$ep"
-                        downloadManager.downloadsInfo.first { info ->
-                            val d = info[downloadId]
-                            d != null && d.state != Download.STATE_QUEUED && d.state != Download.STATE_DOWNLOADING
+                        val downloadId = "${capturedAnime.id}_$ep"
+                        var finalInfo: EpisodeDownloadManager.DownloadInfo? = null
+                        while (true) {
+                            if (batchCancelled || downloadManager.isBatchCancelled(capturedTitle)) return@launch
+                            val d = downloadManager.downloadsInfo.value[downloadId]
+                            if (d != null && d.state != Download.STATE_QUEUED && d.state != Download.STATE_DOWNLOADING) {
+                                finalInfo = d
+                                break
+                            }
+                            delay(500)
                         }
 
-                        val finalInfo = downloadManager.downloadsInfo.value[downloadId]
                         val completed = finalInfo?.state == Download.STATE_COMPLETED
                         val totalBytes = finalInfo?.totalBytes ?: 0L
                         val tooSmall = completed && totalBytes > 0L && totalBytes < 1_000_000L
@@ -274,8 +293,8 @@ fun EpisodeDownloadDialog(
                 completedCount += if (epSuccess) 1 else 0
                 failedCount += if (!epSuccess) 1 else 0
                 downloadManager.updateBatchNotification(
-                    displayTitle, ep, epSuccess,
-                    completedCount, failedCount, episodes.size
+                    capturedTitle, ep, epSuccess,
+                    completedCount, failedCount, capturedEpisodes.size
                 )
             }
             } catch (_: CancellationException) {
@@ -296,7 +315,14 @@ fun EpisodeDownloadDialog(
         val total = requestedDownloadIds.size
         val inProgress = queued + downloading + done + failed
         if (total > 0) {
-            downloadProgress = (done + failed).toFloat() / total
+            val sum = relevant.values.sumOf {
+                when (it.state) {
+                    Download.STATE_COMPLETED -> 1.0
+                    Download.STATE_FAILED -> 1.0
+                    else -> it.progress.toDouble().coerceIn(0.0, 1.0)
+                }
+            }
+            downloadProgress = (sum / total).toFloat()
             completedCount = done
             failedCount = failed
         }
@@ -335,7 +361,21 @@ fun EpisodeDownloadDialog(
                             .statusBarsPadding(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { onDismiss() }) {
+                        IconButton(onClick = {
+                            if (isDownloading) {
+                                downloadActive = false
+                                batchCancelled = true
+                                val doneCount = requestedDownloadIds.count { id ->
+                                    val d = downloadManager.downloadsInfo.value[id]
+                                    d != null && d.state == Download.STATE_COMPLETED
+                                }
+                                requestedDownloadIds.forEach { id ->
+                                    downloadManager.removeDownload(id)
+                                }
+                                downloadManager.cancelBatchNotification(displayTitle, doneCount, totalToDownload)
+                            }
+                            onDismiss()
+                        }) {
                             Icon(Icons.Default.Close, contentDescription = "Close", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -529,7 +569,6 @@ fun EpisodeDownloadDialog(
                 AnimatedVisibility(visible = isDownloading) {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                         LinearProgressIndicator(
-                            progress = { downloadProgress.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                             color = MaterialTheme.colorScheme.primary,
                             trackColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant
@@ -557,9 +596,15 @@ fun EpisodeDownloadDialog(
                             onClick = {
                                 if (isDownloading) {
                                     downloadActive = false
+                                    batchCancelled = true
+                                    val doneCount = requestedDownloadIds.count { id ->
+                                        val d = downloadManager.downloadsInfo.value[id]
+                                        d != null && d.state == Download.STATE_COMPLETED
+                                    }
                                     requestedDownloadIds.forEach { id ->
                                         downloadManager.removeDownload(id)
                                     }
+                                    downloadManager.cancelBatchNotification(displayTitle, doneCount, totalToDownload)
                                 }
                                 onDismiss()
                             },
