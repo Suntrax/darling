@@ -102,3 +102,6 @@ lint/tmp/
 *.env
 secrets.properties
 api_keys.properties
+
+# Legacy ReDantotsu folder
+ReDantotsu/

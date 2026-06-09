@@ -175,24 +175,27 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     private val _playbackDurations = MutableStateFlow<Map<String, Long>>(emptyMap())
     val playbackDurations: StateFlow<Map<String, Long>> = _playbackDurations.asStateFlow()
 
-    // TMDB episode cache - stores episode titles by anime ID with 24h TTL
+    // TMDB episode cache - 24h TTL for non-downloaded anime, persistent for downloaded anime
     private val _tmdbEpisodeCache = MutableStateFlow<Map<Int, List<TmdbEpisode>>>(emptyMap())
     val tmdbEpisodeCache: StateFlow<Map<Int, List<TmdbEpisode>>> = _tmdbEpisodeCache.asStateFlow()
     private val _tmdbCacheTimestamps = mutableMapOf<Int, Long>()
     private val TMDB_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000L
     private val TMDB_CACHE_PREFS = "tmdb_episode_cache"
+    private val TMDB_PERSISTENT_IDS_PREFS = "tmdb_persistent_ids"
+    private val _persistentTmdbIds = mutableSetOf<Int>()
 
     fun getCachedTmdbEpisodes(animeId: Int, status: String? = null): List<TmdbEpisode>? {
-        // Always skip cache for currently airing anime
         if (status == "RELEASING") return null
         val data = _tmdbEpisodeCache.value[animeId]
-        val timestamp = _tmdbCacheTimestamps[animeId]
-        if (data != null && timestamp != null) {
-            val age = System.currentTimeMillis() - timestamp
-            if (age > TMDB_CACHE_MAX_AGE_MS) {
-                _tmdbEpisodeCache.value = _tmdbEpisodeCache.value - animeId
-                _tmdbCacheTimestamps.remove(animeId)
-                return null
+        if (data != null && animeId !in _persistentTmdbIds) {
+            val timestamp = _tmdbCacheTimestamps[animeId]
+            if (timestamp != null) {
+                val age = System.currentTimeMillis() - timestamp
+                if (age > TMDB_CACHE_MAX_AGE_MS) {
+                    _tmdbEpisodeCache.value = _tmdbEpisodeCache.value - animeId
+                    _tmdbCacheTimestamps.remove(animeId)
+                    return null
+                }
             }
         }
         return data
@@ -204,8 +207,40 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         saveTmdbEpisodeCache()
     }
 
+    fun clearTmdbEpisodeCache(animeId: Int) {
+        _tmdbEpisodeCache.value = _tmdbEpisodeCache.value - animeId
+        _tmdbCacheTimestamps.remove(animeId)
+        _persistentTmdbIds.remove(animeId)
+        saveTmdbEpisodeCache()
+        savePersistentTmdbIds()
+    }
+
+    fun pruneTmdbEpisodeCache(retainedIds: Set<Int>) {
+        val current = _tmdbEpisodeCache.value
+        val filtered = current.filterKeys { it in retainedIds }
+        val removedIds = current.keys - filtered.keys
+        removedIds.forEach { _persistentTmdbIds.remove(it) }
+        // Mark retained IDs as persistent and refresh their timestamps
+        val now = System.currentTimeMillis()
+        retainedIds.forEach { id ->
+            _persistentTmdbIds.add(id)
+            _tmdbCacheTimestamps[id] = now
+        }
+        if (filtered.size != current.size || removedIds.isNotEmpty()) {
+            _tmdbEpisodeCache.value = filtered
+            savePersistentTmdbIds()
+            saveTmdbEpisodeCache()
+        }
+    }
+
     fun loadTmdbEpisodeCache() {
         try {
+            // Load persistent IDs
+            val idsData = sharedPreferences.getString(TMDB_PERSISTENT_IDS_PREFS, null)
+            if (idsData != null) {
+                _persistentTmdbIds.addAll(json.decodeFromString<List<Int>>(idsData))
+            }
+
             val data = sharedPreferences.getString(TMDB_CACHE_PREFS, null) ?: return
             val parsed = json.decodeFromString<Map<String, String>>(data)
             val now = System.currentTimeMillis()
@@ -215,7 +250,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 if (parts.size == 2) {
                     val id = parts[0].toIntOrNull() ?: continue
                     val timestamp = parts[1].toLongOrNull() ?: continue
-                    if (now - timestamp < TMDB_CACHE_MAX_AGE_MS) {
+                    if (id in _persistentTmdbIds || (now - timestamp) < TMDB_CACHE_MAX_AGE_MS) {
                         val episodes = json.decodeFromString<List<TmdbEpisode>>(value)
                         restored[id] = episodes
                         _tmdbCacheTimestamps[id] = timestamp
@@ -237,6 +272,12 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 "$id|$ts"
             }
             sharedPreferences.edit { putString(TMDB_CACHE_PREFS, json.encodeToString(timestamped)) }
+        } catch (_: Exception) {}
+    }
+
+    private fun savePersistentTmdbIds() {
+        try {
+            sharedPreferences.edit { putString(TMDB_PERSISTENT_IDS_PREFS, json.encodeToString(_persistentTmdbIds.toList())) }
         } catch (_: Exception) {}
     }
 
@@ -306,13 +347,10 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     }
 
     fun loadAiringScheduleCache(): AiringCacheData? {
-        val cachedData = sharedPreferences.getString(CACHE_AIRING_DATA, null)
-        if (cachedData != null && isCacheValid(CACHE_AIRING_TIME, AIRING_CACHE_DURATION_MS)) {
-            return try {
-                json.decodeFromString<AiringCacheData>(cachedData)
-            } catch (e: Exception) { null }
-        }
-        return null
+        val cachedData = sharedPreferences.getString(CACHE_AIRING_DATA, null) ?: return null
+        return try {
+            json.decodeFromString<AiringCacheData>(cachedData)
+        } catch (e: Exception) { null }
     }
 
     fun loadStreamCache() {
@@ -596,6 +634,8 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         _prefetchedEpisodeInfo.value = emptyMap()
         _detailedAnimeCache.value = emptyMap()
         _detailedAnimeCacheTimestamps.clear()
+        _tmdbCacheTimestamps.clear()
+        _persistentTmdbIds.clear()
         sharedPreferences.edit { clear() }
     }
 

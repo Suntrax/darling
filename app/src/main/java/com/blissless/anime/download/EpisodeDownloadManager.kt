@@ -2,7 +2,9 @@ package com.blissless.anime.download
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -64,6 +66,8 @@ class EpisodeDownloadManager(private val context: Context) {
         val failureReason: Int,
         val malId: Int? = null,
         val year: Int? = null,
+        val category: String = "sub",
+        val downloadTimestamp: Long = 0L,
     )
 
     @Serializable
@@ -88,6 +92,8 @@ class EpisodeDownloadManager(private val context: Context) {
         val malId: Int? = null,
         val year: Int? = null,
         val totalBytes: Long = 0L,
+        val category: String = "sub",
+        val downloadTimestamp: Long = 0L,
     )
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -110,6 +116,9 @@ class EpisodeDownloadManager(private val context: Context) {
     private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val errors: SharedFlow<String> = _errors.asSharedFlow()
 
+    private val _notificationTaps = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val notificationTaps: SharedFlow<String> = _notificationTaps.asSharedFlow()
+
     private var metadataStore: MutableMap<String, DownloadMetadata> = mutableMapOf()
     private val headersStore: MutableMap<String, Map<String, String>> = mutableMapOf()
 
@@ -117,6 +126,7 @@ class EpisodeDownloadManager(private val context: Context) {
         get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private var notificationIdCounter = NOTIFICATION_ID_BASE
+    private val batchResults = mutableMapOf<String, MutableList<String>>()
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -137,6 +147,16 @@ class EpisodeDownloadManager(private val context: Context) {
         }
     }
 
+    private fun notifyWithPermission(notificationId: Int, notification: android.app.Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                NotificationManagerCompat.from(context).notify(notificationId, notification)
+            }
+        } else {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        }
+    }
+
     private fun sendNotification(episodeKey: String, title: String, content: String, showProgress: Boolean = false, progress: Int = 0, maxProgress: Int = 0, icon: Int = android.R.drawable.stat_sys_download) {
         try {
             val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL)
@@ -150,13 +170,7 @@ class EpisodeDownloadManager(private val context: Context) {
                     .setOngoing(true)
                     .setAutoCancel(false)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                    NotificationManagerCompat.from(context).notify(episodeKey.hashCode(), builder.build())
-                }
-            } else {
-                NotificationManagerCompat.from(context).notify(episodeKey.hashCode(), builder.build())
-            }
+            notifyWithPermission(episodeKey.hashCode(), builder.build())
         } catch (e: Exception) {
             Log.w(TAG, "sendNotification: failed", e)
         }
@@ -166,6 +180,83 @@ class EpisodeDownloadManager(private val context: Context) {
         try {
             NotificationManagerCompat.from(context).cancel(episodeKey.hashCode())
         } catch (_: Exception) {}
+    }
+
+    fun startBatchNotification(animeName: String, total: Int) {
+        try {
+            val batchId = "batch_${animeName.hashCode()}"
+            batchResults[batchId] = mutableListOf()
+            val tapIntent = Intent(context, com.blissless.anime.MainActivity::class.java).apply {
+                putExtra("notification_anime", animeName)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context, animeName.hashCode(), tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(animeName)
+                .setContentText("Downloading $total episodes...")
+                .setStyle(NotificationCompat.InboxStyle()
+                    .setBigContentTitle(animeName)
+                    .setSummaryText("0/$total"))
+                .setOngoing(true)
+                .setContentIntent(pendingIntent)
+                .build()
+            notifyWithPermission(batchId.hashCode(), notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "startBatchNotification: failed", e)
+        }
+    }
+
+    fun updateBatchNotification(animeName: String, episode: Int, success: Boolean, completed: Int, failed: Int, total: Int) {
+        try {
+            val batchId = "batch_${animeName.hashCode()}"
+            val results = batchResults.getOrPut(batchId) { mutableListOf() }
+            results.add(if (success) "Ep $episode: ✓" else "Ep $episode: ✗")
+
+            val done = completed + failed
+            val remaining = total - done
+
+            val tapIntent = Intent(context, com.blissless.anime.MainActivity::class.java).apply {
+                putExtra("notification_anime", animeName)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context, animeName.hashCode(), tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val inboxStyle = NotificationCompat.InboxStyle().setBigContentTitle(animeName)
+            val showLines = results.takeLast(6)
+            for (line in showLines) {
+                inboxStyle.addLine(line)
+            }
+            val summaryText = if (remaining == 0) {
+                "$completed/$total downloaded${if (failed > 0) ", $failed failed" else ""}"
+            } else {
+                "$done/$total episodes${if (failed > 0) ", $failed failed" else ""}"
+            }
+            inboxStyle.setSummaryText(summaryText)
+
+            val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL)
+                .setSmallIcon(if (remaining == 0) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_sys_download)
+                .setContentTitle(if (remaining == 0) "Download Complete" else "Downloading")
+                .setContentText("$animeName - $summaryText")
+                .setStyle(inboxStyle)
+                .setOngoing(remaining > 0)
+                .setAutoCancel(remaining == 0)
+                .setContentIntent(pendingIntent)
+                .build()
+            notifyWithPermission(batchId.hashCode(), notification)
+
+            if (remaining == 0) {
+                batchResults.remove(batchId)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "updateBatchNotification: failed", e)
+        }
     }
 
     fun sendBatchCompleteNotification(successCount: Int, failCount: Int) {
@@ -225,28 +316,47 @@ class EpisodeDownloadManager(private val context: Context) {
                         }
                         when (download.state) {
                             Download.STATE_DOWNLOADING -> {
-                                val ep = metadataStore[id]?.episode ?: 0
-                                val anime = metadataStore[id]?.animeName ?: "Anime"
-                                sendNotification(id, "Downloading", "$anime - Ep $ep starting...", showProgress = true, icon = android.R.drawable.stat_sys_download)
+                                val meta = metadataStore[id]
+                                if (meta != null) {
+                                    val batchId = "batch_${meta.animeName.hashCode()}"
+                                    if (batchId !in batchResults) {
+                                        sendNotification(id, "Downloading", "${meta.animeName} - Ep ${meta.episode} starting...", showProgress = true, icon = android.R.drawable.stat_sys_download)
+                                    }
+                                }
                             }
                             Download.STATE_COMPLETED -> {
-                                val ep = metadataStore[id]?.episode ?: 0
-                                val anime = metadataStore[id]?.animeName ?: "Anime"
-                                sendNotification(id, "Download Complete", "$anime - Ep $ep saved", icon = android.R.drawable.stat_sys_download_done)
-                                // Persist actual file size for 0B fix
                                 val meta = metadataStore[id]
-                                if (meta != null && download.bytesDownloaded > 0) {
-                                    metadataStore[id] = meta.copy(totalBytes = download.bytesDownloaded)
+                                if (meta != null) {
+                                    val bytes = download.bytesDownloaded
+                                    val contentLen = download.contentLength
+                                    Log.i(TAG, "onDownloadChanged: $id COMPLETED, bytes=$bytes contentLength=$contentLen url=${download.request.uri.toString().take(80)}")
+                                    if (bytes > 0 && bytes < 1_000_000L) {
+                                        Log.w(TAG, "onDownloadChanged: $id completed but only $bytes bytes, likely a stub file")
+                                    }
+                                    val now = System.currentTimeMillis()
+                                    metadataStore[id] = meta.copy(
+                                        totalBytes = if (bytes > 0) bytes else meta.totalBytes,
+                                        downloadTimestamp = if (meta.downloadTimestamp == 0L) now else meta.downloadTimestamp,
+                                    )
                                     saveMetadataToPrefs()
+                                    val batchId = "batch_${meta.animeName.hashCode()}"
+                                    if (batchId !in batchResults) {
+                                        sendNotification(id, "Successfully downloaded", "${meta.animeName} - Ep ${meta.episode}", icon = android.R.drawable.stat_sys_download_done)
+                                    }
                                 }
                             }
                             Download.STATE_FAILED -> {
-                                val exMsg = if (exception != null) "${exception.message}" else "Unknown error"
-                                Log.e(TAG, "onDownloadChanged: $id FAILED: $exMsg")
-                                _errors.tryEmit("Download failed for ${id}: $exMsg")
-                                val ep = metadataStore[id]?.episode ?: 0
-                                val anime = metadataStore[id]?.animeName ?: "Anime"
-                                sendNotification(id, "Download Failed", "$anime - Ep $ep: $exMsg", icon = android.R.drawable.stat_sys_warning)
+                                val meta = metadataStore[id]
+                                if (meta != null) {
+                                    val exMsg = if (exception != null) "${exception.message}" else "Unknown error"
+                                    val failureReason = download.failureReason
+                                    Log.e(TAG, "onDownloadChanged: $id FAILED: $exMsg (reason=$failureReason)")
+                                    _errors.tryEmit("Download failed for ${id}: $exMsg")
+                                    val batchId = "batch_${meta.animeName.hashCode()}"
+                                    if (batchId !in batchResults) {
+                                        sendNotification(id, "Failed download for", "${meta.animeName} - Ep ${meta.episode}", icon = android.R.drawable.stat_sys_warning)
+                                    }
+                                }
                             }
                         }
                         updateDownloadInfo(download)
@@ -342,6 +452,8 @@ class EpisodeDownloadManager(private val context: Context) {
             failureReason = download.failureReason,
             malId = meta?.malId,
             year = meta?.year,
+            category = meta?.category ?: "sub",
+            downloadTimestamp = meta?.downloadTimestamp ?: 0L,
         )
         _downloadsInfo.value = _downloadsInfo.value + (id to info)
     }
@@ -380,6 +492,7 @@ class EpisodeDownloadManager(private val context: Context) {
         mimeType: String,
         malId: Int? = null,
         year: Int? = null,
+        category: String = "sub",
     ) {
         val id = "${animeId}_$episode"
         val cacheKey = "download_$id"
@@ -453,6 +566,7 @@ class EpisodeDownloadManager(private val context: Context) {
             subtitleTracks = cachedSubtitleTracks,
             malId = malId,
             year = year,
+            category = category,
         )
         saveMetadataToPrefs()
 
@@ -510,6 +624,7 @@ class EpisodeDownloadManager(private val context: Context) {
             mimeType = if (meta.videoUrl.contains(".m3u8")) "application/x-mpegurl" else "video/mp4",
             malId = meta.malId,
             year = meta.year,
+            category = meta.category,
         )
     }
 
@@ -631,6 +746,60 @@ class EpisodeDownloadManager(private val context: Context) {
                 return@runBlocking null
             }
         }
+    }
+
+    fun probeVideoMimeType(url: String, headers: Map<String, String>): String {
+        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                var builder = okhttp3.Request.Builder().url(url)
+                for ((key, value) in headers) {
+                    builder = builder.header(key, value)
+                }
+                val request = builder.build()
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    Log.d(TAG, "probeVideoMimeType: HTTP ${response.code} for ${url.take(60)}")
+                    response.close()
+                    return@runBlocking fallbackVideoMimeType(url)
+                }
+                val contentType = response.body?.contentType()
+                if (contentType != null) {
+                    val ct = contentType.type.lowercase() + "/" + contentType.subtype.lowercase()
+                    if (ct.contains("mpegurl") || ct == "application/vnd.apple.mpegurl") {
+                        Log.d(TAG, "probeVideoMimeType: detected HLS via Content-Type: $ct for ${url.take(60)}")
+                        response.close()
+                        return@runBlocking "application/x-mpegurl"
+                    }
+                }
+                val body = response.body ?: run {
+                    response.close()
+                    return@runBlocking fallbackVideoMimeType(url)
+                }
+                val stream = body.byteStream()
+                val first = ByteArray(20)
+                val read = try { stream.read(first) } finally { stream.close() }
+                response.close()
+                if (read >= 7) {
+                    val header = String(first, 0, read, Charsets.UTF_8)
+                    if (header.startsWith("#EXTM3U")) {
+                        Log.d(TAG, "probeVideoMimeType: detected HLS via #EXTM3U signature for ${url.take(60)}")
+                        return@runBlocking "application/x-mpegurl"
+                    }
+                }
+                Log.d(TAG, "probeVideoMimeType: no HLS signature detected for ${url.take(60)}, firstBytes=${String(first, 0, minOf(read, 20), Charsets.UTF_8).replace('\n', '|')}")
+                return@runBlocking fallbackVideoMimeType(url)
+            } catch (e: Exception) {
+                Log.w(TAG, "probeVideoMimeType: failed for ${url.take(60)}", e)
+                return@runBlocking fallbackVideoMimeType(url)
+            }
+        }
+    }
+
+    private fun fallbackVideoMimeType(url: String): String = when {
+        url.contains(".m3u8") -> "application/x-mpegurl"
+        url.contains(".mp4") -> "video/mp4"
+        url.contains(".webm") -> "video/webm"
+        else -> "video/mp4"
     }
 
     private fun saveHeadersForDownload(id: String, headers: Map<String, String>) {

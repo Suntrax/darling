@@ -76,6 +76,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.draw.scale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -203,6 +206,7 @@ fun PlayerScreen(
     extensionName: String = "",
     onExtensionServerChange: ((hosterName: String) -> Unit)? = null,
     onPrefetchNextExtensionEpisode: (() -> Unit)? = null,
+    onAutoPlayNextEpisodeChanged: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -1345,6 +1349,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                     Icon(Icons.Default.AspectRatio, "Change aspect ratio", tint = Color.White)
                                 }
                             }
+
                         }
                     }
                 }
@@ -1502,7 +1507,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Error, null, tint = Color.Red, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.Refresh, null, tint = Color(0xFFFFA726), modifier = Modifier.size(32.dp))
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("Stream Error", color = Color.White, style = MaterialTheme.typography.titleMedium)
                             Text(playbackError ?: "Unknown error", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
@@ -1774,16 +1779,50 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                             }
                         }
 
-                        // Fullscreen button on the far right
-                        IconButton(
-                            onClick = { toggleFullscreen() },
-                            modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                        // Autoplay + Fullscreen with connected background
+                        Row(
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
-                                tint = Color.White
-                            )
+                            Surface(
+                                onClick = { onAutoPlayNextEpisodeChanged?.invoke(!autoPlayNextEpisode) },
+                                color = Color.Transparent
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "Autoplay",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                    Switch(
+                                        checked = autoPlayNextEpisode,
+                                        onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                        modifier = Modifier.scale(0.6f),
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = Color.White,
+                                            checkedThumbColor = Color.Black,
+                                            uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
+                                            uncheckedThumbColor = Color.White
+                                        )
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { toggleFullscreen() },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
                 }

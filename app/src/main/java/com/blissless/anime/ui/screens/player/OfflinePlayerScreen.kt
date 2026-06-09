@@ -62,6 +62,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.draw.scale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -132,6 +135,7 @@ fun OfflinePlayerScreen(
     autoPlayNextEpisode: Boolean = false,
     tmdbEpisodes: Map<Int, TmdbEpisode> = emptyMap(),
     onSavePlaybackPosition: ((Int, Int, Long, Long) -> Unit)? = null,
+    onAutoPlayNextEpisodeChanged: ((Boolean) -> Unit)? = null,
     initialPosition: Long = 0L,
 ) {
     val context = LocalContext.current
@@ -1386,20 +1390,50 @@ fun OfflinePlayerScreen(
                                 }
                             }
 
-                            IconButton(
-                                onClick = { toggleFullscreen() },
+                            // Autoplay + Fullscreen with connected background
+                            Row(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .background(
-                                        Color.Black.copy(alpha = 0.5f),
-                                        shape = MaterialTheme.shapes.small
-                                    )
+                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
-                                    tint = Color.White
-                                )
+                                Surface(
+                                    onClick = { onAutoPlayNextEpisodeChanged?.invoke(!autoPlayNextEpisode) },
+                                    color = Color.Transparent
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Autoplay",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Switch(
+                                            checked = autoPlayNextEpisode,
+                                            onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                            modifier = Modifier.scale(0.6f),
+                                            colors = SwitchDefaults.colors(
+                                                checkedTrackColor = Color.White,
+                                                checkedThumbColor = Color.Black,
+                                                uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
+                                                uncheckedThumbColor = Color.White
+                                            )
+                                        )
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = { toggleFullscreen() },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
+                                        tint = Color.White
+                                    )
+                                }
                             }
                         }
                     }

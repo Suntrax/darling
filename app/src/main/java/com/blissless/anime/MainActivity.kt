@@ -42,10 +42,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.animation.Crossfade
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
@@ -57,7 +55,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -85,7 +82,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.blissless.anime.api.myanimelist.LoginProvider
@@ -93,14 +89,11 @@ import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.DetailedAnimeData
 import com.blissless.anime.data.models.EpisodeStreams
 import com.blissless.anime.data.models.ExploreAnime
-import com.blissless.anime.data.models.AniwatchStreamResult
 import com.blissless.anime.data.models.LocalAnimeEntry
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.animesource.model.Hoster
 import com.blissless.anime.data.models.QualityOption
 import com.blissless.anime.data.models.ServerInfo
 import com.blissless.anime.stream.PlayerData
-import okhttp3.OkHttpClient
 import com.blissless.anime.data.models.toDetailedAnimeData
 import com.blissless.anime.ui.screens.cast.AllCastScreen
 import com.blissless.anime.ui.screens.cast.AllStaffScreen
@@ -118,11 +111,9 @@ import com.blissless.anime.ui.screens.status.StatusListScreen
 import com.blissless.anime.ui.screens.character.StaffScreen
 import com.blissless.anime.ui.screens.relations.AllRelationsScreen
 import com.blissless.anime.ui.theme.AppTheme
-import com.blissless.anime.update.GitHubRelease
 import com.blissless.anime.update.UpdateViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 
 class MainActivity : ComponentActivity() {
 
@@ -145,6 +136,7 @@ class MainActivity : ComponentActivity() {
 
         mainViewModel.init(applicationContext, hasToken)
 
+        intent.getStringExtra("notification_anime")?.let { if (it.isNotBlank()) mainViewModel.onNotificationAnimeTap(it) }
         intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
         handleAuthCallback(intent)
 
@@ -447,6 +439,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+        intent.getStringExtra("notification_anime")?.let { if (it.isNotBlank()) mainViewModel.onNotificationAnimeTap(it) }
         intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
     }
 
@@ -1936,6 +1929,7 @@ fun MainScreen(
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,
+                onAutoPlayNextEpisodeChanged = { viewModel.setAutoPlayNextEpisode(it) },
                 swipeVolume = swipeVolume,
                 swipeBrightness = swipeBrightness,
                 disableMaterialColors = disableMaterialColors,
@@ -2162,7 +2156,6 @@ fun MainScreen(
                             viewModel = viewModel,
                             downloadManager = viewModel.episodeDownloadManager,
                             isOled = isOled,
-                            onDownloadClick = { },
                             onNavbarHidden = viewModel::setHideNavbar,
                         )
                         4 -> SettingsScreen(

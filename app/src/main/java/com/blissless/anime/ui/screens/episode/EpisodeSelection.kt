@@ -96,7 +96,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.media3.exoplayer.offline.Download
 import com.blissless.anime.MainViewModel
+import com.blissless.anime.download.EpisodeDownloadManager
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.data.models.TmdbEpisode
 import kotlinx.coroutines.delay
@@ -255,6 +257,7 @@ fun RichEpisodeScreen(
     var selectedEpisode by remember { mutableStateOf<Int?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val downloadsInfo by viewModel.episodeDownloadManager.downloadsInfo.collectAsState()
 
     // Animation states for entry
     var isVisible by remember { mutableStateOf(false) }
@@ -521,7 +524,8 @@ fun RichEpisodeScreen(
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
                             val hasAired = episodeNum <= released
-                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, playbackPositions = playbackPositions, playbackDurations = playbackDurations, animeId = anime.id, onSelect = { selectedEpisode = episodeNum }, onPlay = {
+                            val downloadInfo = downloadsInfo["${anime.id}_$episodeNum"]
+                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, playbackPositions = playbackPositions, playbackDurations = playbackDurations, animeId = anime.id, downloadInfo = downloadInfo, onSelect = { selectedEpisode = episodeNum }, onPlay = {
                                 if (hasAired) {
                                     val title = if (ep.title.isNotEmpty() && !ep.title.startsWith("Episode", ignoreCase = true)) ep.title else "Episode $episodeNum"
                                     onEpisodeSelect(episodeNum, title)
@@ -733,6 +737,7 @@ private fun RichTmdbEpisodeCard(
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     animeId: Int = 0,
+    downloadInfo: EpisodeDownloadManager.DownloadInfo? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -860,7 +865,7 @@ private fun RichTmdbEpisodeCard(
                         }
                     }
                 }
-                Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         if (image.isNullOrEmpty()) {
                             Box(
@@ -928,10 +933,38 @@ private fun RichTmdbEpisodeCard(
                             color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (downloadInfo != null && downloadInfo.state == Download.STATE_COMPLETED) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (downloadInfo.category == "dub") "DUB" else "SUB",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "·",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = formatDownloadTimestamp(downloadInfo.downloadTimestamp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+private fun formatDownloadTimestamp(timestamp: Long): String {
+    val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+    return sdf.format(java.util.Date(timestamp))
 }
 
 private fun formatTimeFromMs(ms: Long): String {

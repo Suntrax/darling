@@ -575,6 +575,8 @@ class MainViewModel : ViewModel() {
     val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
     val defaultExtensionPackage: StateFlow<String> get() = userPreferences.defaultExtensionPackage
     val defaultSubtitleLang: StateFlow<String> get() = userPreferences.defaultSubtitleLang
+    val downloadPreferredCategory: StateFlow<String> get() = userPreferences.downloadPreferredCategory
+    val downloadSubtitleLang: StateFlow<String> get() = userPreferences.downloadSubtitleLang
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
     val streamProvider: StateFlow<Int> get() = userPreferences.streamProvider
@@ -584,6 +586,14 @@ class MainViewModel : ViewModel() {
     val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
+
+    // Notification tap events
+    private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
+    val notificationAnimeTaps: SharedFlow<String> = _notificationAnimeTaps.asSharedFlow()
+
+    fun onNotificationAnimeTap(animeName: String) {
+        _notificationAnimeTaps.tryEmit(animeName)
+    }
     val swipeVolume: StateFlow<Boolean> get() = userPreferences.swipeVolume
     val swipeBrightness: StateFlow<Boolean> get() = userPreferences.swipeBrightness
 
@@ -1248,45 +1258,47 @@ class MainViewModel : ViewModel() {
             return
         }
 
-        val shouldForce = force || cached == null
-
         viewModelScope.launch {
             _isLoadingSchedule.value = true
-            val schedules = repository.fetchAiringSchedule()
+            try {
+                val schedules = repository.fetchAiringSchedule()
 
-            val airingList = schedules.filter { it.media != null }.map { schedule ->
-                val media = schedule.media!!
-                val title = media.title.romaji ?: media.title.english ?: "Unknown"
-                val titleEnglish = media.title.english
-                val episodes = media.episodes ?: 0
+                val airingList = schedules.filter { it.media != null }.map { schedule ->
+                    val media = schedule.media!!
+                    val title = media.title.romaji ?: media.title.english ?: "Unknown"
+                    val titleEnglish = media.title.english
+                    val episodes = media.episodes ?: 0
 
-                AiringScheduleAnime(
-                    id = media.id,
-                    title = title,
-                    titleEnglish = titleEnglish,
-                    cover = schedule.media.coverImage?.extraLarge ?: "",
-                    episodes = episodes,
-                    airingEpisode = schedule.episode,
-                    airingAt = schedule.airingAt,
-                    timeUntilAiring = schedule.timeUntilAiring,
-                    averageScore = media.averageScore,
-                    genres = media.genres ?: emptyList(),
-                    year = media.seasonYear,
-                    malId = media.idMal,
-                    isAdult = media.isAdult
-                )
-            }.sortedBy { it.airingAt }
+                    AiringScheduleAnime(
+                        id = media.id,
+                        title = title,
+                        titleEnglish = titleEnglish,
+                        cover = schedule.media.coverImage?.extraLarge ?: "",
+                        episodes = episodes,
+                        airingEpisode = schedule.episode,
+                        airingAt = schedule.airingAt,
+                        timeUntilAiring = schedule.timeUntilAiring,
+                        averageScore = media.averageScore,
+                        genres = media.genres ?: emptyList(),
+                        year = media.seasonYear,
+                        malId = media.idMal,
+                        isAdult = media.isAdult
+                    )
+                }.sortedBy { it.airingAt }
 
-            val scheduleByDay = airingList.groupBy { anime ->
-                val calendar = Calendar.getInstance().apply { timeInMillis = anime.airingAt * 1000L }
-                calendar.get(Calendar.DAY_OF_WEEK) - 1
+                val scheduleByDay = airingList.groupBy { anime ->
+                    val calendar = Calendar.getInstance().apply { timeInMillis = anime.airingAt * 1000L }
+                    calendar.get(Calendar.DAY_OF_WEEK) - 1
+                }
+
+                _airingSchedule.value = scheduleByDay
+                _airingAnimeList.value = airingList
+                cacheManager.saveAiringScheduleCache(scheduleByDay, airingList)
+                lastExploreRefreshTime = System.currentTimeMillis()
+            } catch (e: Exception) {
+                // Keep existing cached data on failure
             }
-
-            _airingSchedule.value = scheduleByDay
-            _airingAnimeList.value = airingList
-            cacheManager.saveAiringScheduleCache(scheduleByDay, airingList)
             _isLoadingSchedule.value = false
-            lastExploreRefreshTime = System.currentTimeMillis()
         }
     }
 
@@ -1568,6 +1580,8 @@ class MainViewModel : ViewModel() {
     fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
     fun setDefaultExtensionPackage(packageName: String) = userPreferences.setDefaultExtensionPackage(packageName)
     fun setDefaultSubtitleLang(lang: String) = userPreferences.setDefaultSubtitleLang(lang)
+    fun setDownloadPreferredCategory(category: String) = userPreferences.setDownloadPreferredCategory(category)
+    fun setDownloadSubtitleLang(lang: String) = userPreferences.setDownloadSubtitleLang(lang)
     fun setStreamProvider(provider: Int) = userPreferences.setStreamProvider(provider)
     fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
     fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
@@ -1973,6 +1987,8 @@ class MainViewModel : ViewModel() {
 
     fun getCachedTmdbEpisodes(animeId: Int, status: String? = null): List<TmdbEpisode>? = cacheManager.getCachedTmdbEpisodes(animeId, status)
     fun cacheTmdbEpisodes(animeId: Int, episodes: List<TmdbEpisode>) = cacheManager.cacheTmdbEpisodes(animeId, episodes)
+    fun clearTmdbEpisodeCache(animeId: Int) = cacheManager.clearTmdbEpisodeCache(animeId)
+    fun pruneTmdbEpisodeCache(retainedIds: Set<Int>) = cacheManager.pruneTmdbEpisodeCache(retainedIds)
     val tmdbEpisodeCache: StateFlow<Map<Int, List<TmdbEpisode>>> get() = cacheManager.tmdbEpisodeCache
 
     fun retryDownload(animeId: Int, episode: Int) {
@@ -2244,7 +2260,7 @@ class MainViewModel : ViewModel() {
                     viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Could not find '${anime.title}' in extension") }
                     return@withContext null
                 }
-                Log.i(epTag, "playEpisodeWithExtension: matched anime '${matchedSAnime.title}' for ep $episodeNumber")
+                Log.i(epTag, "playEpisodeWithExtension: matched anime '${matchedSAnime.title}' (url=${matchedSAnime.url}) for ep $episodeNumber")
 
                 var sEpisodes = sm.getEpisodes(source, matchedSAnime)
                 Log.d(epTag, "playEpisodeWithExtension: got ${sEpisodes.size} episodes from source")
@@ -2315,6 +2331,9 @@ class MainViewModel : ViewModel() {
                     return@withContext null
                 }
                 Log.d(epTag, "playEpisodeWithExtension: found ${allVideos.size} videos for ep $episodeNumber")
+                allVideos.forEach { v ->
+                    Log.d(epTag, "  video: ${v.video.videoTitle} (${v.video.resolution}p) url=${v.video.videoUrl.take(100)} hoster=${v.hosterName}")
+                }
 
                 val dubVideos = allVideos.filter {
                     it.hosterName.contains("dub", ignoreCase = true) || it.video.videoTitle.contains("dub", ignoreCase = true)
@@ -2338,6 +2357,7 @@ class MainViewModel : ViewModel() {
                     val res = it.video.resolution ?: 0
                     if (res == 0) it.video.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
                 }?.video ?: allVideos.last().video
+                Log.i(epTag, "playEpisodeWithExtension: selected video '${bestVideo.videoTitle}' (${bestVideo.resolution}p) url=${bestVideo.videoUrl.take(100)}")
 
                 val referer = bestVideo.headers?.let { h ->
                     (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }

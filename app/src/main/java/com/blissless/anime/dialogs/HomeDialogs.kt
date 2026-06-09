@@ -239,7 +239,7 @@ fun HomeAnimeStatusDialog(
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (markedForRemoval) Color.Red else MaterialTheme.colorScheme.primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = if (markedForRemoval) Color.Red else MaterialTheme.colorScheme.primary, contentColor = Color.White)
                 ) { Text(if (markedForRemoval) "Remove from List" else "Save Changes", fontWeight = FontWeight.Bold) }
 
                 Spacer(modifier = Modifier.height(8.dp))

@@ -331,24 +331,25 @@ fun ScheduleScreen(
         if (apiError != null || isOffline) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = if (isOffline) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.errorContainer,
+                color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                tonalElevation = 4.dp
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(16.dp)
+                        tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall
+                        color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }

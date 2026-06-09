@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -234,8 +237,9 @@ fun HomeScreen(
                 // Error/Offline Banner
                 if (apiError != null || isOffline) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars),
+                        color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                        tonalElevation = 4.dp
                     ) {
                         Row(
                             modifier = Modifier
@@ -247,13 +251,13 @@ fun HomeScreen(
                             Icon(
                                 imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }

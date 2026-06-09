@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -69,6 +70,7 @@ import androidx.media3.exoplayer.offline.Download
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.AnimeMedia
 import com.blissless.anime.download.EpisodeDownloadManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -77,7 +79,7 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "AnimeDownload"
 
-private enum class DownloadMode { ALL, SELECTIVE, RANGE }
+private enum class DownloadMode { ALL, UNDOWNLOADED, SELECTIVE, RANGE }
 private fun formatBytes(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
@@ -127,8 +129,22 @@ fun EpisodeDownloadDialog(
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorDialogMessage by remember { mutableStateOf("") }
     var showFailureDetail by remember { mutableStateOf<String?>(null) }
+    var showBatteryOptDialog by remember { mutableStateOf(false) }
+    var batteryOptDismissed by remember { mutableStateOf(false) }
+    var downloadActive by remember { mutableStateOf(true) }
+    val isIgnoringBatteryOptimizations = remember {
+        val pm = context.getSystemService(android.os.PowerManager::class.java)
+        pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { downloadActive = false }
+    }
 
     LaunchedEffect(Unit) {
+        if (!isIgnoringBatteryOptimizations && !batteryOptDismissed) {
+            showBatteryOptDialog = true
+        }
         downloadManager.errors.collect { errorMsg ->
             errorDialogMessage = errorMsg
             showErrorDialog = true
@@ -138,6 +154,7 @@ fun EpisodeDownloadDialog(
 
     fun getEpisodesToDownload(): List<Int> = when (mode) {
         DownloadMode.ALL -> (1..released).toList()
+        DownloadMode.UNDOWNLOADED -> (1..released).filter { it !in completedEpisodes }
         DownloadMode.SELECTIVE -> selectedEpisodes.sorted()
         DownloadMode.RANGE -> (rangeFrom..rangeTo).filter { it in 1..released }
     }
@@ -151,6 +168,18 @@ fun EpisodeDownloadDialog(
             return
         }
 
+        val existingActive = downloadsInfo.values.any {
+            it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED
+        }
+        if (existingActive || isDownloading) {
+            Log.w(TAG, "startDownload: a download batch is already active")
+            Toast.makeText(context, "A download is already in progress", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val downloadCategoryPref = viewModel.downloadPreferredCategory.value
+        val streamCategoryPref = viewModel.preferredCategory.value
+        val resolvedCategory = if (downloadCategoryPref == "same_as_stream") streamCategoryPref else downloadCategoryPref
         val episodes = getEpisodesToDownload()
         if (episodes.isEmpty()) {
             Log.w(TAG, "startDownload: no episodes selected")
@@ -167,10 +196,14 @@ fun EpisodeDownloadDialog(
         requestedDownloadIds = episodes.map { "${anime.id}_$it" }.toSet()
         Log.d(TAG, "startDownload: tracking ${requestedDownloadIds.size} download IDs: $requestedDownloadIds")
 
+        downloadManager.startBatchNotification(displayTitle, episodes.size)
+
         scope.launch {
-            for (ep in episodes) {
-                currentEpisode = ep
-                Log.d(TAG, "startDownload: resolving episode $ep...")
+            try {
+                for (ep in episodes) {
+                    if (!downloadActive) return@launch
+                    currentEpisode = ep
+                    Log.d(TAG, "startDownload: resolving episode $ep...")
                 val result = withContext(Dispatchers.IO) {
                     try {
                         viewModel.playEpisodeWithExtension(anime, ep, extPkg)
@@ -180,20 +213,16 @@ fun EpisodeDownloadDialog(
                     }
                 }
 
+                var epSuccess = false
                 if (result != null && result.videos.isNotEmpty()) {
-                    val video = result.videos.maxByOrNull { it.resolution ?: 0 }
-                        ?: result.videos.firstOrNull()
-                    if (video != null) {
-                        Log.d(TAG, "startDownload: ep $ep resolved to video: ${video.videoTitle} (${video.resolution}p) url=${video.videoUrl.take(60)}...")
-                        val mimeType = when {
-                            video.videoUrl.contains(".m3u8") -> "application/x-mpegurl"
-                            video.videoUrl.contains(".mp4") -> "video/mp4"
-                            video.videoUrl.contains(".webm") -> "video/webm"
-                            else -> {
-                                Log.w(TAG, "startDownload: unknown mime type for ep $ep, defaulting to video/mp4")
-                                "video/mp4"
-                            }
-                        }
+                    val sortedVideos = result.videos.sortedByDescending { it.resolution ?: 0 }
+                    var downloadSucceeded = false
+
+                    for ((videoIndex, video) in sortedVideos.withIndex()) {
+                        if (downloadSucceeded) break
+
+                        Log.d(TAG, "startDownload: ep $ep trying video ${videoIndex + 1}/${sortedVideos.size}: ${video.videoTitle} (${video.resolution}p) url=${video.videoUrl.take(100)}")
+                        val mimeType = downloadManager.probeVideoMimeType(video.videoUrl, result.videoHeaders)
 
                         downloadManager.startDownload(
                             animeId = anime.id,
@@ -208,23 +237,51 @@ fun EpisodeDownloadDialog(
                             mimeType = mimeType,
                             malId = anime.malId,
                             year = anime.year,
+                            category = resolvedCategory,
                         )
-                        Log.i(TAG, "startDownload: ep $ep download initiated, waiting for completion...")
+                        Log.i(TAG, "startDownload: ep $ep video ${videoIndex + 1} initiated, waiting...")
 
-                        // Wait for this download to complete or fail before fetching next episode's stream
                         val downloadId = "${anime.id}_$ep"
                         downloadManager.downloadsInfo.first { info ->
                             val d = info[downloadId]
-                            d != null && (d.state == Download.STATE_COMPLETED || d.state == Download.STATE_FAILED)
+                            d != null && d.state != Download.STATE_QUEUED && d.state != Download.STATE_DOWNLOADING
                         }
-                        Log.i(TAG, "startDownload: ep $ep download finished")
-                    } else {
-                        Log.w(TAG, "startDownload: no valid video found for ep $ep (videos existed but maxBy/first was null)")
-                        Toast.makeText(context, "Ep $ep: No valid video source found", Toast.LENGTH_SHORT).show()
+
+                        val finalInfo = downloadManager.downloadsInfo.value[downloadId]
+                        val completed = finalInfo?.state == Download.STATE_COMPLETED
+                        val totalBytes = finalInfo?.totalBytes ?: 0L
+                        val tooSmall = completed && totalBytes > 0L && totalBytes < 1_000_000L
+                        if (tooSmall) {
+                            Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} completed but only ${formatBytes(totalBytes)}, likely a stub file, treating as failure")
+                            downloadManager.removeDownload(downloadId)
+                        } else if (completed) {
+                            downloadSucceeded = true
+                            Log.i(TAG, "startDownload: ep $ep download succeeded with video ${videoIndex + 1} (${formatBytes(totalBytes)})")
+                        } else {
+                            Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed, trying next source...")
+                            downloadManager.removeDownload(downloadId)
+                        }
+                    }
+
+                    epSuccess = downloadSucceeded
+                    if (!epSuccess) {
+                        Log.w(TAG, "startDownload: all video sources failed for ep $ep")
                     }
                 } else {
-                    Log.w(TAG, "startDownload: no result or empty videos for ep $ep (result was null=${result == null})")
+                    Log.w(TAG, "startDownload: no result or empty videos for ep $ep")
                 }
+
+                completedCount += if (epSuccess) 1 else 0
+                failedCount += if (!epSuccess) 1 else 0
+                downloadManager.updateBatchNotification(
+                    displayTitle, ep, epSuccess,
+                    completedCount, failedCount, episodes.size
+                )
+            }
+            } catch (_: CancellationException) {
+                Log.i(TAG, "startDownload: cancelled")
+            } catch (e: Exception) {
+                Log.e(TAG, "startDownload: unexpected error", e)
             }
         }
     }
@@ -246,7 +303,6 @@ fun EpisodeDownloadDialog(
         Log.d(TAG, "progress: $done done, $failed failed, $queued queued, $downloading downloading, $inProgress/$total accounted")
         if ((done + failed) >= total && (done + failed) > 0) {
             isDownloading = false
-            downloadManager.sendBatchCompleteNotification(done, failed)
             if (failed > 0) {
                 val msg = "Downloaded $done episodes, $failed failed. Check logcat with 'AnimeDownload' filter for details."
                 Log.w(TAG, "Download batch complete: $done success, $failed failed out of $total")
@@ -259,7 +315,7 @@ fun EpisodeDownloadDialog(
     }
 
     Dialog(
-        onDismissRequest = { if (!isDownloading) onDismiss() },
+        onDismissRequest = { onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         Surface(
@@ -279,7 +335,7 @@ fun EpisodeDownloadDialog(
                             .statusBarsPadding(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { if (!isDownloading) onDismiss() }) {
+                        IconButton(onClick = { onDismiss() }) {
                             Icon(Icons.Default.Close, contentDescription = "Close", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -311,6 +367,15 @@ fun EpisodeDownloadDialog(
                         selected = mode == DownloadMode.ALL,
                         onClick = { mode = DownloadMode.ALL },
                         label = { Text("All") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = if (isOled) Color.Black else Color.White
+                        )
+                    )
+                    FilterChip(
+                        selected = mode == DownloadMode.UNDOWNLOADED,
+                        onClick = { mode = DownloadMode.UNDOWNLOADED },
+                        label = { Text("Undownloaded") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
                             selectedLabelColor = if (isOled) Color.Black else Color.White
@@ -383,6 +448,7 @@ fun EpisodeDownloadDialog(
                         val isDownloadingNow = ep in inProgressEps
                         val isSelected = when (mode) {
                             DownloadMode.ALL -> true
+                            DownloadMode.UNDOWNLOADED -> ep !in completedEpisodes
                             DownloadMode.SELECTIVE -> ep in selectedEpisodes
                             DownloadMode.RANGE -> ep in rangeFrom..rangeTo
                         }
@@ -470,7 +536,7 @@ fun EpisodeDownloadDialog(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Episode $currentEpisode... ($completedCount done, $failedCount failed)",
+                            text = "Episode $currentEpisode... ($completedCount done)",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -488,11 +554,19 @@ fun EpisodeDownloadDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         OutlinedButton(
-                            onClick = { if (!isDownloading) onDismiss() },
+                            onClick = {
+                                if (isDownloading) {
+                                    downloadActive = false
+                                    requestedDownloadIds.forEach { id ->
+                                        downloadManager.removeDownload(id)
+                                    }
+                                }
+                                onDismiss()
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
-                            enabled = !isDownloading
-                        ) { Text("Cancel") }
+                            enabled = true
+                        ) { Text(if (isDownloading) "Cancel" else "Close") }
                         Button(
                             onClick = { startDownload() },
                             modifier = Modifier.weight(1f),
@@ -523,6 +597,43 @@ fun EpisodeDownloadDialog(
             },
             dismissButton = {
                 TextButton(onClick = { showNoExtDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showBatteryOptDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showBatteryOptDialog = false
+                batteryOptDismissed = true
+            },
+            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+            title = { Text("Disable Battery Optimization?", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) },
+            text = {
+                Text(
+                    "Downloads may pause or fail when the app is in the background due to battery optimization. " +
+                    "Would you like to disable battery optimization for this app?",
+                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBatteryOptDialog = false
+                    batteryOptDismissed = true
+                    try {
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            android.net.Uri.parse("package:${context.packageName}")
+                        )
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                }) { Text("Disable") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showBatteryOptDialog = false
+                    batteryOptDismissed = true
+                }) { Text("Continue Anyway") }
             }
         )
     }

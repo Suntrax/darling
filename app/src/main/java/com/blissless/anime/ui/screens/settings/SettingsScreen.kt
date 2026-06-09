@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -62,6 +63,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -79,6 +81,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -119,6 +122,7 @@ fun SettingsScreen(
             SettingsGroup("account", "Account", "Login and manage your anime list", Icons.Default.Person, s.primary),
             SettingsGroup("appearance", "Appearance", "Theme, colors, and display options", Icons.Default.Palette, s.secondary),
             SettingsGroup("general", "General", "Startup screen and sync settings", Icons.Default.Settings, s.tertiary),
+            SettingsGroup("downloads", "Downloads", "Sub/dub, subtitles, and download preferences", Icons.Default.Download, s.error),
             SettingsGroup("stream", "Stream Settings", "Audio preferences and buffering", Icons.Default.PlayArrow, s.primary),
             SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions, s.secondary),
             SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Memory, s.tertiary),
@@ -151,6 +155,7 @@ fun SettingsScreen(
                 "account" -> AccountSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "appearance" -> AppearanceSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, onBack = { selectedGroup = null })
                 "general" -> GeneralSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "downloads" -> DownloadsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "stream" -> StreamSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, preferredCategory = preferredCategory, onBack = { selectedGroup = null })
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
@@ -733,6 +738,148 @@ private fun StreamSettingsPage(
 }
 
 @Composable
+private fun DownloadsSettingsPage(
+    viewModel: MainViewModel,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val downloadPreferredCategory by viewModel.downloadPreferredCategory.collectAsState(initial = "same_as_stream")
+    val downloadSubtitleLang by viewModel.downloadSubtitleLang.collectAsState(initial = "same_as_stream")
+    val streamPreferredCategory by viewModel.preferredCategory.collectAsState(initial = "sub")
+    val streamSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
+    var isIgnoringBattery by remember { mutableStateOf(checkBatteryOpt(context)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isIgnoringBattery = checkBatteryOpt(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
+    var showSubtitleLangPicker by remember { mutableStateOf(false) }
+
+    SettingsPageScaffold(title = "Downloads", onBack = onBack) {
+        SectionHeader("AUDIO")
+        SettingsCard {
+            Text("Preferred Audio Category", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text("Download subbed or dubbed audio when available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsChoiceChip(label = "Same as stream", isSelected = downloadPreferredCategory == "same_as_stream", onClick = { viewModel.setDownloadPreferredCategory("same_as_stream") })
+                SettingsChoiceChip(label = "SUB", isSelected = downloadPreferredCategory == "sub", onClick = { viewModel.setDownloadPreferredCategory("sub") })
+                SettingsChoiceChip(label = "DUB", isSelected = downloadPreferredCategory == "dub", onClick = { viewModel.setDownloadPreferredCategory("dub") })
+            }
+        }
+
+        SectionHeader("SUBTITLES")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Subscriptions, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Preferred Subtitle Language", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (downloadSubtitleLang == "same_as_stream") "Same as stream ($streamSubtitleLang)"
+                        else downloadSubtitleLang,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
+            }
+        }
+
+        SectionHeader("BACKGROUND DOWNLOADS")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(
+                        if (isIgnoringBattery) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Battery Optimization", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (isIgnoringBattery) "Disabled - downloads will work reliably" else "Download reliability may be reduced",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = {
+                    if (isIgnoringBattery) {
+                        Toast.makeText(context, "Battery optimization is already disabled", Toast.LENGTH_SHORT).show()
+                    } else {
+                        try {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                android.net.Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                }) {
+                    Text(if (isIgnoringBattery) "Disabled" else "Fix", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    if (showSubtitleLangPicker) {
+        AlertDialog(
+            onDismissRequest = { showSubtitleLangPicker = false },
+            title = { Text("Preferred Subtitle Language") },
+            text = {
+                Column {
+                    TextButton(onClick = { viewModel.setDownloadSubtitleLang("same_as_stream"); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Same as stream ($streamSubtitleLang)",
+                            color = if (downloadSubtitleLang == "same_as_stream") MaterialTheme.colorScheme.primary else Color.Unspecified,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    subtitleLanguages.forEach { lang ->
+                        TextButton(onClick = { viewModel.setDownloadSubtitleLang(lang); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                lang,
+                                color = if (downloadSubtitleLang == lang) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
 private fun PlayerSettingsPage(
     viewModel: MainViewModel,
     autoSkipOpening: Boolean,
@@ -1200,4 +1347,9 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
         else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
+}
+
+private fun checkBatteryOpt(context: android.content.Context): Boolean {
+    val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+    return pm?.isIgnoringBatteryOptimizations(context.packageName) == true
 }

@@ -1,5 +1,12 @@
 package com.blissless.anime.ui.screens.downloads
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,8 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.media3.exoplayer.offline.Download
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -36,15 +41,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.activity.compose.BackHandler
-
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,21 +66,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.media3.exoplayer.offline.Download
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.blissless.anime.MainViewModel
 import com.blissless.anime.data.models.TmdbEpisode
 import com.blissless.anime.download.EpisodeDownloadManager
 import com.blissless.anime.ui.screens.player.OfflinePlayerScreen
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 
+@android.annotation.SuppressLint("UnstableApiUsage")
 @Composable
 fun DownloadsScreen(
     viewModel: MainViewModel,
     downloadManager: EpisodeDownloadManager,
     isOled: Boolean,
-    onDownloadClick: () -> Unit,
     onNavbarHidden: (Boolean) -> Unit = {},
 ) {
+    val context = LocalContext.current
     val downloadsInfo by downloadManager.downloadsInfo.collectAsState()
     val groupedDownloads = remember(downloadsInfo) {
         val completed = downloadsInfo.values.filter { it.state == Download.STATE_COMPLETED }
@@ -135,7 +143,23 @@ fun DownloadsScreen(
     val playbackPositions by viewModel.playbackPositions.collectAsState()
     val playbackDurations by viewModel.playbackDurations.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.notificationAnimeTaps.collect { animeName ->
+            selectedAnime = groupedDownloads.find { it.animeName == animeName }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val downloadedIds = (groupedDownloads.flatMap { it.episodes.map { d -> d.animeId } } +
+                inProgressDownloads.flatMap { (_, infos) -> infos.map { it.animeId } } +
+                failedDownloads.flatMap { (_, infos) -> infos.map { it.animeId } }).toSet()
+        viewModel.pruneTmdbEpisodeCache(downloadedIds)
+    }
+
     val hasContent = groupedDownloads.isNotEmpty() || inProgressDownloads.isNotEmpty() || failedDownloads.isNotEmpty()
+    val batteryOptDismissed = remember { mutableStateOf(false) }
+    val pm = remember { context.getSystemService(android.os.PowerManager::class.java) }
+    val isIgnoringBattery = remember { pm?.isIgnoringBatteryOptimizations(context.packageName) == true }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -229,6 +253,64 @@ fun DownloadsScreen(
                     )
                 }
 
+                // Battery optimization hint
+                if (!isIgnoringBattery && !batteryOptDismissed.value) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFFFFF3E0)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Storage,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF57C00),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Battery Optimization",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isOled) Color.White else Color(0xFFE65100)
+                                    )
+                                    Text(
+                                        "Disable battery optimization for better download reliability",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOled) Color.White.copy(alpha = 0.7f) else Color(0xFFBF360C)
+                                    )
+                                }
+                                TextButton(onClick = {
+                                    try {
+                                        val intent = android.content.Intent(
+                                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            "package:${context.packageName}".toUri()
+                                        )
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {}
+                                }) {
+                                    Text("Fix", fontWeight = FontWeight.Bold)
+                                }
+                                IconButton(onClick = { batteryOptDismissed.value = true }) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = if (isOled) Color.White.copy(alpha = 0.5f) else Color(0xFFBF360C).copy(alpha = 0.5f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // In-progress downloads section
                 if (filteredInProgressDownloads.isNotEmpty()) {
                     item {
@@ -241,7 +323,12 @@ fun DownloadsScreen(
                         )
                     }
                     filteredInProgressDownloads.forEach { (animeName, infos) ->
-                        item {
+                        item(key = "in_progress_$animeName") {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
+                                exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
+                            ) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
@@ -281,9 +368,21 @@ fun DownloadsScreen(
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
                                             )
+                                            IconButton(
+                                                onClick = { downloadManager.removeDownload("${info.animeId}_${info.episode}") },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    "Cancel download",
+                                                    tint = Color.White.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
+                            }
                             }
                         }
                     }
@@ -302,7 +401,12 @@ fun DownloadsScreen(
                         )
                     }
                     filteredFailedDownloads.forEach { (animeName, infos) ->
-                        item {
+                        item(key = "failed_$animeName") {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
+                                exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
+                            ) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
@@ -346,6 +450,7 @@ fun DownloadsScreen(
                                     }
                                 }
                             }
+                            }
                         }
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -362,13 +467,19 @@ fun DownloadsScreen(
                             color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary
                         )
                     }
-                    items(filteredGroupedDownloads) { group ->
-                        DownloadsAnimeCard(
-                            anime = group,
-                            isOled = isOled,
-                            onClick = { selectedAnime = group },
-                            onDelete = { showDeleteConfirm = group.animeName },
-                        )
+                    items(filteredGroupedDownloads, key = { it.animeName }) { group ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
+                            exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
+                        ) {
+                            DownloadsAnimeCard(
+                                anime = group,
+                                isOled = isOled,
+                                onClick = { selectedAnime = group },
+                                onDelete = { showDeleteConfirm = group.animeName },
+                            )
+                        }
                     }
                 }
             }
@@ -384,7 +495,9 @@ fun DownloadsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm?.let { name ->
+                        val animeIds = groupedDownloads.find { it.animeName == name }?.episodes?.map { it.animeId }?.toSet() ?: emptySet()
                         downloadManager.removeAnime(name)
+                        animeIds.forEach { viewModel.clearTmdbEpisodeCache(it) }
                         showDeleteConfirm = null
                     }
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
@@ -396,6 +509,15 @@ fun DownloadsScreen(
     }
 
     if (selectedAnime != null) {
+        val animeId = selectedAnime!!.episodes.firstOrNull()?.animeId ?: 0
+        LaunchedEffect(animeId) {
+            if (animeId > 0 && viewModel.getCachedTmdbEpisodes(animeId) == null) {
+                try {
+                    val episodes = viewModel.fetchTmdbEpisodes(selectedAnime!!.animeName, animeId)
+                    viewModel.cacheTmdbEpisodes(animeId, episodes)
+                } catch (_: Exception) {}
+            }
+        }
         BackHandler { if (playingDownload == null) selectedAnime = null }
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             DownloadedEpisodesDialog(
@@ -407,7 +529,8 @@ fun DownloadsScreen(
                     playerEpisodes = selectedAnime?.episodes ?: emptyList()
                     playingDownload = info
                 },
-                tmdbEpisodes = tmdbEpisodeCache[selectedAnime!!.episodes.firstOrNull()?.animeId]?.associate { it.episode to it } ?: emptyMap(),
+                onClearTmdbCache = { animeId -> viewModel.clearTmdbEpisodeCache(animeId) },
+                tmdbEpisodes = tmdbEpisodeCache[animeId]?.associate { it.episode to it } ?: emptyMap(),
                 playbackPositions = playbackPositions,
                 playbackDurations = playbackDurations,
             )
@@ -435,6 +558,7 @@ fun DownloadsScreen(
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,
+                onAutoPlayNextEpisodeChanged = { viewModel.setAutoPlayNextEpisode(it) },
                 onDismiss = { playingDownload = null },
                 allEpisodes = playerEpisodes,
                 onNavbarHidden = onNavbarHidden,
@@ -448,6 +572,7 @@ fun DownloadsScreen(
     }
 }
 
+@android.annotation.SuppressLint("UnstableApiUsage")
 @Composable
 private fun DownloadedEpisodesDialog(
     anime: EpisodeDownloadManager.GroupedDownload,
@@ -455,6 +580,7 @@ private fun DownloadedEpisodesDialog(
     isOled: Boolean,
     onDismiss: () -> Unit,
     onPlay: (EpisodeDownloadManager.DownloadInfo) -> Unit,
+    onClearTmdbCache: (Int) -> Unit = {},
     tmdbEpisodes: Map<Int, TmdbEpisode> = emptyMap(),
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
@@ -513,7 +639,7 @@ private fun DownloadedEpisodesDialog(
                         val epDuration = playbackDurations[epPlaybackKey] ?: 0L
                         val displayBytes = if (ep.totalBytes > 0) ep.totalBytes else ep.downloadedBytes
                         val progressRatio = if (savedPos > 0 && epDuration > 0) (savedPos.toFloat() / epDuration).coerceIn(0f, 1f) else 0f
-                        val remainingText = if (savedPos > 0 && epDuration > savedPos) {
+                        val remainingText = if (savedPos in 1..<epDuration) {
                             val remaining = epDuration - savedPos
                             val mins = (remaining / 60000).toInt()
                             val secs = ((remaining % 60000) / 1000).toInt()
@@ -569,12 +695,13 @@ private fun DownloadedEpisodesDialog(
                                             Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(28.dp))
                                         }
                                         // Delete button top-right
-                                        IconButton(
-                                            onClick = { episodeToDelete = ep },
+                                        Box(
                                             modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(32.dp)
                                                 .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                                .clickable { episodeToDelete = ep },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF5350), modifier = Modifier.size(16.dp))
                                         }
                                     }
                                 } else {
@@ -631,33 +758,61 @@ private fun DownloadedEpisodesDialog(
                                     }
                                 }
                                 // Info section
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (tmdbEp != null) "Ep ${ep.episode} - ${tmdbEp.title}" else "Episode ${ep.episode}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (tmdbEp != null && tmdbEp.description.isNotEmpty()) {
                                         Text(
-                                            text = if (tmdbEp != null) "Ep ${ep.episode} - ${tmdbEp.title}" else "Episode ${ep.episode}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
+                                            text = tmdbEp.description,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        if (tmdbEp != null && tmdbEp.description.isNotEmpty()) {
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
                                             Text(
-                                                text = tmdbEp.description,
+                                                text = if (ep.category == "dub") "DUB" else "SUB",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "·",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                            )
+                                            if (ep.downloadTimestamp > 0L) {
+                                                Text(
+                                                    text = formatDownloadTimestamp(ep.downloadTimestamp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = "·",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (isOled) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                )
+                                            }
+                                            Text(
+                                                text = formatFileSize(displayBytes),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
-                                        Text(
-                                            text = formatFileSize(displayBytes),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
                                     }
                                 }
                             }
@@ -685,7 +840,10 @@ private fun DownloadedEpisodesDialog(
                     downloadManager.removeDownload(id)
                     episodes = episodes.filter { it.episode != ep.episode }
                     episodeToDelete = null
-                    if (episodes.isEmpty()) onDismiss()
+                    if (episodes.isEmpty()) {
+                        onClearTmdbCache(ep.animeId)
+                        onDismiss()
+                    }
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
@@ -693,6 +851,11 @@ private fun DownloadedEpisodesDialog(
             }
         )
     }
+}
+
+private fun formatDownloadTimestamp(timestamp: Long): String {
+    val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+    return sdf.format(java.util.Date(timestamp))
 }
 
 private fun formatFileSize(bytes: Long): String {
@@ -708,8 +871,8 @@ private fun formatTimeFromMs(ms: Long): String {
     val seconds = (ms / 1000) % 60
     val minutes = (ms / (1000 * 60)) % 60
     val hours = ms / (1000 * 60 * 60)
-    return if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds)
-    else String.format("%d:%02d", minutes, seconds)
+    return if (hours > 0) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
+    else String.format(java.util.Locale.ROOT, "%d:%02d", minutes, seconds)
 }
 
 @Composable

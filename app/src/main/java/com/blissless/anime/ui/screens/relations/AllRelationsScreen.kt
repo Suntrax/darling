@@ -184,7 +184,7 @@ fun AllRelationsScreen(
                                             )
                                         }
                                         val episodeText = when {
-                                            relation.episodes != null && relation.episodes > 0 -> "${relation.episodes} eps"
+                                            relation.episodes != null && relation.episodes > 0 -> "${relation.episodes} ${if (relation.episodes == 1) "ep" else "eps"}"
                                             relation.latestEpisode != null && relation.latestEpisode > 0 -> "Ep ${relation.latestEpisode}"
                                             else -> null
                                         }
