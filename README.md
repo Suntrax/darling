@@ -8,9 +8,9 @@ A modern anime tracking and streaming app for Android.
 
 ## Screenshots
 
-| Home | Explore | Schedule| Widget |
-|------|---------|---------|--------|
-| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Schedule](screenshots/airing.png) | ![Widget](screenshots/widget.png) |
+| Schedule | Explore | Home | Widget |
+|----------|---------|------|--------|
+| ![Schedule](screenshots/airing.png) | ![Explore](screenshots/explore.png) | ![Home](screenshots/home.png) | ![Widget](screenshots/widget.png) |
 
 ## Features
 
