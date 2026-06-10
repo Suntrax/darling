@@ -1064,7 +1064,7 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 -> "$bytes B"
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-        else -> "${bytes / (1024 * 1024 * 1024)} GB"
+        else -> "${"%.1f".format(bytes / (1024.0 * 1024.0 * 1024.0)).replace('.', ',')} GB"
     }
 }
 

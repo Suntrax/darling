@@ -263,16 +263,39 @@ class EpisodeDownloadManager(private val context: Context) {
             if (remaining == 0) {
                 batchResults.remove(batchId)
                 _activeBatches.value = _activeBatches.value - animeName
+                batchEpisodeNumbers.remove(animeName)
             }
         } catch (e: Exception) {
             Log.w(TAG, "updateBatchNotification: failed", e)
         }
     }
 
-    fun sendBatchCompleteNotification(successCount: Int, failCount: Int) {
-        val title = "Downloads Complete"
-        val content = "$successCount episodes downloaded${if (failCount > 0) ", $failCount failed" else ""}"
-        sendNotification("batch_complete", title, content, icon = android.R.drawable.stat_sys_download_done)
+    fun sendBatchCompleteNotification(animeName: String, successCount: Int, failCount: Int) {
+        try {
+            val title = "Downloads Complete"
+            val content = "$successCount episodes downloaded${if (failCount > 0) ", $failCount failed" else ""}"
+            val tapIntent = Intent(context, com.blissless.anime.MainActivity::class.java).apply {
+                putExtra("notification_anime", animeName)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context, animeName.hashCode(), tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.InboxStyle()
+                    .setBigContentTitle(animeName)
+                    .setSummaryText(content))
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+            notifyWithPermission("batch_complete".hashCode(), notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "sendBatchCompleteNotification: failed", e)
+        }
     }
 
     fun cancelBatchNotification(animeName: String, completed: Int = 0, total: Int = 0) {
