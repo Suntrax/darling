@@ -8,9 +8,9 @@ A modern anime tracking and streaming app for Android.
 
 ## Screenshots
 
-| Home | Explore | Schedule| Widget |
-|------|---------|---------|--------|
-| ![Home](screenshots/home.png) | ![Explore](screenshots/explore.png) | ![Schedule](screenshots/airing.png) | ![Widget](screenshots/widget.png) |
+| Schedule | Explore | Home | Widget |
+|----------|---------|------|--------|
+| ![Schedule](screenshots/airing.png) | ![Explore](screenshots/explore.png) | ![Home](screenshots/home.png) | ![Widget](screenshots/widget.png) |
 
 ## Features
 
@@ -36,7 +36,7 @@ Download the APK from [Releases](https://github.com/Suntrax/darling/releases) an
 - **AniList GraphQL API** - Anime list syncing, metadata, user data
 - **TMDB API** - Episode metadata (titles, descriptions, thumbnails) for library and streaming views
 - **Jikan API (v4)** - MyAnimeList favorites and history sync for MAL users
-- **Tachiyomi Anime Source Framework** - Dynamic extension system for multi-source streaming
+- **Aniyomi Anime Source Framework** - Dynamic extension system for multi-source streaming
 - **MVVM Architecture** - ViewModel + StateFlow pattern
 - **OkHttp + kotlinx.serialization** - HTTP client and JSON parsing for third-party APIs
 - **Coil** - Image loading and caching
