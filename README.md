@@ -1,6 +1,6 @@
 # Darling
 
-> **⚠️ DISCONTINUED** — This project is no longer maintained. Check out its successor **[Tensei](https://github.com/YOUR_USERNAME/tensei)** for the latest version.
+> **⚠️ DISCONTINUED** — This project is no longer maintained. Check out its successor **[Tensei](https://github.com/Suntrax/tensei)** for the latest version.
 
 A modern anime tracking and streaming app for Android.
 
