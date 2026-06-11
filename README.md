@@ -1,5 +1,7 @@
 # Darling
 
+> **⚠️ DISCONTINUED** — This project is no longer maintained. Check out its successor **[Tensei](https://github.com/YOUR_USERNAME/tensei)** for the latest version.
+
 A modern anime tracking and streaming app for Android.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green.svg)
@@ -27,7 +29,7 @@ A modern anime tracking and streaming app for Android.
 
 ## Installation
 
-Download the APK from [Releases](https://github.com/Suntrax/darling/releases) and install.
+This project is discontinued. Please download the latest version from **[Tensei](https://github.com/YOUR_USERNAME/tensei/releases)** instead.
 
 ## Tech Stack
 
